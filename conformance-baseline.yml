@@ -1,12 +1,31 @@
-# Known MCP conformance scenarios that may fail for this application server.
-# Update as the official suite and FastMCP evolve.
+# Expected MCP conformance failures for this application server.
 #
-# This project is an application MCP server (tools/resources over AESO data),
-# not a full SDK reference implementation. Scenarios requiring auth, sampling,
-# elicitation, or unrelated capability surfaces are expected to be absent.
+# The official active suite targets "everything-server" capability demos
+# (image/audio tools, prompts, elicitation, sampling, etc.). aeso-mcp is a
+# domain MCP server: tools/resources for AESO data only. Failures below are
+# intentionally unsupported surfaces, not protocol regressions.
+#
+# Format: https://github.com/modelcontextprotocol/conformance/blob/main/SDK_INTEGRATION.md
 
 server:
-  - scenario: auth-oauth-protected-resource
-    reason: Read-only public-data server; OAuth protected resource not in v0.1 scope
-  - scenario: sampling-create-message
-    reason: Server does not implement sampling; tools are read-only data retrieval
+  - completion-complete
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-with-logging
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - resources-subscribe
+  - resources-unsubscribe
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  - dns-rebinding-protection

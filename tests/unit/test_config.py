@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -10,8 +12,13 @@ from aeso_mcp.config import Settings, clear_settings_cache, get_settings
 from aeso_mcp.errors import ConfigurationError
 
 
-def test_missing_api_key_raises_actionable_error(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_missing_api_key_raises_actionable_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     monkeypatch.delenv("AESO_API_KEY", raising=False)
+    # Avoid picking up a developer-local .env when asserting missing credentials.
+    monkeypatch.chdir(tmp_path)
     clear_settings_cache()
     with pytest.raises(ConfigurationError, match="AESO_API_KEY"):
         get_settings()

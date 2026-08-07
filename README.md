@@ -69,14 +69,16 @@ Domain code does not depend on FastMCP. Framework changes should stay in `aeso_m
 
 ## Installation
 
-### Run with uvx (recommended)
+### From GitHub (current)
+
+Until the package is published to PyPI:
 
 ```bash
 export AESO_API_KEY=your-key
-uvx aeso-mcp
+uvx --from git+https://github.com/bchoi-qwe/aeso-mcp.git aeso-mcp
 ```
 
-### Local development
+Or install editable for development:
 
 ```bash
 git clone https://github.com/bchoi-qwe/aeso-mcp.git
@@ -84,6 +86,13 @@ cd aeso-mcp
 uv sync --group dev
 cp .env.example .env   # set AESO_API_KEY
 uv run aeso-mcp
+```
+
+### From PyPI (after publish)
+
+```bash
+export AESO_API_KEY=your-key
+uvx aeso-mcp
 ```
 
 ### Docker
@@ -111,7 +120,7 @@ Missing credentials produce an actionable startup error. The key is never return
   "mcpServers": {
     "aeso": {
       "command": "uvx",
-      "args": ["aeso-mcp"],
+      "args": ["--from", "git+https://github.com/bchoi-qwe/aeso-mcp.git", "aeso-mcp"],
       "env": {
         "AESO_API_KEY": "your-key"
       }
@@ -214,7 +223,7 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 - Merit order, metered volumes, and unit commitments when reliable sources exist
 - Optional DuckDB/Parquet historical analytics store
 - Broader forecast vs actual tools
-- PyPI publication and MCP Registry listing
+- PyPI publication (requires `PYPI_TOKEN` or Trusted Publisher) and MCP Registry listing
 
 ## Contributing
 

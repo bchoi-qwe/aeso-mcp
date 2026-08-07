@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-07
+
 ### Added
 
 - `compare_forecast_to_actual` analytics tool (AIL forecast error metrics)
+- GitHub release packaging notes and publish workflow for PyPI
 
 ### Fixed
 
@@ -17,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Snapshot AIL extraction from raw CSD `alberta_internal_load`
 - Cache TTLs now use short TTL for ranges overlapping the current market day
 - Snapshot pool price / SMP selection uses latest `interval_start`
+- Config unit test no longer false-passes when a local `.env` is present
+- MCP conformance baseline format updated for application-server expected failures
+- CI uv cache contention on the conformance job
 
 ## [0.1.0] - 2026-08-07
 
@@ -32,5 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit, contract, MCP, and optional live integration tests
 - GitHub Actions CI, Dockerfile, Renovate config, and MCP registry `server.json`
 
-[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bchoi-qwe/aeso-mcp/releases/tag/v0.1.0

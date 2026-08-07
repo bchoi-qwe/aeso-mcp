@@ -60,6 +60,7 @@ jobs:
   mcp-conformance:
     name: MCP conformance (server)
     runs-on: ubuntu-latest
+    # Keep non-blocking while FastMCP / suite expectations evolve.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +68,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
-          enable-cache: true
+          # Avoid shared-cache lock contention with the quality job.
+          enable-cache: false
           version: "0.12.2"
 
       - uses: actions/setup-node@v4
@@ -92,21 +94,16 @@ jobs:
 
       - name: Run official conformance suite
         run: |
-          set +e
           npx --yes @modelcontextprotocol/conformance@0.1.13 server \
             --url http://127.0.0.1:8765/mcp \
             --suite active \
             --expected-failures ./conformance-baseline.yml
-          status=$?
-          echo "conformance_exit=$status"
-          # Job is continue-on-error; still fail the step on unexpected runner crashes.
-          if [ "$status" -gt 1 ]; then exit "$status"; fi
-          exit 0
 
       - name: Document conformance status
+        if: always()
         run: |
           echo "Official MCP conformance is exercised in CI."
-          echo "Unsupported or environment-specific scenarios are tracked in conformance-baseline.yml."
+          echo "Application-server gaps are baselined in conformance-baseline.yml."
 
   docker:
     name: Docker build
