@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     cache_ttl_historical_s: float = Field(default=86_400.0, ge=0.0)
     cache_ttl_assets_s: float = Field(default=86_400.0, ge=0.0)
     cache_ttl_forecast_s: float = Field(default=300.0, ge=0.0)
+    cache_max_entries: int = Field(
+        default=512,
+        ge=16,
+        le=10_000,
+        validation_alias="AESO_MCP_CACHE_MAX_ENTRIES",
+        description="Maximum in-memory cache entries before eviction.",
+    )
 
     aeso_base_url: str = Field(
         default="https://apimgw.aeso.ca/public",

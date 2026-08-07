@@ -22,15 +22,35 @@ class _CacheEntry[T]:
 
 
 class AsyncTTLCache:
-    """Simple async TTL cache with per-key single-flight behavior."""
+    """Simple async TTL cache with per-key single-flight behavior.
 
-    def __init__(self) -> None:
+    Bounded by ``max_entries`` (FIFO of soonest-expiring keys after dropping
+    already-expired entries) so long-lived servers cannot grow without limit.
+    """
+
+    def __init__(self, *, max_entries: int = 512) -> None:
+        if max_entries < 1:
+            raise ValueError("max_entries must be >= 1")
+        self._max_entries = max_entries
         self._store: dict[Hashable, _CacheEntry[object]] = {}
         self._inflight: dict[Hashable, asyncio.Future[object]] = {}
         self._lock = asyncio.Lock()
 
     def clear(self) -> None:
         self._store.clear()
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+    def _evict_if_needed(self, now: float) -> None:
+        expired = [k for k, e in self._store.items() if e.expires_at <= now]
+        for key in expired:
+            self._store.pop(key, None)
+        while len(self._store) >= self._max_entries:
+            # Drop the entry that expires soonest (approximation of LRU for TTL caches).
+            oldest_key = min(self._store, key=lambda k: self._store[k].expires_at)
+            self._store.pop(oldest_key, None)
+            logger.debug("cache_evict key=%s size=%s", oldest_key, len(self._store))
 
     async def get_or_set(
         self,
@@ -71,7 +91,9 @@ class AsyncTTLCache:
         logger.debug("cache_miss key=%s", key)
         try:
             value = await factory()
-            self._store[key] = _CacheEntry(value=value, expires_at=time.monotonic() + ttl_s)
+            now = time.monotonic()
+            self._evict_if_needed(now)
+            self._store[key] = _CacheEntry(value=value, expires_at=now + ttl_s)
             inflight.set_result(value)
             return value
         except Exception as exc:

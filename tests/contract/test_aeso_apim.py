@@ -215,3 +215,15 @@ async def test_api_key_not_in_exception_message(provider: AesoApimProvider) -> N
     with pytest.raises(AuthenticationError) as exc:
         await provider.get_pool_prices(start, end)
     assert "test-key" not in str(exc.value)
+
+
+@pytest.mark.asyncio
+async def test_apim_stubs_raise_unsupported(provider: AesoApimProvider) -> None:
+    from aeso_mcp.errors import UnsupportedDatasetError
+
+    start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
+    end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
+    with pytest.raises(UnsupportedDatasetError, match="Historical generation"):
+        await provider.get_generation_history(start, end)
+    with pytest.raises(UnsupportedDatasetError, match="outages"):
+        await provider.get_outages(start, end)

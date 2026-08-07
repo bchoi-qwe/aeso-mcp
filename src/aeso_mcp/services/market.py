@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import QueryTooLargeError
+from aeso_mcp.errors import AesoMcpError, AuthenticationError, QueryTooLargeError
 from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
 from aeso_mcp.models.generation import (
     FuelMixComponent,
@@ -211,7 +211,11 @@ class MarketService:
             max_days=self._settings.max_load_days,
             label="generation range",
         )
-        intervals, prov = await self._provider.get_generation_history(start, end)
+        intervals, prov = await self._cache.get_or_set(
+            ("generation_history", start.isoformat(), end.isoformat()),
+            lambda: self._provider.get_generation_history(start, end),
+            ttl_s=historical_ttl_s(self._settings, start, end),
+        )
         warnings.append(
             "Historical generation currently includes wind and solar only; "
             "full fuel-mix history is not available from the public CSD endpoint."
@@ -255,7 +259,9 @@ class MarketService:
             )
             if prices:
                 pool_price = max(prices, key=lambda i: i.interval_start).pool_price_cad_per_mwh
-        except Exception:
+        except AuthenticationError:
+            raise
+        except AesoMcpError:
             warnings.append("Recent pool price unavailable for snapshot.")
             logger.warning("snapshot_pool_price_unavailable")
 
@@ -265,7 +271,9 @@ class MarketService:
             )
             if smps:
                 smp = max(smps, key=lambda i: i.interval_start).system_marginal_price_cad_per_mwh
-        except Exception:
+        except AuthenticationError:
+            raise
+        except AesoMcpError:
             warnings.append("Recent system marginal price unavailable for snapshot.")
             logger.warning("snapshot_smp_unavailable")
 
@@ -275,12 +283,21 @@ class MarketService:
         wind = next((c.generation_mw for c in components if c.fuel_type == "Wind"), None)
         solar = next((c.generation_mw for c in components if c.fuel_type == "Solar"), None)
         renewable = sum(c.generation_mw for c in components if c.fuel_type in RENEWABLE)
+        ail = _opt_float(csd.get("alberta_internal_load_mw"))
+
+        status = DataStatus.ACTUAL
+        if pool_price is None or ail is None:
+            status = DataStatus.PRELIMINARY
+            if pool_price is None:
+                warnings.append("Snapshot is preliminary: recent pool price missing.")
+            if ail is None:
+                warnings.append("Snapshot is preliminary: Alberta Internal Load missing.")
 
         return MarketSnapshotResponse(
             observed_at=observed_at,
             pool_price_cad_per_mwh=pool_price,
             system_marginal_price_cad_per_mwh=smp,
-            alberta_internal_load_mw=_opt_float(csd.get("alberta_internal_load_mw")),
+            alberta_internal_load_mw=ail,
             total_generation_mw=total,
             generation_by_fuel=components,
             wind_generation_mw=wind,
@@ -295,7 +312,7 @@ class MarketService:
             metadata=_meta(
                 dataset="Market Snapshot",
                 prov=prov,
-                status=DataStatus.ACTUAL,
+                status=status,
                 units={
                     "pool_price_cad_per_mwh": "CAD/MWh",
                     "system_marginal_price_cad_per_mwh": "CAD/MWh",

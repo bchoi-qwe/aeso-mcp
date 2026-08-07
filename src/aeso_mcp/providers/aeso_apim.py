@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from aeso_mcp.errors import DataValidationError
+from aeso_mcp.errors import DataValidationError, UnsupportedDatasetError
 from aeso_mcp.models.assets import AssetRecord
 from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.generation import FuelMixComponent, GenerationInterval
@@ -203,9 +203,13 @@ class AesoApimProvider:
         start: datetime,
         end: datetime,
     ) -> tuple[list[GenerationInterval], dict[str, str]]:
-        # Direct historical fuel-mix is not generally available; wind/solar via GridStatus.
+        # Direct historical fuel-mix is not generally available on this adapter.
+        # Production wiring uses GridStatusProvider for wind/solar history.
         _ = (start, end)
-        return [], _prov("Wind/Solar Generation API")
+        raise UnsupportedDatasetError(
+            "Historical generation is not implemented on the direct APIM provider; "
+            "use the GridStatus-backed runtime path (default)."
+        )
 
     async def get_interchange(
         self,
@@ -366,7 +370,10 @@ class AesoApimProvider:
     ) -> tuple[list[OutageRecord], dict[str, str]]:
         # Outage endpoints vary; prefer GridStatus for reliability in v0.1.
         _ = (start, end)
-        return [], _prov("Generator Outages API")
+        raise UnsupportedDatasetError(
+            "Generator outages are not implemented on the direct APIM provider; "
+            "use the GridStatus-backed runtime path (default)."
+        )
 
 
 def _nested(data: Any, *keys: str) -> Any:

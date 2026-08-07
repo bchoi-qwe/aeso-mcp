@@ -92,3 +92,85 @@ async def test_supply_demand_snapshot_single_request() -> None:
     client.get_fuel_mix.assert_not_called()
     client.get_interchange.assert_not_called()
     client.get_reserves.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cache_evicts_when_over_max_entries() -> None:
+    from aeso_mcp.services.cache import AsyncTTLCache
+
+    cache = AsyncTTLCache(max_entries=2)
+
+    async def _make(value: int):
+        async def factory() -> int:
+            return value
+
+        return factory
+
+    await cache.get_or_set("a", await _make(1), ttl_s=60)
+    await cache.get_or_set("b", await _make(2), ttl_s=60)
+    assert len(cache) == 2
+    await cache.get_or_set("c", await _make(3), ttl_s=60)
+    assert len(cache) == 2
+    assert "c" in {k for k in ("a", "b", "c") if k in cache._store}
+
+
+@pytest.mark.asyncio
+async def test_snapshot_auth_failure_is_not_swallowed() -> None:
+    from unittest.mock import AsyncMock
+
+    from aeso_mcp.errors import AuthenticationError
+    from aeso_mcp.models.generation import FuelMixComponent
+    from aeso_mcp.services.market import MarketService
+
+    provider = AsyncMock()
+    provider.get_supply_demand_snapshot.return_value = (
+        datetime(2024, 1, 15, 12, 0, tzinfo=MARKET_TZ),
+        {
+            "generation_by_fuel": [FuelMixComponent(fuel_type="Wind", generation_mw=100.0)],
+            "reserves": {},
+            "alberta_internal_load_mw": 9000.0,
+            "total_generation_mw": 100.0,
+            "net_interchange_mw": 0.0,
+            "interchange_paths": [],
+        },
+        {"provider": "gridstatus", "source_product": "CSD"},
+    )
+    provider.get_pool_prices.side_effect = AuthenticationError("bad key")
+    service = MarketService(provider, _settings())
+    with pytest.raises(AuthenticationError):
+        await service.get_market_snapshot()
+
+
+@pytest.mark.asyncio
+async def test_snapshot_marks_preliminary_when_price_missing() -> None:
+    from unittest.mock import AsyncMock
+
+    from aeso_mcp.models.common import DataStatus
+    from aeso_mcp.models.generation import FuelMixComponent
+    from aeso_mcp.services.market import MarketService
+
+    provider = AsyncMock()
+    provider.get_supply_demand_snapshot.return_value = (
+        datetime(2024, 1, 15, 12, 0, tzinfo=MARKET_TZ),
+        {
+            "generation_by_fuel": [FuelMixComponent(fuel_type="Wind", generation_mw=100.0)],
+            "reserves": {},
+            "alberta_internal_load_mw": 9000.0,
+            "total_generation_mw": 100.0,
+            "net_interchange_mw": 0.0,
+            "interchange_paths": [],
+        },
+        {"provider": "gridstatus", "source_product": "CSD"},
+    )
+    provider.get_pool_prices.return_value = (
+        [],
+        {"provider": "gridstatus", "source_product": "Pool Price API"},
+    )
+    provider.get_system_marginal_prices.return_value = (
+        [],
+        {"provider": "gridstatus", "source_product": "SMP"},
+    )
+    service = MarketService(provider, _settings())
+    snap = await service.get_market_snapshot()
+    assert snap.metadata.status == DataStatus.PRELIMINARY
+    assert any("pool price missing" in w.lower() for w in snap.warnings)

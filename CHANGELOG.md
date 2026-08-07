@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `LIMITATIONS.md` honest gap inventory; Pre-PyPI checklist in CONTRIBUTING
+- Historical generation responses now use the semantic TTL cache
+- Bounded in-memory cache (`AESO_MCP_CACHE_MAX_ENTRIES`, default 512)
+- Expanded live integration smoke (snapshot, load, SMP, interchange, reserves, assets, outages)
+- Snapshot marks `preliminary` when pool price or AIL is missing
+
+### Changed
+
+- PyPI publish workflow is **manual only** (`workflow_dispatch`); no auto-publish on GitHub releases
+- Direct APIM adapter raises `UnsupportedDatasetError` for outages and historical generation instead of returning empty lists
+- GridStatus renewable/history and optional load-forecast paths no longer swallow authentication failures
+- Snapshot / analytics optional enrichment no longer swallows authentication failures
+
+## [0.1.1] - 2026-08-07
+
 ## [0.1.1] - 2026-08-07
 
 ### Added

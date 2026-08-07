@@ -28,7 +28,7 @@ class AppContainer:
 
 def build_container(settings: Settings) -> AppContainer:
     """Construct the default production dependency graph."""
-    cache = AsyncTTLCache()
+    cache = AsyncTTLCache(max_entries=settings.cache_max_entries)
     provider = GridStatusProvider(settings)
     market = MarketService(provider, settings, cache)
     grid = GridService(provider, settings, cache)

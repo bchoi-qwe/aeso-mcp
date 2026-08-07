@@ -17,6 +17,7 @@ import pandas as pd
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import (
+    AesoMcpError,
     AuthenticationError,
     DataValidationError,
     UpstreamUnavailableError,
@@ -133,7 +134,10 @@ class GridStatusProvider:
                     key = row["interval_start"]
                     if key in forecast_rows:
                         row["load_forecast_mw"] = forecast_rows[key]
-            except Exception:
+            except AuthenticationError:
+                raise
+            except AesoMcpError:
+                # Forecast is optional enrichment; keep actual load if forecast fails.
                 logger.warning("load_forecast_unavailable")
         start_m, end_m = to_market(start), to_market(end)
         rows = [r for r in rows if start_m <= r["interval_start"] < end_m]  # type: ignore[operator]
@@ -152,6 +156,7 @@ class GridStatusProvider:
     ) -> tuple[list[GenerationInterval], dict[str, str]]:
         client = self._get_client()
         intervals: list[GenerationInterval] = []
+        failures: list[AesoMcpError] = []
         for fuel, method in (
             ("Wind", client.get_wind_hourly),
             ("Solar", client.get_solar_hourly),
@@ -159,8 +164,14 @@ class GridStatusProvider:
             try:
                 df = await self._run(method, date=start, end=end)
                 intervals.extend(_parse_renewable_hourly(df, fuel_type=fuel))
-            except Exception:
-                logger.warning("generation_history_unavailable fuel=%s", fuel)
+            except AuthenticationError:
+                raise
+            except AesoMcpError as exc:
+                # One renewable series may be temporarily unavailable; keep the other.
+                logger.warning("generation_history_unavailable fuel=%s error=%s", fuel, exc.code)
+                failures.append(exc)
+        if not intervals and failures:
+            raise failures[-1]
         start_m, end_m = to_market(start), to_market(end)
         intervals = [i for i in intervals if start_m <= i.interval_start < end_m]
         return intervals, _provenance("Wind/Solar Generation API")

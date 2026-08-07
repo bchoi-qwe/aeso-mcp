@@ -1,8 +1,8 @@
 name: Publish to PyPI
 
+# Manual only. Do not publish until the package has been human-reviewed.
+# See LIMITATIONS.md and CONTRIBUTING.md (Pre-PyPI checklist).
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -32,7 +32,7 @@ jobs:
       - name: Publish
         # Prefer PYPI_TOKEN when set. Otherwise attempt Trusted Publisher (OIDC).
         # Configure either a repo secret PYPI_TOKEN or a PyPI Trusted Publisher
-        # for environment "pypi" before relying on this workflow.
+        # for environment "pypi" before running this workflow.
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |

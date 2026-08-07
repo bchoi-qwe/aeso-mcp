@@ -39,6 +39,10 @@ All market timestamps are normalized to **America/Edmonton**. DST spring-forward
 ## Query bounds
 Server-enforced limits protect against oversized responses (for example SMP max 7 days).
 Prefer analytics tools for long-period statistical questions.
+
+## Limitations
+See the repository `LIMITATIONS.md` for an honest inventory of coverage gaps
+(historical generation wind/solar-only, deferred PyPI, FastMCP prerelease, etc.).
 """
 
 POOL_PRICE_METHODOLOGY = """# Methodology: Pool Price

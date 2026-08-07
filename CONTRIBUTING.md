@@ -51,3 +51,14 @@ AESO_API_KEY=... uv run pytest tests/integration -m integration
 - FastMCP 4.x may be pinned to a prerelease while targeting MCP `2026-07-28`
 - Dependency canary workflow may test newer allowed versions without blocking merge
 - Do not auto-merge major FastMCP / MCP SDK upgrades
+
+## Pre-PyPI checklist
+
+Do **not** publish to PyPI or the MCP Registry until a human has signed off on:
+
+1. [LIMITATIONS.md](LIMITATIONS.md) reviewed and still accurate
+2. Live smoke with a real `AESO_API_KEY` (`pytest tests/integration -m integration`)
+3. Tool/resource surface matches README (no silent stubs presented as working)
+4. Secret hygiene: no keys in git, logs, or chat history (rotate if exposed)
+5. Publish workflow remains **manual** (`workflow_dispatch` only)
+6. Version/CHANGELOG cut intentionally for the published tag

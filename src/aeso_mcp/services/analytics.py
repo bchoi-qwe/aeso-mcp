@@ -6,7 +6,7 @@ from __future__ import annotations
 from statistics import mean, median
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import InvalidDateRangeError
+from aeso_mcp.errors import AesoMcpError, AuthenticationError, InvalidDateRangeError
 from aeso_mcp.models.analytics import (
     AssociatedChange,
     CompareForecastToActualRequest,
@@ -108,7 +108,9 @@ class AnalyticsService:
         try:
             load = await self._market.get_load(LoadRequest(start=start, end=end))
             load_by_start = {i.interval_start: i.load_mw for i in load.intervals}
-        except Exception:
+        except AuthenticationError:
+            raise
+        except AesoMcpError:
             load_by_start = {}
 
         events: list[PriceEvent] = []
@@ -305,7 +307,9 @@ class AnalyticsService:
         try:
             load = await self._market.get_load(LoadRequest(start=start_m, end=end_m))
             load_vals = [i.load_mw for i in load.intervals]
-        except Exception:
+        except AuthenticationError:
+            raise
+        except AesoMcpError:
             load_vals = []
 
         return PeriodStatistics(

@@ -16,7 +16,7 @@
 - Current market snapshot combining price, load, generation, interchange, and reserves
 - Historical Pool Price and System Marginal Price retrieval with explicit units and timezones
 - Deterministic analytics: period comparison, price-event detection, condition evidence
-- GridStatus-backed AESO adapters plus a direct APIM httpx client for contracts/gaps
+- GridStatus-backed AESO adapters plus a direct APIM httpx client for contracts (not a full second production stack)
 - Query bounds, caching, retries, and secret-safe error handling
 - Resources for glossary, dataset catalog, and methodology notes
 
@@ -69,6 +69,8 @@ Domain code does not depend on FastMCP. Framework changes should stay in `aeso_m
 
 ## Installation
 
+See [LIMITATIONS.md](LIMITATIONS.md) for an honest gap inventory. **PyPI publication is deferred** until after human review.
+
 ### From GitHub (current)
 
 Until the package is published to PyPI:
@@ -88,7 +90,9 @@ cp .env.example .env   # set AESO_API_KEY
 uv run aeso-mcp
 ```
 
-### From PyPI (after publish)
+### From PyPI (deferred)
+
+Not published yet. After review and an intentional publish, install with:
 
 ```bash
 export AESO_API_KEY=your-key
@@ -220,10 +224,10 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 
 ## Roadmap
 
+- Human review against [LIMITATIONS.md](LIMITATIONS.md) before any PyPI / MCP Registry publish
 - Merit order, metered volumes, and unit commitments when reliable sources exist
 - Optional DuckDB/Parquet historical analytics store
 - Broader forecast vs actual tools
-- PyPI publication (requires `PYPI_TOKEN` or Trusted Publisher) and MCP Registry listing
 
 ## Contributing
 
