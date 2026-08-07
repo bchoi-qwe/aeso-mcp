@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Choi
     given-names: Brandon
-repository-code: "https://github.com/brandonchoi/aeso-mcp"
-url: "https://github.com/brandonchoi/aeso-mcp"
+repository-code: "https://github.com/bchoi-qwe/aeso-mcp"
+url: "https://github.com/bchoi-qwe/aeso-mcp"
 abstract: >-
   An agent-native Model Context Protocol server providing typed access and
   deterministic analytics for Alberta electricity market data from official

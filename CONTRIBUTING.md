@@ -5,7 +5,7 @@ Thanks for contributing to `aeso-mcp`.
 ## Development setup
 
 ```bash
-git clone https://github.com/brandonchoi/aeso-mcp.git
+git clone https://github.com/bchoi-qwe/aeso-mcp.git
 cd aeso-mcp
 uv sync --group dev
 cp .env.example .env   # add AESO_API_KEY for live checks

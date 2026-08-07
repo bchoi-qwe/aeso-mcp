@@ -32,5 +32,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit, contract, MCP, and optional live integration tests
 - GitHub Actions CI, Dockerfile, Renovate config, and MCP registry `server.json`
 
-[Unreleased]: https://github.com/brandonchoi/aeso-mcp/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/brandonchoi/aeso-mcp/releases/tag/v0.1.0
+[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bchoi-qwe/aeso-mcp/releases/tag/v0.1.0

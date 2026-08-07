@@ -1,6 +1,6 @@
 # aeso-mcp
 
-<!-- mcp-name: io.github.brandonchoi/aeso-mcp -->
+<!-- mcp-name: io.github.bchoi-qwe/aeso-mcp -->
 
 **Agent-native, strongly typed access and analytics for Alberta's electricity market using official AESO data.**
 
@@ -79,7 +79,7 @@ uvx aeso-mcp
 ### Local development
 
 ```bash
-git clone https://github.com/brandonchoi/aeso-mcp.git
+git clone https://github.com/bchoi-qwe/aeso-mcp.git
 cd aeso-mcp
 uv sync --group dev
 cp .env.example .env   # set AESO_API_KEY
