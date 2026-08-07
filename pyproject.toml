@@ -1,0 +1,136 @@
+[project]
+name = "aeso-mcp"
+version = "0.1.0"
+description = "Agent-native MCP server for Alberta electricity market data via official AESO APIs"
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
+authors = [
+    { name = "Brandon Choi", email = "bchoi0824@gmail.com" }
+]
+keywords = [
+    "aeso",
+    "alberta",
+    "electricity",
+    "energy",
+    "mcp",
+    "model-context-protocol",
+    "grid",
+]
+# Remove deprecated license classifier
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp==4.0.0b2",
+    "gridstatus>=0.36.0,<0.37",
+    "httpx>=0.28.1,<1",
+    "pandas>=2.2.0,<3",
+    "pydantic>=2.11.0,<3",
+    "pydantic-settings>=2.8.0,<3",
+    "tenacity>=9.0.0,<10",
+    "tzdata>=2025.1",
+]
+
+[project.optional-dependencies]
+analytics = [
+    "duckdb>=1.2.0,<2",
+    "pyarrow>=19.0.0,<22",
+]
+
+[project.urls]
+Homepage = "https://github.com/brandonchoi/aeso-mcp"
+Documentation = "https://github.com/brandonchoi/aeso-mcp#readme"
+Repository = "https://github.com/brandonchoi/aeso-mcp"
+Issues = "https://github.com/brandonchoi/aeso-mcp/issues"
+Changelog = "https://github.com/brandonchoi/aeso-mcp/blob/main/CHANGELOG.md"
+
+[project.scripts]
+aeso-mcp = "aeso_mcp.__main__:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "respx>=0.22.0",
+    "ruff>=0.11.0",
+    "pyright>=1.1.400",
+    "build>=1.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.2,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+# FastMCP 4 is currently prerelease-only while targeting MCP 2026-07-28.
+prerelease = "allow"
+
+[tool.uv.build-backend]
+module-name = "aeso_mcp"
+module-root = "src"
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+    "ASYNC",
+    "S",
+    "T20",
+]
+ignore = [
+    "S101",  # assert used in tests
+    "E501",  # line length handled by formatter; markdown tables may exceed
+    "SIM108",  # ternary not always clearer for timezone localization
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "integration: live AESO API tests (require AESO_API_KEY)",
+    "slow: longer-running tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["aeso_mcp"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 65
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+reportMissingImports = true
+reportMissingTypeStubs = false

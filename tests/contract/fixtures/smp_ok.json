@@ -1,0 +1,16 @@
+{
+  "return": {
+    "System Marginal Price Report": [
+      {
+        "begin_datetime_utc": "2024-01-15T07:00:00.000Z",
+        "end_datetime_utc": "2024-01-15T07:01:00.000Z",
+        "system_marginal_price": 41.5
+      },
+      {
+        "begin_datetime_utc": "2024-01-15T07:01:00.000Z",
+        "end_datetime_utc": "2024-01-15T07:05:00.000Z",
+        "system_marginal_price": 999.99
+      }
+    ]
+  }
+}

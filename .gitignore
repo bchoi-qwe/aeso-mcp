@@ -1,0 +1,45 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+wheels/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Tooling / coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+htmlcov/
+.coverage
+coverage.xml
+.cache/
+
+# Environment / secrets
+.env
+.env.local
+*.pem
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# MCP / local runtime
+mcp-traces/
+*.log
+
+# uv
+uv.toml.local

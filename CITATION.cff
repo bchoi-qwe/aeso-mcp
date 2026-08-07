@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: "aeso-mcp"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Choi
+    given-names: Brandon
+repository-code: "https://github.com/brandonchoi/aeso-mcp"
+url: "https://github.com/brandonchoi/aeso-mcp"
+abstract: >-
+  An agent-native Model Context Protocol server providing typed access and
+  deterministic analytics for Alberta electricity market data from official
+  AESO APIs.
+keywords:
+  - AESO
+  - Alberta
+  - electricity
+  - MCP
+  - energy markets
+license: MIT
+version: 0.1.0
+date-released: "2026-08-07"

@@ -1,0 +1,20 @@
+{
+  "return": {
+    "Pool Price Report": [
+      {
+        "begin_datetime_utc": "2024-01-15T07:00:00.000Z",
+        "begin_datetime_mpt": "2024-01-15 00:00",
+        "pool_price": 45.67,
+        "forecast_pool_price": 50.0,
+        "rolling_30day_avg": 60.12
+      },
+      {
+        "begin_datetime_utc": "2024-01-15T08:00:00.000Z",
+        "begin_datetime_mpt": "2024-01-15 01:00",
+        "pool_price": 55.0,
+        "forecast_pool_price": 52.0,
+        "rolling_30day_avg": 60.2
+      }
+    ]
+  }
+}

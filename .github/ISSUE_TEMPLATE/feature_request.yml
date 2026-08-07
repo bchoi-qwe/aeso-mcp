@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose an enhancement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What question or workflow is hard with the current tools?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed tool or change
+      description: Prefer intent-oriented tools over raw endpoint wrappers.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Upstream data source
+      description: Which AESO / GridStatus dataset would back this?

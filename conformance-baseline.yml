@@ -1,0 +1,12 @@
+# Known MCP conformance scenarios that may fail for this application server.
+# Update as the official suite and FastMCP evolve.
+#
+# This project is an application MCP server (tools/resources over AESO data),
+# not a full SDK reference implementation. Scenarios requiring auth, sampling,
+# elicitation, or unrelated capability surfaces are expected to be absent.
+
+server:
+  - scenario: auth-oauth-protected-resource
+    reason: Read-only public-data server; OAuth protected resource not in v0.1 scope
+  - scenario: sampling-create-message
+    reason: Server does not implement sampling; tools are read-only data retrieval

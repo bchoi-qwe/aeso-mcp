@@ -1,0 +1,35 @@
+{
+  "return": {
+    "effective_datetime_utc": "2024-01-15T18:30:00.000Z",
+    "alberta_internal_load": 9500.5,
+    "generation_data_list": [
+      {
+        "fuel_type": "WIND",
+        "aggregated_net_generation": 1200.0,
+        "aggregated_maximum_capability": 2000.0
+      },
+      {
+        "fuel_type": "SOLAR",
+        "aggregated_net_generation": 300.0,
+        "aggregated_maximum_capability": 800.0
+      },
+      {
+        "fuel_type": "GAS FIRED STEAM",
+        "aggregated_net_generation": 4000.0,
+        "aggregated_maximum_capability": 5000.0
+      }
+    ],
+    "interchange_list": [
+      {"path": "British Columbia", "actual_flow": 200.0},
+      {"path": "Saskatchewan", "actual_flow": -50.0},
+      {"path": "Montana", "actual_flow": 10.0}
+    ],
+    "contingency_reserve_required": 400.0,
+    "dispatched_contigency_reserve_total": 420.0,
+    "dispatched_contingency_reserve_gen": 300.0,
+    "dispatched_contingency_reserve_other": 120.0,
+    "ffr_armed_dispatch": 10.0,
+    "ffr_offered_volume": 20.0,
+    "long_lead_time_volume": 100.0
+  }
+}

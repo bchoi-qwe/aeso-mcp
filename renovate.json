@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "description": "Group MCP ecosystem updates",
+      "matchPackageNames": [
+        "fastmcp",
+        "fastmcp-slim",
+        "mcp",
+        "mcp-types"
+      ],
+      "groupName": "mcp-ecosystem",
+      "dependencyDashboardApproval": true,
+      "ignoreTests": false,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "description": "Allow monitoring FastMCP prereleases while on 4.x beta channel",
+      "matchPackageNames": ["fastmcp", "fastmcp-slim"],
+      "ignoreUnstable": false,
+      "allowedVersions": "/^4\\./"
+    },
+    {
+      "description": "Do not auto-merge major framework upgrades",
+      "matchUpdateTypes": ["major"],
+      "matchPackageNames": ["fastmcp", "mcp", "gridstatus", "pydantic"],
+      "automerge": false,
+      "dependencyDashboardApproval": true
+    }
+  ]
+}
