@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP conformance job is blocking; `server.json` no longer claims a published PyPI package
 - Historical approved transmission publication windows use half-open `[start, end)` matching
   other date-range tools; live tests always close HTTP clients
+- Half-open range filters and analytics durations use UTC so fall-back fold ambiguity is safe
+- Authenticated APIM client/base URL are restricted to `apimgw.aeso.ca` (no wildcard `*.aeso.ca`)
+- Direct APIM CSD helpers reuse shared `parse_csd_payload` (no capability-as-generation fallback)
 
 ### Added
 

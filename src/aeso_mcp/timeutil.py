@@ -109,6 +109,17 @@ def validate_range(
     return start_m, end_m
 
 
+def in_half_open_range(value: datetime, start: datetime, end: datetime) -> bool:
+    """True if ``start <= value < end`` using UTC chronology (DST-safe)."""
+    value_utc = to_utc(value)
+    return to_utc(start) <= value_utc < to_utc(end)
+
+
+def elapsed_hours(start: datetime, end: datetime) -> float:
+    """Elapsed hours between two datetimes using UTC (DST-safe)."""
+    return (to_utc(end) - to_utc(start)).total_seconds() / 3600
+
+
 def format_aeso_date(value: datetime) -> str:
     """Format a market datetime as AESO API date (YYYY-MM-DD)."""
     return to_market(value).strftime("%Y-%m-%d")

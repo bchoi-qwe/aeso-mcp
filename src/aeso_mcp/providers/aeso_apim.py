@@ -7,7 +7,6 @@ GridStatus does not expose. Prefer GridStatusProvider for production reads.
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -19,9 +18,7 @@ from aeso_mcp.models.grid import InterchangePathFlow, OutageRecord
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
 from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, format_aeso_date, to_market
-
-logger = logging.getLogger(__name__)
+from aeso_mcp.timeutil import MARKET_TZ, format_aeso_date, in_half_open_range
 
 
 def _prov(product: str, api_version: str | None = None) -> dict[str, str]:
@@ -75,8 +72,7 @@ class AesoApimProvider:
                     rolling_30day_avg_cad_per_mwh=_opt_float(item.get("rolling_30day_avg")),
                 )
             )
-        start_m, end_m = to_market(start), to_market(end)
-        intervals = [i for i in intervals if start_m <= i.interval_start < end_m]
+        intervals = [i for i in intervals if in_half_open_range(i.interval_start, start, end)]
         return intervals, _prov("Pool Price API", "v1.1")
 
     async def get_system_marginal_prices(
@@ -115,8 +111,7 @@ class AesoApimProvider:
                     system_marginal_price_cad_per_mwh=float(price),
                 )
             )
-        start_m, end_m = to_market(start), to_market(end)
-        intervals = [i for i in intervals if start_m <= i.interval_start < end_m]
+        intervals = [i for i in intervals if in_half_open_range(i.interval_start, start, end)]
         return intervals, _prov("System Marginal Price API", "v1.1")
 
     async def get_load(
@@ -167,36 +162,19 @@ class AesoApimProvider:
                     "load_forecast_mw": forecast,
                 }
             )
-        start_m, end_m = to_market(start), to_market(end)
-        rows = [r for r in rows if start_m <= r["interval_start"] < end_m]  # type: ignore[operator]
+        rows = [
+            r
+            for r in rows
+            if isinstance(r["interval_start"], datetime)
+            and in_half_open_range(r["interval_start"], start, end)
+        ]
         return rows, _prov("Alberta Internal Load API", "v1")
 
     async def get_fuel_mix(self) -> tuple[datetime, list[FuelMixComponent], dict[str, str]]:
         data = await self._http.get_json("currentsupplydemand-api/v2/csd/summary/current")
-        payload = data.get("return")
-        if not isinstance(payload, dict):
-            raise DataValidationError("Unexpected CSD response shape.")
-        observed_at = _parse_utc(str(payload["effective_datetime_utc"]))
-        gen_list = payload.get("generation_data_list") or []
-        components: list[FuelMixComponent] = []
-        if isinstance(gen_list, list):
-            for item in gen_list:
-                if not isinstance(item, dict):
-                    continue
-                fuel = str(item.get("fuel_type", "Unknown")).title()
-                gen = _opt_float(item.get("aggregated_maximum_capability"))
-                # Prefer net generation when present
-                net = _opt_float(item.get("aggregated_net_generation"))
-                value = net if net is not None else gen
-                if value is None:
-                    continue
-                components.append(
-                    FuelMixComponent(
-                        fuel_type=fuel,
-                        generation_mw=value,
-                        maximum_capability_mw=_opt_float(item.get("aggregated_maximum_capability")),
-                    )
-                )
+        observed_at, payload = parse_csd_payload(data)
+        components = payload["generation_by_fuel"]
+        assert isinstance(components, list)
         return observed_at, components, _prov("Current Supply Demand API", "v2")
 
     async def get_generation_history(
@@ -216,48 +194,19 @@ class AesoApimProvider:
         self,
     ) -> tuple[datetime, list[InterchangePathFlow], float, dict[str, str]]:
         data = await self._http.get_json("currentsupplydemand-api/v2/csd/summary/current")
-        payload = data.get("return")
-        if not isinstance(payload, dict):
-            raise DataValidationError("Unexpected CSD response shape.")
-        observed_at = _parse_utc(str(payload["effective_datetime_utc"]))
-        paths: list[InterchangePathFlow] = []
-        for item in payload.get("interchange_list") or []:
-            if not isinstance(item, dict):
-                continue
-            path = str(item.get("path", "Unknown")).strip()
-            if path.endswith(" Flow"):
-                path = path[: -len(" Flow")].strip()
-            flow = _opt_float(item.get("actual_flow"))
-            if flow is None:
-                continue
-            paths.append(InterchangePathFlow(path=path, flow_mw=flow))
-        net = sum(p.flow_mw for p in paths)
-        return observed_at, paths, net, _prov("Current Supply Demand API", "v2")
+        observed_at, payload = parse_csd_payload(data)
+        paths = payload["interchange_paths"]
+        net = payload["net_interchange_mw"]
+        assert isinstance(paths, list)
+        assert isinstance(net, int | float)
+        return observed_at, paths, float(net), _prov("Current Supply Demand API", "v2")
 
     async def get_reserves(self) -> tuple[datetime, dict[str, float | None], dict[str, str]]:
         data = await self._http.get_json("currentsupplydemand-api/v2/csd/summary/current")
-        payload = data.get("return")
-        if not isinstance(payload, dict):
-            raise DataValidationError("Unexpected CSD response shape.")
-        observed_at = _parse_utc(str(payload["effective_datetime_utc"]))
-        values = {
-            "contingency_reserve_required_mw": _opt_float(
-                payload.get("contingency_reserve_required")
-            ),
-            "dispatched_contingency_reserve_total_mw": _opt_float(
-                payload.get("dispatched_contigency_reserve_total")
-            ),
-            "dispatched_contingency_reserve_gen_mw": _opt_float(
-                payload.get("dispatched_contingency_reserve_gen")
-            ),
-            "dispatched_contingency_reserve_other_mw": _opt_float(
-                payload.get("dispatched_contingency_reserve_other")
-            ),
-            "fast_frequency_response_dispatched_mw": _opt_float(payload.get("ffr_armed_dispatch")),
-            "fast_frequency_response_offered_mw": _opt_float(payload.get("ffr_offered_volume")),
-            "long_lead_time_volume_mw": _opt_float(payload.get("long_lead_time_volume")),
-        }
-        return observed_at, values, _prov("Current Supply Demand API", "v2")
+        observed_at, payload = parse_csd_payload(data)
+        reserves = payload["reserves"]
+        assert isinstance(reserves, dict)
+        return observed_at, reserves, _prov("Current Supply Demand API", "v2")
 
     async def get_supply_demand_snapshot(
         self,

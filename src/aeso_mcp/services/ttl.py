@@ -12,6 +12,7 @@ from aeso_mcp.timeutil import (
     market_now,
     start_of_market_day,
     to_market,
+    to_utc,
 )
 
 
@@ -27,7 +28,7 @@ def historical_ttl_s(settings: Settings, start: datetime, end: datetime) -> floa
     end_m = to_market(end)
     today_start = start_of_market_day(today)
     tomorrow = end_of_market_day(today)
-    overlaps_today = start_m < tomorrow and end_m > today_start
+    overlaps_today = to_utc(start_m) < to_utc(tomorrow) and to_utc(end_m) > to_utc(today_start)
     if overlaps_today:
         return settings.cache_ttl_snapshot_s
     return settings.cache_ttl_historical_s

@@ -18,7 +18,13 @@ from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.market_power import McsinrInterval, SecondaryOfferPriceLimitInterval
 from aeso_mcp.models.transmission import TransmissionOutageRecord
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, parse_aeso_hour_ending, to_market
+from aeso_mcp.timeutil import (
+    MARKET_TZ,
+    in_half_open_range,
+    parse_aeso_hour_ending,
+    to_market,
+    to_utc,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,11 +190,11 @@ class AesoPublicReportsProvider:
                 href = str(csv_link["href"])
                 publication_time = _publication_time_from_href(href)
                 if publication_time is not None:
-                    # Match service-layer half-open [start, end) semantics.
-                    if start <= publication_time < end:
+                    # Match service-layer half-open [start, end) semantics (UTC-safe).
+                    if in_half_open_range(publication_time, start, end):
                         csv_url = self._http.resolve_outage_report_url(href, base=current_url)
                         historical.append((csv_url, publication_time))
-                    if publication_time < start:
+                    if to_utc(publication_time) < to_utc(start):
                         break
                     if publication_time.date() <= date(2025, 1, 22) and not jumped_to_archives:
                         current_url = _ARCHIVE_JUMP_URL

@@ -34,3 +34,10 @@ def test_settings_do_not_expose_secret_in_repr() -> None:
 def test_invalid_log_level_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings.model_validate({"aeso_api_key": "x", "log_level": "VERBOSE"})
+
+
+def test_non_apim_base_url_rejected() -> None:
+    with pytest.raises(ValidationError, match=r"apimgw\.aeso\.ca"):
+        Settings.model_validate(
+            {"aeso_api_key": "x", "aeso_base_url": "https://ets.aeso.ca/public"}
+        )

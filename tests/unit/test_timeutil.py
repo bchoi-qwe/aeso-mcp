@@ -10,7 +10,9 @@ import pytest
 from aeso_mcp.errors import InvalidDateRangeError
 from aeso_mcp.timeutil import (
     MARKET_TZ,
+    elapsed_hours,
     ensure_aware,
+    in_half_open_range,
     is_dst_fall_back_day,
     is_dst_spring_forward_day,
     market_day_hours,
@@ -119,3 +121,17 @@ def test_validate_range_ambiguous_fall_back_uses_utc_order() -> None:
     start, end = validate_range(earlier, later)
     assert start == to_market(earlier)
     assert end == to_market(later)
+
+
+def test_in_half_open_range_and_elapsed_hours_are_dst_safe() -> None:
+    earlier = datetime(2024, 11, 3, 1, 30, tzinfo=MARKET_TZ, fold=0)
+    later = datetime(2024, 11, 3, 1, 15, tzinfo=MARKET_TZ, fold=1)
+    # Wall-clock comparison is inverted; UTC helpers must disagree with that.
+    assert earlier > later
+    day_end = datetime(2024, 11, 3, 3, 0, tzinfo=MARKET_TZ)
+    assert in_half_open_range(later, earlier, day_end)
+    assert not in_half_open_range(earlier, later, day_end)
+    day_start = datetime(2024, 11, 3, 0, 0, tzinfo=MARKET_TZ)
+    next_midnight = datetime(2024, 11, 4, 0, 0, tzinfo=MARKET_TZ)
+    assert (next_midnight - day_start).total_seconds() / 3600 == 24.0
+    assert elapsed_hours(day_start, next_midnight) == 25.0

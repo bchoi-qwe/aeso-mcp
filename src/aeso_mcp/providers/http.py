@@ -124,5 +124,5 @@ class AesoHttpClient:
         if path.startswith("http://") or path.startswith("https://"):
             raise DataValidationError("Absolute upstream URLs are not allowed.")
         host = httpx.URL(self._settings.aeso_base_url).host
-        if host not in ALLOWED_HOSTS and not host.endswith(".aeso.ca"):
+        if host not in ALLOWED_HOSTS:
             raise DataValidationError(f"Upstream host not allow-listed: {host}")

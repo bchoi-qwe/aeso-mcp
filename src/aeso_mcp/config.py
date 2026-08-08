@@ -115,6 +115,21 @@ class Settings(BaseSettings):
         validation_alias="AESO_MCP_BASE_URL",
     )
 
+    @field_validator("aeso_base_url")
+    @classmethod
+    def _validate_aeso_base_url(cls, value: str) -> str:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("AESO_MCP_BASE_URL must be an absolute http(s) URL")
+        host = parsed.hostname.lower()
+        if host != "apimgw.aeso.ca":
+            raise ValueError(
+                "AESO_MCP_BASE_URL host must be apimgw.aeso.ca (authenticated APIM gateway only)."
+            )
+        return value.rstrip("/")
+
     @field_validator("log_level")
     @classmethod
     def _normalize_log_level(cls, value: str) -> str:

@@ -25,7 +25,7 @@ from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.prices import PoolPriceRequest
 from aeso_mcp.services.market import MarketService
-from aeso_mcp.timeutil import to_market, utc_now, validate_range
+from aeso_mcp.timeutil import elapsed_hours, to_market, to_utc, utc_now, validate_range
 
 
 class AnalyticsService:
@@ -144,7 +144,7 @@ class AnalyticsService:
             max_days=self._settings.max_pool_price_days,
             label="focus window",
         )
-        duration = focus_end - focus_start
+        duration = to_utc(focus_end) - to_utc(focus_start)
         if request.baseline_start is not None and request.baseline_end is not None:
             baseline_start, baseline_end = validate_range(
                 request.baseline_start,
@@ -154,8 +154,8 @@ class AnalyticsService:
             )
         else:
             baseline_end = focus_start
-            baseline_start = focus_start - duration
-            if baseline_end <= baseline_start:
+            baseline_start = to_market(to_utc(focus_start) - duration)
+            if to_utc(baseline_end) <= to_utc(baseline_start):
                 raise InvalidDateRangeError("Unable to infer a valid baseline window.")
 
         focus = await self._period_stats(focus_start, focus_end)
@@ -331,7 +331,7 @@ def _close_event(active: list, load_by_start: dict, min_hours: float) -> PriceEv
         return None
     start = active[0].interval_start
     end = active[-1].interval_end
-    duration = (end - start).total_seconds() / 3600
+    duration = elapsed_hours(start, end)
     if duration < min_hours:
         return None
     prices = [i.pool_price_cad_per_mwh for i in active]

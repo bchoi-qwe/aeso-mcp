@@ -29,11 +29,9 @@ from aeso_mcp.models.grid import GeneratorOutageInterval, InterchangePathFlow
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
 from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, to_market
+from aeso_mcp.timeutil import MARKET_TZ, in_half_open_range
 
 logger = logging.getLogger(__name__)
-
-RENEWABLE_FUELS = frozenset({"Wind", "Solar", "Hydro"})
 
 
 def _provenance(product: str, api_version: str | None = None) -> dict[str, str]:
@@ -104,9 +102,8 @@ class GridStatusProvider:
         client = self._get_client()
         df = await self._run(client.get_pool_price, date=start, end=end)
         intervals = _parse_pool_prices(df)
-        # Filter to requested half-open range in market time
-        start_m, end_m = to_market(start), to_market(end)
-        intervals = [i for i in intervals if start_m <= i.interval_start < end_m]
+        # Filter to requested half-open range in true elapsed order (DST-safe).
+        intervals = [i for i in intervals if in_half_open_range(i.interval_start, start, end)]
         return intervals, _provenance("Pool Price API", "v1.1")
 
     async def get_system_marginal_prices(
@@ -117,8 +114,7 @@ class GridStatusProvider:
         client = self._get_client()
         df = await self._run(client.get_system_marginal_price, date=start, end=end)
         intervals = _parse_smp(df)
-        start_m, end_m = to_market(start), to_market(end)
-        intervals = [i for i in intervals if start_m <= i.interval_start < end_m]
+        intervals = [i for i in intervals if in_half_open_range(i.interval_start, start, end)]
         return intervals, _provenance("System Marginal Price API", "v1.1")
 
     async def get_load(
@@ -147,8 +143,12 @@ class GridStatusProvider:
             except AesoMcpError:
                 # Forecast is optional enrichment; keep actual load if forecast fails.
                 logger.warning("load_forecast_unavailable")
-        start_m, end_m = to_market(start), to_market(end)
-        rows = [r for r in rows if start_m <= r["interval_start"] < end_m]  # type: ignore[operator]
+        rows = [
+            r
+            for r in rows
+            if isinstance(r["interval_start"], datetime)
+            and in_half_open_range(r["interval_start"], start, end)
+        ]
         return rows, _provenance("Alberta Internal Load API", "v1")
 
     async def get_fuel_mix(self) -> tuple[datetime, list[FuelMixComponent], dict[str, str]]:
@@ -180,8 +180,7 @@ class GridStatusProvider:
                 failures.append(exc)
         if not intervals and failures:
             raise failures[-1]
-        start_m, end_m = to_market(start), to_market(end)
-        intervals = [i for i in intervals if start_m <= i.interval_start < end_m]
+        intervals = [i for i in intervals if in_half_open_range(i.interval_start, start, end)]
         return intervals, _provenance("Wind/Solar Generation API")
 
     async def get_interchange(
@@ -234,12 +233,7 @@ class GridStatusProvider:
         client = self._get_client()
         df = await self._run(client.get_generator_outages_hourly, date=start, end=end)
         outages = _parse_generator_outage_intervals(df)
-        start_m, end_m = to_market(start), to_market(end)
-        outages = [
-            o
-            for o in outages
-            if o.interval_start is not None and start_m <= to_market(o.interval_start) < end_m
-        ]
+        outages = [o for o in outages if in_half_open_range(o.interval_start, start, end)]
         return outages, _provenance("Generator Outages API")
 
 

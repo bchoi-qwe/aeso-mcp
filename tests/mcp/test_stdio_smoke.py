@@ -20,11 +20,14 @@ async def test_stdio_compatible_inmemory_client_lists_tools() -> None:
     # For discovery-only smoke we inject a container built with settings.
     container = build_container(settings)
     mcp = create_mcp_server(settings, container)
-    async with Client(mcp) as client:
-        tools = await client.list_tools()
-        names = {t.name for t in tools}
-        assert "get_market_snapshot" in names
-        assert "compare_forecast_to_actual" in names
-        resources = await client.list_resources()
-        uris = {str(r.uri) for r in resources}
-        assert "aeso://glossary" in uris
+    try:
+        async with Client(mcp) as client:
+            tools = await client.list_tools()
+            names = {t.name for t in tools}
+            assert "get_market_snapshot" in names
+            assert "compare_forecast_to_actual" in names
+            resources = await client.list_resources()
+            uris = {str(r.uri) for r in resources}
+            assert "aeso://glossary" in uris
+    finally:
+        await container.aclose()
