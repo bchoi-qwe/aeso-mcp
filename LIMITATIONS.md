@@ -17,8 +17,9 @@ human-reviewed and accepted (or fixed).
 | --- | --- |
 | Historical generation | **Wind and solar only** (public AESO/GridStatus coverage). Current fuel mix is all fuels. |
 | Direct APIM provider | Used for contract tests and some parsing paths. Outages and historical generation **raise** `UnsupportedDatasetError` on the direct APIM adapter. Runtime uses GridStatus. |
-| Outages | Depend on GridStatus’s generator-outages adapter; empty ranges produce an explicit warning, not invented rows. |
-| Merit order / unit commitments / metered volumes | Not implemented. |
+| Outages | Generator outages via GridStatus. Approved transmission outages via GridStatus ETS CSV. Long-range significant transmission outages via credential-free public-reports client (`approval_status=tentative`). |
+| Merit order / unit commitments / metered volumes | Not implemented yet — prefer **APIM**, do not scrape ETS copies. |
+| Market-power public reports (MCSINR, secondary offer limit) | Implemented as current ETS CSV publications via credential-free public-reports client. Historical windows not yet supported. |
 | Settlement finality | Operational feeds may be preliminary; metadata does not claim final settlement. |
 
 ## Analytics

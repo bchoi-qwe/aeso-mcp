@@ -6,6 +6,7 @@ from aeso_mcp.services.assets import AssetsService
 from aeso_mcp.services.cache import AsyncTTLCache
 from aeso_mcp.services.grid import GridService
 from aeso_mcp.services.market import MarketService
+from aeso_mcp.services.transmission import TransmissionService
 
 __all__ = [
     "AnalyticsService",
@@ -13,4 +14,5 @@ __all__ = [
     "AsyncTTLCache",
     "GridService",
     "MarketService",
+    "TransmissionService",
 ]

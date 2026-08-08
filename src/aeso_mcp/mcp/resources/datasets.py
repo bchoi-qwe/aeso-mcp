@@ -21,6 +21,10 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Interchange | `get_interchange` | current | MW | actual | Current Supply Demand API v2 |
 | Operating Reserves | `get_reserves` | current | MW | actual | Current Supply Demand API v2 |
 | Generator Outages | `get_outages` | hourly | MW | actual | Generator Outages (via GridStatus) |
+| Approved Tx Outages | `get_approved_transmission_outages` | publication | — | preliminary / approved | ETS CSV via GridStatus |
+| Long-range Tx Outages | `get_long_range_transmission_outages` | publication (~24mo) | — | preliminary / tentative | ETS public report CSV |
+| MCSINR | `get_monthly_cumulative_net_revenue` | hourly HE | CAD | preliminary | ETS MCSINR CSV |
+| Secondary Offer Limit | `get_secondary_offer_price_limit` | publication | CAD/MWh | preliminary | ETS Current SOC CSV |
 | Assets | `get_assets` | catalog | — | actual | Asset List API v1 |
 
 ## Analytics (derived)
@@ -41,8 +45,8 @@ Server-enforced limits protect against oversized responses (for example SMP max 
 Prefer analytics tools for long-period statistical questions.
 
 ## Limitations
-See the repository `LIMITATIONS.md` for an honest inventory of coverage gaps
-(historical generation wind/solar-only, deferred PyPI, FastMCP prerelease, etc.).
+See the repository `LIMITATIONS.md` and `docs/data-sources.md` for coverage gaps
+and the APIM-first vs public-report resolution order.
 """
 
 POOL_PRICE_METHODOLOGY = """# Methodology: Pool Price

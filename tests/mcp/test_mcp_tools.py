@@ -20,11 +20,13 @@ from aeso_mcp.models.grid import (
     InterchangePathFlow,
 )
 from aeso_mcp.models.prices import PoolPriceInterval
+from aeso_mcp.models.transmission import TransmissionOutageRecord
 from aeso_mcp.services.analytics import AnalyticsService
 from aeso_mcp.services.assets import AssetsService
 from aeso_mcp.services.cache import AsyncTTLCache
 from aeso_mcp.services.grid import GridService
 from aeso_mcp.services.market import MarketService
+from aeso_mcp.services.transmission import TransmissionService
 from aeso_mcp.timeutil import MARKET_TZ, utc_now
 
 EXPECTED_TOOLS = {
@@ -36,7 +38,11 @@ EXPECTED_TOOLS = {
     "get_interchange",
     "get_reserves",
     "get_outages",
+    "get_approved_transmission_outages",
+    "get_long_range_transmission_outages",
     "get_assets",
+    "get_monthly_cumulative_net_revenue",
+    "get_secondary_offer_price_limit",
     "compare_market_periods",
     "find_price_events",
     "explain_market_conditions",
@@ -129,6 +135,61 @@ def container(settings: Settings) -> AppContainer:
         [],
         {"provider": "gridstatus", "source_product": "Outages"},
     )
+    pub = start
+    provider.get_approved_transmission_outages.return_value = (
+        [
+            TransmissionOutageRecord(
+                interval_start=start,
+                interval_end=start + timedelta(days=1),
+                publication_time=pub,
+                transmission_owner="ALTALINK",
+                element_type="Outage",
+                element="TEST LINE",
+                scheduled_activity="maintenance",
+                comments=None,
+                interconnection=None,
+                approval_status="approved",
+            )
+        ],
+        pub,
+        {"provider": "gridstatus", "source_product": "Approved Transmission Outages"},
+    )
+    long_range = AsyncMock()
+    long_range.get_long_range_transmission_outages.return_value = (
+        [
+            TransmissionOutageRecord(
+                interval_start=start,
+                interval_end=start + timedelta(days=30),
+                publication_time=pub,
+                transmission_owner="ATCO",
+                element="LONG RANGE ELEMENT",
+                scheduled_activity="forced outage",
+                approval_status="tentative",
+            )
+        ],
+        pub,
+        {"provider": "aeso_public_report", "source_product": "Long Range"},
+    )
+    transmission = TransmissionService(
+        approved_provider=provider,
+        long_range_provider=long_range,
+        settings=settings,
+        cache=cache,
+    )
+    public_reports = AsyncMock()
+    public_reports.get_monthly_cumulative_net_revenue.return_value = (
+        [],
+        start,
+        {"provider": "aeso_public_report", "source_product": "MCSINR"},
+    )
+    public_reports.get_secondary_offer_price_limit.return_value = (
+        [],
+        start,
+        {"provider": "aeso_public_report", "source_product": "SOC"},
+    )
+    from aeso_mcp.services.market_power import MarketPowerService
+
+    market_power = MarketPowerService(public_reports, settings, cache)
 
     return AppContainer(
         settings=settings,
@@ -137,6 +198,9 @@ def container(settings: Settings) -> AppContainer:
         grid=grid,
         assets=assets,
         analytics=analytics,
+        transmission=transmission,
+        market_power=market_power,
+        public_reports_http=AsyncMock(),
     )
 
 

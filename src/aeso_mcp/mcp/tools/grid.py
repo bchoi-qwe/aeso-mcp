@@ -13,6 +13,11 @@ from aeso_mcp.models.grid import (
     OutagesResponse,
     ReservesResponse,
 )
+from aeso_mcp.models.transmission import (
+    ApprovedTransmissionOutagesRequest,
+    LongRangeTransmissionOutagesRequest,
+    TransmissionOutagesResponse,
+)
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -21,7 +26,7 @@ if TYPE_CHECKING:
 
 
 def register_grid_tools(mcp: FastMCP, container: AppContainer) -> None:
-    """Register interchange, reserves, outages, and assets tools."""
+    """Register interchange, reserves, outages, assets, and transmission tools."""
 
     @mcp.tool(
         name="get_interchange",
@@ -62,7 +67,8 @@ def register_grid_tools(mcp: FastMCP, container: AppContainer) -> None:
         description=(
             "Returns AESO generator outage observations for [start, end) when available. "
             "Units: MW. Timestamps: America/Edmonton. Empty results may indicate no outages "
-            "or upstream unavailability."
+            "or upstream unavailability. For transmission planned outages use "
+            "get_approved_transmission_outages or get_long_range_transmission_outages."
         ),
         annotations={
             "readOnlyHint": True,
@@ -74,6 +80,47 @@ def register_grid_tools(mcp: FastMCP, container: AppContainer) -> None:
     @map_errors
     async def get_outages(request: OutagesRequest) -> OutagesResponse:
         return await container.grid.get_outages(request)
+
+    @mcp.tool(
+        name="get_approved_transmission_outages",
+        description=(
+            "Returns AESO-approved planned transmission outages (approval_status=approved). "
+            "Omit start/end for the current public publication. Historical start/end select "
+            "publication windows and are tightly bounded. Distinct from generator outages "
+            "and from long-range tentative outages."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    @map_errors
+    async def get_approved_transmission_outages(
+        request: ApprovedTransmissionOutagesRequest,
+    ) -> TransmissionOutagesResponse:
+        return await container.transmission.get_approved_transmission_outages(request)
+
+    @mcp.tool(
+        name="get_long_range_transmission_outages",
+        description=(
+            "Returns Long Range Significant Transmission Outages covering ~24 months ahead. "
+            "Entries may be tentative and not AESO-approved (approval_status=tentative). "
+            "Do not confuse with get_approved_transmission_outages."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    @map_errors
+    async def get_long_range_transmission_outages(
+        request: LongRangeTransmissionOutagesRequest,
+    ) -> TransmissionOutagesResponse:
+        return await container.transmission.get_long_range_transmission_outages(request)
 
     @mcp.tool(
         name="get_assets",

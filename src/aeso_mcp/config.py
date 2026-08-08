@@ -67,12 +67,39 @@ class Settings(BaseSettings):
     cache_ttl_historical_s: float = Field(default=86_400.0, ge=0.0)
     cache_ttl_assets_s: float = Field(default=86_400.0, ge=0.0)
     cache_ttl_forecast_s: float = Field(default=300.0, ge=0.0)
+    cache_ttl_public_report_s: float = Field(
+        default=900.0,
+        ge=0.0,
+        validation_alias="AESO_MCP_CACHE_TTL_PUBLIC_REPORT_S",
+        description="TTL for current approved public-report publications.",
+    )
+    cache_ttl_long_range_outages_s: float = Field(
+        default=1_800.0,
+        ge=0.0,
+        validation_alias="AESO_MCP_CACHE_TTL_LONG_RANGE_OUTAGES_S",
+        description="TTL for long-range significant transmission outage publications.",
+    )
+    cache_ttl_market_power_s: float = Field(
+        default=300.0,
+        ge=0.0,
+        validation_alias="AESO_MCP_CACHE_TTL_MARKET_POWER_S",
+        description="TTL for MCSINR / Secondary Offer Price Limit current publications.",
+    )
     cache_max_entries: int = Field(
         default=512,
         ge=16,
         le=10_000,
         validation_alias="AESO_MCP_CACHE_MAX_ENTRIES",
         description="Maximum in-memory cache entries before eviction.",
+    )
+    max_transmission_outage_history_days: int = Field(
+        default=14,
+        ge=1,
+        le=31,
+        validation_alias="AESO_MCP_MAX_TX_OUTAGE_HISTORY_DAYS",
+        description=(
+            "Max historical window for approved transmission outage publication navigation."
+        ),
     )
 
     aeso_base_url: str = Field(

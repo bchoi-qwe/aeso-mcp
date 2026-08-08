@@ -29,6 +29,7 @@ classifiers = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "beautifulsoup4>=4.12.0,<5",
     "fastmcp==4.0.0b2",
     "gridstatus>=0.36.0,<0.37",
     "httpx>=0.28.1,<1",

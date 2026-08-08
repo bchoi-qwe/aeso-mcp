@@ -27,6 +27,7 @@ from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.generation import FuelMixComponent, GenerationInterval
 from aeso_mcp.models.grid import InterchangePathFlow, OutageRecord
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
+from aeso_mcp.models.transmission import TransmissionOutageRecord
 from aeso_mcp.timeutil import MARKET_TZ, to_market
 
 logger = logging.getLogger(__name__)
@@ -233,6 +234,34 @@ class GridStatusProvider:
             if o.interval_start is not None and start_m <= to_market(o.interval_start) < end_m
         ]
         return outages, _provenance("Generator Outages API")
+
+    async def get_approved_transmission_outages(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> tuple[list[TransmissionOutageRecord], datetime | None, dict[str, str]]:
+        """Approved transmission planned outages via GridStatus's ETS CSV path."""
+        client = self._get_client()
+        if start is None and end is None:
+            df = await self._run(client.get_transmission_outages, date="latest")
+        else:
+            if start is None or end is None:
+                from aeso_mcp.errors import InvalidDateRangeError
+
+                raise InvalidDateRangeError(
+                    "Provide both start and end for historical approved transmission outages."
+                )
+            df = await self._run(
+                client.get_transmission_outages,
+                date=to_market(start),
+                end=to_market(end),
+            )
+        records, publication_time = _parse_transmission_outages(df, approval_status="approved")
+        return (
+            records,
+            publication_time,
+            _provenance("Approved Transmission Outages (ETS public report)"),
+        )
 
 
 def _series_to_market_dt(value: Any) -> datetime:
@@ -633,6 +662,59 @@ def _parse_outages(df: pd.DataFrame) -> list[OutageRecord]:
             )
         )
     return records
+
+
+def _parse_transmission_outages(
+    df: pd.DataFrame,
+    *,
+    approval_status: str,
+) -> tuple[list[TransmissionOutageRecord], datetime | None]:
+    if df is None or df.empty:
+        return [], None
+    publication_time: datetime | None = None
+    if "Publish Time" in df.columns:
+        for value in df["Publish Time"]:
+            if _is_present(value):
+                publication_time = _series_to_market_dt(value)
+                break
+    records: list[TransmissionOutageRecord] = []
+    for _, row in df.iterrows():
+        element = _optional_str(row.get("Element"))
+        if not element:
+            continue
+        if "Interval Start" not in df.columns or not _is_present(row.get("Interval Start")):
+            continue
+        start = _series_to_market_dt(row["Interval Start"])
+        end = (
+            _series_to_market_dt(row["Interval End"])
+            if "Interval End" in df.columns and _is_present(row.get("Interval End"))
+            else None
+        )
+        pub = (
+            _series_to_market_dt(row["Publish Time"])
+            if "Publish Time" in df.columns and _is_present(row.get("Publish Time"))
+            else publication_time
+        )
+        records.append(
+            TransmissionOutageRecord(
+                interval_start=start,
+                interval_end=end,
+                publication_time=pub,
+                transmission_owner=_optional_str(row.get("Transmission Owner") or row.get("Owner")),
+                element_type=_optional_str(row.get("Type")),
+                element=element,
+                scheduled_activity=_optional_str(row.get("Scheduled Activity")),
+                comments=_optional_str(
+                    row.get("Date Time Comments") or row.get("Date/Time Comments")
+                ),
+                interconnection=_optional_str(
+                    row.get("Interconnection") or row.get("Affected Intertie")
+                ),
+                approval_status="approved" if approval_status == "approved" else "tentative",
+                duration_note=_optional_str(row.get("Date Time Comments")),
+            )
+        )
+    return records, publication_time
 
 
 def _optional_str(value: Any) -> str | None:

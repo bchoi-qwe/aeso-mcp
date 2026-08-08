@@ -109,3 +109,41 @@ async def test_live_outages_recent_day(live_settings: Settings) -> None:
     assert result.metadata.observation_count == len(result.outages)
     if not result.outages:
         assert result.warnings
+
+
+@pytest.mark.asyncio
+async def test_live_transmission_public_reports(live_settings: Settings) -> None:
+    from aeso_mcp.models.market_power import MarketPowerMitigationRequest
+    from aeso_mcp.models.transmission import (
+        ApprovedTransmissionOutagesRequest,
+        LongRangeTransmissionOutagesRequest,
+    )
+
+    container = build_container(live_settings)
+    try:
+        approved = await container.transmission.get_approved_transmission_outages(
+            ApprovedTransmissionOutagesRequest()
+        )
+        assert approved.approval_status == "approved"
+        assert approved.metadata.observation_count == len(approved.outages)
+
+        long_range = await container.transmission.get_long_range_transmission_outages(
+            LongRangeTransmissionOutagesRequest()
+        )
+        assert long_range.approval_status == "tentative"
+        assert long_range.outages
+        assert all(o.approval_status == "tentative" for o in long_range.outages)
+
+        mcsinr = await container.market_power.get_monthly_cumulative_net_revenue(
+            MarketPowerMitigationRequest()
+        )
+        assert mcsinr.intervals
+        assert mcsinr.one_sixth_annualized_unavoidable_costs_cad is not None
+
+        soc = await container.market_power.get_secondary_offer_price_limit(
+            MarketPowerMitigationRequest()
+        )
+        assert soc.intervals
+        assert soc.limit_in_effect is not None
+    finally:
+        await container.public_reports_http.aclose()

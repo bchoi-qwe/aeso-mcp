@@ -49,8 +49,15 @@ from aeso_mcp.models.prices import (
     SystemMarginalPriceRequest,
     SystemMarginalPriceResponse,
 )
+from aeso_mcp.models.transmission import (
+    ApprovedTransmissionOutagesRequest,
+    LongRangeTransmissionOutagesRequest,
+    TransmissionOutageRecord,
+    TransmissionOutagesResponse,
+)
 
 __all__ = [
+    "ApprovedTransmissionOutagesRequest",
     "AssetRecord",
     "AssetsRequest",
     "AssetsResponse",
@@ -77,6 +84,7 @@ __all__ = [
     "LoadInterval",
     "LoadRequest",
     "LoadResponse",
+    "LongRangeTransmissionOutagesRequest",
     "MarketSnapshotResponse",
     "OutageRecord",
     "OutagesRequest",
@@ -91,4 +99,6 @@ __all__ = [
     "SystemMarginalPriceInterval",
     "SystemMarginalPriceRequest",
     "SystemMarginalPriceResponse",
+    "TransmissionOutageRecord",
+    "TransmissionOutagesResponse",
 ]

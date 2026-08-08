@@ -14,4 +14,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks.
 - Prefer GridStatus for AESO datasets it already supports
 - Keep tools intent-oriented, typed, bounded, and timezone-aware (`America/Edmonton`)
 - Never log or return `AESO_API_KEY`
+- Do not reuse the APIM HTTP client for `ets.aeso.ca` — use `AesoPublicReportsHttpClient` (no credentials)
 - Do not add agent frameworks (LangChain, etc.) — this server provides tools to agents
+- See [docs/data-sources.md](docs/data-sources.md) before adding scrapers

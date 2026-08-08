@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `docs/data-sources.md` coverage matrix (APIM-first resolution order)
+- Approved transmission outages via GridStatus (`get_approved_transmission_outages`)
+- Credential-free public-reports HTTP client and Long Range Significant Transmission Outages
+  (`get_long_range_transmission_outages`, `approval_status=tentative`)
+- Market-power public reports: `get_monthly_cumulative_net_revenue` (MCSINR) and
+  `get_secondary_offer_price_limit`
+- `TransmissionService` / `MarketPowerService` with separate public-report providers
 - `LIMITATIONS.md` honest gap inventory; Pre-PyPI checklist in CONTRIBUTING
 - Historical generation responses now use the semantic TTL cache
 - Bounded in-memory cache (`AESO_MCP_CACHE_MAX_ENTRIES`, default 512)

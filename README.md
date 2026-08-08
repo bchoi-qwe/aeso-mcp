@@ -32,6 +32,10 @@
 | Interchange | `get_interchange` | Current path flows MW |
 | Operating reserves | `get_reserves` | Current MW indicators |
 | Generator outages | `get_outages` | When upstream data available |
+| Approved Tx outages | `get_approved_transmission_outages` | AESO-approved planned transmission outages |
+| Long-range Tx outages | `get_long_range_transmission_outages` | Tentative ~24-month significant outages |
+| MCSINR | `get_monthly_cumulative_net_revenue` | Cumulative net revenue vs offer-cap trigger |
+| Secondary offer limit | `get_secondary_offer_price_limit` | Whether secondary offer cap is in effect |
 | Assets | `get_assets` | Registry with filters |
 
 Analytics: `compare_market_periods`, `find_price_events`, `explain_market_conditions`,
@@ -225,7 +229,8 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 ## Roadmap
 
 - Human review against [LIMITATIONS.md](LIMITATIONS.md) before any PyPI / MCP Registry publish
-- Merit order, metered volumes, and unit commitments when reliable sources exist
+- See [docs/data-sources.md](docs/data-sources.md) for APIM vs public-report backlog (MCSINR, secondary offer cap, merit order via APIM)
+- Merit order, metered volumes, and unit commitments via **APIM** (do not scrape ETS copies)
 - Optional DuckDB/Parquet historical analytics store
 - Broader forecast vs actual tools
 
