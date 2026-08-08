@@ -65,9 +65,9 @@ def register_grid_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="get_outages",
         description=(
-            "Returns AESO generator outage observations for [start, end) when available. "
-            "Units: MW. Timestamps: America/Edmonton. Empty results may indicate no outages "
-            "or upstream unavailability. For transmission planned outages use "
+            "Returns hourly AESO generator outage capacity by technology/fuel for "
+            "[start, end) (Total Outage MW plus per-fuel components). Timestamps: "
+            "America/Edmonton. For transmission planned outages use "
             "get_approved_transmission_outages or get_long_range_transmission_outages."
         ),
         annotations={

@@ -26,7 +26,9 @@ Out of scope / residual risk:
 - Secrets only via environment / `.env` (never committed)
 - API keys are `SecretStr` and must not appear in logs or client error messages
 - No generic URL-fetch, shell, filesystem, SQL, or code-execution tools
-- Upstream host allow-list limited to AESO APIM
+- Upstream host allow-list for authenticated APIM (`apimgw.aeso.ca`) and
+  credential-free public reports (`ets.aeso.ca`); redirects are re-validated
+  against the public-report allow-list
 - Bounded date ranges, observation caps, HTTP timeouts, and selective retries
 - Stdio logging goes to **stderr** only
 

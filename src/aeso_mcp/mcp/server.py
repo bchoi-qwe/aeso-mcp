@@ -6,6 +6,9 @@ Framework-specific code lives here. Domain services remain FastMCP-agnostic.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastmcp import FastMCP
 
 from aeso_mcp import __version__
@@ -32,6 +35,13 @@ def create_mcp_server(
             settings = get_settings()
         container = build_container(settings)
 
+    @asynccontextmanager
+    async def lifespan(_server: FastMCP) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            await container.aclose()
+
     mcp = FastMCP(
         name="aeso-mcp",
         version=__version__,
@@ -44,6 +54,7 @@ def create_mcp_server(
             "America/Edmonton. This project is independent and not affiliated with or "
             "endorsed by AESO."
         ),
+        lifespan=lifespan,
     )
 
     register_market_tools(mcp, container)

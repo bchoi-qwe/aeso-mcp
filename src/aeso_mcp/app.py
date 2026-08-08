@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from aeso_mcp.config import Settings
 from aeso_mcp.providers.gridstatus import GridStatusProvider
+from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 from aeso_mcp.services.analytics import AnalyticsService
@@ -30,13 +31,20 @@ class AppContainer:
     analytics: AnalyticsService
     transmission: TransmissionService
     market_power: MarketPowerService
+    apim_http: AesoHttpClient
     public_reports_http: AesoPublicReportsHttpClient
+
+    async def aclose(self) -> None:
+        """Close outbound HTTP clients."""
+        await self.public_reports_http.aclose()
+        await self.apim_http.aclose()
 
 
 def build_container(settings: Settings) -> AppContainer:
     """Construct the default production dependency graph."""
     cache = AsyncTTLCache(max_entries=settings.cache_max_entries)
-    provider = GridStatusProvider(settings)
+    apim_http = AesoHttpClient(settings)
+    provider = GridStatusProvider(settings, apim_http=apim_http)
     public_http = AesoPublicReportsHttpClient(settings)
     public_reports = AesoPublicReportsProvider(public_http)
     market = MarketService(provider, settings, cache)
@@ -44,7 +52,7 @@ def build_container(settings: Settings) -> AppContainer:
     assets = AssetsService(provider, settings, cache)
     analytics = AnalyticsService(market, settings)
     transmission = TransmissionService(
-        approved_provider=provider,
+        approved_provider=public_reports,
         long_range_provider=public_reports,
         settings=settings,
         cache=cache,
@@ -59,5 +67,6 @@ def build_container(settings: Settings) -> AppContainer:
         analytics=analytics,
         transmission=transmission,
         market_power=market_power,
+        apim_http=apim_http,
         public_reports_http=public_http,
     )

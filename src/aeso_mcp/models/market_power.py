@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -42,10 +43,10 @@ class MarketPowerMitigationRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Reserved for historical date windows once HistoricalMCSINR parameters are stable.
-    current_only: bool = Field(
+    # Historical windows are not implemented yet — advertise only current.
+    current_only: Literal[True] = Field(
         default=True,
-        description="v0.2 fetches the current ETS publication only.",
+        description="Only the current ETS publication is supported.",
     )
 
 

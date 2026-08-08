@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import pandas as pd
+import httpx
 import pytest
+import respx
 
 from aeso_mcp.config import Settings
 from aeso_mcp.models.transmission import (
@@ -15,7 +16,11 @@ from aeso_mcp.models.transmission import (
     LongRangeTransmissionOutagesRequest,
     TransmissionOutageRecord,
 )
-from aeso_mcp.providers.gridstatus import GridStatusProvider, _parse_transmission_outages
+from aeso_mcp.providers.public_reports import (
+    APPROVED_TX_LANDING_URL,
+    AesoPublicReportsProvider,
+)
+from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 from aeso_mcp.services.transmission import TransmissionService
 from aeso_mcp.timeutil import MARKET_TZ
 
@@ -24,61 +29,36 @@ def _settings() -> Settings:
     return Settings(aeso_api_key="test-key")  # type: ignore[arg-type]
 
 
-def test_parse_approved_transmission_outages_dataframe() -> None:
-    start = datetime(2026, 8, 1, 8, 0, tzinfo=MARKET_TZ)
-    end = datetime(2026, 8, 5, 17, 0, tzinfo=MARKET_TZ)
-    pub = datetime(2026, 8, 5, 15, 11, tzinfo=MARKET_TZ)
-    df = pd.DataFrame(
-        [
-            {
-                "Interval Start": start,
-                "Interval End": end,
-                "Publish Time": pub,
-                "Transmission Owner": "ALTALINK",
-                "Type": "Outage",
-                "Element": "256s C1",
-                "Scheduled Activity": "forced outage",
-                "Date Time Comments": "12,129 Hours Continuous",
-                "Interconnection": "",
-            }
-        ]
-    )
-    records, publication_time = _parse_transmission_outages(df, approval_status="approved")
-    assert publication_time == pub
-    assert len(records) == 1
-    assert records[0].approval_status == "approved"
-    assert records[0].element == "256s C1"
-    assert records[0].transmission_owner == "ALTALINK"
-
-
+@respx.mock
 @pytest.mark.asyncio
-async def test_approved_transmission_outages_latest_via_gridstatus() -> None:
-    start = datetime(2026, 8, 1, 8, 0, tzinfo=MARKET_TZ)
-    pub = datetime(2026, 8, 5, 15, 11, tzinfo=MARKET_TZ)
-    df = pd.DataFrame(
-        [
-            {
-                "Interval Start": start,
-                "Interval End": start + timedelta(days=1),
-                "Publish Time": pub,
-                "Transmission Owner": "ATCO",
-                "Type": "Outage",
-                "Element": "826s 504R",
-                "Scheduled Activity": "emergency removal",
-                "Date Time Comments": "note",
-                "Interconnection": None,
-            }
-        ]
+async def test_approved_transmission_outages_latest_via_public_client() -> None:
+    html = (
+        "<html><body>"
+        '<a href="csvData\\\\_2026-08-05_15-11-00_qryOpPlanTransmissionTable_1.csv">'
+        "CSV</a>"
+        "</body></html>"
     )
-    client = MagicMock()
-    client.get_transmission_outages.return_value = df
-    provider = GridStatusProvider(_settings())
-    provider._client = client
-    records, publication_time, meta = await provider.get_approved_transmission_outages()
-    assert meta["provider"] == "gridstatus"
-    assert publication_time == pub
+    csv_body = (
+        b"Owner,From,To,Duration,Type,Element,Scheduled Activity,"
+        b"Date/Time Comments,Interconnection\n"
+        b"ATCO,01-Aug-26 08:00,02-Aug-26 08:00,24 Hours,Outage,826s 504R,"
+        b"emergency removal,note,\n"
+    )
+    respx.get(APPROVED_TX_LANDING_URL).mock(return_value=httpx.Response(200, text=html))
+    respx.get(url__regex=r".*csvData/.*qryOpPlanTransmissionTable_1\.csv").mock(
+        return_value=httpx.Response(200, content=csv_body)
+    )
+    client = AesoPublicReportsHttpClient(_settings())
+    try:
+        provider = AesoPublicReportsProvider(client)
+        records, publication_time, meta = await provider.get_approved_transmission_outages()
+    finally:
+        await client.aclose()
+    assert meta["provider"] == "aeso_public_report"
+    assert publication_time is not None
+    assert publication_time.year == 2026
     assert records[0].approval_status == "approved"
-    client.get_transmission_outages.assert_called_once_with(date="latest")
+    assert records[0].element == "826s 504R"
 
 
 @pytest.mark.asyncio
@@ -96,7 +76,7 @@ async def test_transmission_service_keeps_approval_semantics() -> None:
             )
         ],
         start,
-        {"provider": "gridstatus", "source_product": "Approved"},
+        {"provider": "aeso_public_report", "source_product": "Approved"},
     )
     long_range.get_long_range_transmission_outages.return_value = (
         [
@@ -124,3 +104,4 @@ async def test_transmission_service_keeps_approval_semantics() -> None:
     assert approved_resp.approval_status == "approved"
     assert long_resp.approval_status == "tentative"
     assert any("tentative" in w.lower() for w in long_resp.warnings)
+    assert approved_resp.metadata.provider.value == "aeso_public_report"

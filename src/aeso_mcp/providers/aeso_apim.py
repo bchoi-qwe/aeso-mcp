@@ -17,6 +17,7 @@ from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.generation import FuelMixComponent, GenerationInterval
 from aeso_mcp.models.grid import InterchangePathFlow, OutageRecord
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
+from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.timeutil import MARKET_TZ, format_aeso_date, to_market
 
@@ -223,7 +224,9 @@ class AesoApimProvider:
         for item in payload.get("interchange_list") or []:
             if not isinstance(item, dict):
                 continue
-            path = str(item.get("path", "Unknown"))
+            path = str(item.get("path", "Unknown")).strip()
+            if path.endswith(" Flow"):
+                path = path[: -len(" Flow")].strip()
             flow = _opt_float(item.get("actual_flow"))
             if flow is None:
                 continue
@@ -260,66 +263,8 @@ class AesoApimProvider:
         self,
     ) -> tuple[datetime, dict[str, object], dict[str, str]]:
         data = await self._http.get_json("currentsupplydemand-api/v2/csd/summary/current")
-        payload = data.get("return")
-        if not isinstance(payload, dict):
-            raise DataValidationError("Unexpected CSD response shape.")
-        observed_at = _parse_utc(str(payload["effective_datetime_utc"]))
-
-        components: list[FuelMixComponent] = []
-        for item in payload.get("generation_data_list") or []:
-            if not isinstance(item, dict):
-                continue
-            fuel = str(item.get("fuel_type", "Unknown")).title()
-            net = _opt_float(item.get("aggregated_net_generation"))
-            if net is None:
-                continue
-            components.append(
-                FuelMixComponent(
-                    fuel_type=fuel,
-                    generation_mw=net,
-                    maximum_capability_mw=_opt_float(item.get("aggregated_maximum_capability")),
-                )
-            )
-
-        paths: list[InterchangePathFlow] = []
-        for item in payload.get("interchange_list") or []:
-            if not isinstance(item, dict):
-                continue
-            flow = _opt_float(item.get("actual_flow"))
-            if flow is None:
-                continue
-            paths.append(InterchangePathFlow(path=str(item.get("path", "Unknown")), flow_mw=flow))
-
-        reserves = {
-            "contingency_reserve_required_mw": _opt_float(
-                payload.get("contingency_reserve_required")
-            ),
-            "dispatched_contingency_reserve_total_mw": _opt_float(
-                payload.get("dispatched_contigency_reserve_total")
-            ),
-            "dispatched_contingency_reserve_gen_mw": _opt_float(
-                payload.get("dispatched_contingency_reserve_gen")
-            ),
-            "dispatched_contingency_reserve_other_mw": _opt_float(
-                payload.get("dispatched_contingency_reserve_other")
-            ),
-            "fast_frequency_response_dispatched_mw": _opt_float(payload.get("ffr_armed_dispatch")),
-            "fast_frequency_response_offered_mw": _opt_float(payload.get("ffr_offered_volume")),
-            "long_lead_time_volume_mw": _opt_float(payload.get("long_lead_time_volume")),
-        }
-
-        return (
-            observed_at,
-            {
-                "generation_by_fuel": components,
-                "total_generation_mw": sum(c.generation_mw for c in components),
-                "interchange_paths": paths,
-                "net_interchange_mw": sum(p.flow_mw for p in paths),
-                "reserves": reserves,
-                "alberta_internal_load_mw": _opt_float(payload.get("alberta_internal_load")),
-            },
-            _prov("Current Supply Demand API", "v2"),
-        )
+        observed_at, payload = parse_csd_payload(data)
+        return observed_at, payload, _prov("Current Supply Demand API", "v2")
 
     async def get_assets(
         self,

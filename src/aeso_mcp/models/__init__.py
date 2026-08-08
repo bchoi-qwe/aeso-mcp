@@ -33,6 +33,7 @@ from aeso_mcp.models.generation import (
     LoadResponse,
 )
 from aeso_mcp.models.grid import (
+    GeneratorOutageInterval,
     InterchangePathFlow,
     InterchangeResponse,
     MarketSnapshotResponse,
@@ -79,6 +80,7 @@ __all__ = [
     "GenerationRequest",
     "GenerationResponse",
     "GenerationSnapshot",
+    "GeneratorOutageInterval",
     "InterchangePathFlow",
     "InterchangeResponse",
     "LoadInterval",

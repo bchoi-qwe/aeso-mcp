@@ -7,7 +7,7 @@ human-reviewed and accepted (or fixed).
 ## Distribution
 
 - Install from GitHub (`uvx --from git+…` or clone + `uv run`). PyPI is deferred.
-- MCP Registry listing is not published yet (`server.json` exists for a future listing).
+- MCP Registry listing is not published yet (`server.json` is a placeholder without a PyPI package entry until publication).
 - FastMCP is pinned to a **prerelease** (`4.0.0b2`) to target MCP protocol generation
   `2026-07-28`; expect framework churn.
 
@@ -17,7 +17,7 @@ human-reviewed and accepted (or fixed).
 | --- | --- |
 | Historical generation | **Wind and solar only** (public AESO/GridStatus coverage). Current fuel mix is all fuels. |
 | Direct APIM provider | Used for contract tests and some parsing paths. Outages and historical generation **raise** `UnsupportedDatasetError` on the direct APIM adapter. Runtime uses GridStatus. |
-| Outages | Generator outages via GridStatus. Approved transmission outages via GridStatus ETS CSV. Long-range significant transmission outages via credential-free public-reports client (`approval_status=tentative`). |
+| Outages | Generator outages via GridStatus as **hourly aggregated capacity by fuel/technology**. Approved and long-range transmission outages via credential-free public-reports client (`approval_status=approved` / `tentative`). |
 | Merit order / unit commitments / metered volumes | Not implemented yet — prefer **APIM**, do not scrape ETS copies. |
 | Market-power public reports (MCSINR, secondary offer limit) | Implemented as current ETS CSV publications via credential-free public-reports client. Historical windows not yet supported. |
 | Settlement finality | Operational feeds may be preliminary; metadata does not claim final settlement. |

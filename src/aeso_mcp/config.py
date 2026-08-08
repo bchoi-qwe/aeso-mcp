@@ -73,6 +73,14 @@ class Settings(BaseSettings):
         validation_alias="AESO_MCP_CACHE_TTL_PUBLIC_REPORT_S",
         description="TTL for current approved public-report publications.",
     )
+    cache_ttl_historical_public_report_s: float = Field(
+        default=86_400.0,
+        ge=0.0,
+        validation_alias="AESO_MCP_CACHE_TTL_HISTORICAL_PUBLIC_REPORT_S",
+        description=(
+            "TTL for historical approved transmission publications (immutable archive snapshots)."
+        ),
+    )
     cache_ttl_long_range_outages_s: float = Field(
         default=1_800.0,
         ge=0.0,

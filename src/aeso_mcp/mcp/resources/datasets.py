@@ -20,8 +20,8 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Generation / Fuel Mix | `get_generation` | current (all fuels); hourly wind/solar history | MW | actual | Current Supply Demand + renewable APIs |
 | Interchange | `get_interchange` | current | MW | actual | Current Supply Demand API v2 |
 | Operating Reserves | `get_reserves` | current | MW | actual | Current Supply Demand API v2 |
-| Generator Outages | `get_outages` | hourly | MW | actual | Generator Outages (via GridStatus) |
-| Approved Tx Outages | `get_approved_transmission_outages` | publication | — | preliminary / approved | ETS CSV via GridStatus |
+| Generator Outages | `get_outages` | hourly | MW | actual | Generator Outages (aggregated by fuel via GridStatus) |
+| Approved Tx Outages | `get_approved_transmission_outages` | publication | — | preliminary / approved | ETS CSV via public-reports client |
 | Long-range Tx Outages | `get_long_range_transmission_outages` | publication (~24mo) | — | preliminary / tentative | ETS public report CSV |
 | MCSINR | `get_monthly_cumulative_net_revenue` | hourly HE | CAD | preliminary | ETS MCSINR CSV |
 | Secondary Offer Limit | `get_secondary_offer_price_limit` | publication | CAD/MWh | preliminary | ETS Current SOC CSV |

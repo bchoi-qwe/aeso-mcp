@@ -103,18 +103,21 @@ class GridService:
         warnings: list[str] = []
         if not outages:
             warnings.append(
-                "No outage records returned for the requested range "
+                "No hourly generator outage capacity intervals returned for the requested range "
                 "(empty upstream response or dataset unavailable)."
             )
         return OutagesResponse(
             outages=outages,
             metadata=DatasetMetadata(
-                dataset="Generator Outages",
+                dataset="Generator Outage Capacity (by fuel)",
                 source_product=prov.get("source_product"),
                 api_version=prov.get("api_version"),
                 retrieved_at=utc_now(),
                 status=DataStatus.ACTUAL,
-                units={"outage_mw": "MW", "maximum_capability_mw": "MW"},
+                units={
+                    "total_outage_mw": "MW",
+                    "mothball_outage_mw": "MW",
+                },
                 observation_granularity="1h",
                 request_start=start,
                 request_end=end,

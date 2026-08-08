@@ -63,26 +63,37 @@ class MarketSnapshotResponse(WarningMixin):
 
 
 class OutagesRequest(DateRangeRequest):
-    """Request generator outage reports."""
+    """Request hourly generator outage capacity by fuel/technology."""
 
 
-class OutageRecord(BaseModel):
-    """One generator outage observation."""
+class GeneratorOutageInterval(BaseModel):
+    """Aggregated hourly generator outage capacity (GridStatus AESO shape)."""
 
     model_config = ConfigDict(extra="forbid")
 
     interval_start: datetime
     interval_end: datetime | None = None
-    asset_id: str | None = None
-    asset_name: str | None = None
-    fuel_type: str | None = None
-    outage_mw: float | None = None
-    maximum_capability_mw: float | None = None
-    raw: dict[str, str | float | int | None] = Field(default_factory=dict)
+    publication_time: datetime | None = None
+    total_outage_mw: float
+    mothball_outage_mw: float = 0.0
+    simple_cycle_mw: float = 0.0
+    combined_cycle_mw: float = 0.0
+    cogeneration_mw: float = 0.0
+    gas_fired_steam_mw: float = 0.0
+    coal_mw: float = 0.0
+    hydro_mw: float = 0.0
+    wind_mw: float = 0.0
+    solar_mw: float = 0.0
+    energy_storage_mw: float = 0.0
+    biomass_and_other_mw: float = 0.0
+
+
+# Backwards-compatible alias for imports that still say OutageRecord.
+OutageRecord = GeneratorOutageInterval
 
 
 class OutagesResponse(WarningMixin):
-    """Generator outage observations."""
+    """Hourly generator outage capacity by technology/fuel."""
 
-    outages: list[OutageRecord]
+    outages: list[GeneratorOutageInterval]
     metadata: DatasetMetadata

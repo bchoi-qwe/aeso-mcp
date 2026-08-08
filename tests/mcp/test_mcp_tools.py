@@ -136,7 +136,8 @@ def container(settings: Settings) -> AppContainer:
         {"provider": "gridstatus", "source_product": "Outages"},
     )
     pub = start
-    provider.get_approved_transmission_outages.return_value = (
+    public_reports = AsyncMock()
+    public_reports.get_approved_transmission_outages.return_value = (
         [
             TransmissionOutageRecord(
                 interval_start=start,
@@ -152,10 +153,12 @@ def container(settings: Settings) -> AppContainer:
             )
         ],
         pub,
-        {"provider": "gridstatus", "source_product": "Approved Transmission Outages"},
+        {
+            "provider": "aeso_public_report",
+            "source_product": "Approved Transmission Outages (ETS public report)",
+        },
     )
-    long_range = AsyncMock()
-    long_range.get_long_range_transmission_outages.return_value = (
+    public_reports.get_long_range_transmission_outages.return_value = (
         [
             TransmissionOutageRecord(
                 interval_start=start,
@@ -171,12 +174,11 @@ def container(settings: Settings) -> AppContainer:
         {"provider": "aeso_public_report", "source_product": "Long Range"},
     )
     transmission = TransmissionService(
-        approved_provider=provider,
-        long_range_provider=long_range,
+        approved_provider=public_reports,
+        long_range_provider=public_reports,
         settings=settings,
         cache=cache,
     )
-    public_reports = AsyncMock()
     public_reports.get_monthly_cumulative_net_revenue.return_value = (
         [],
         start,
@@ -200,6 +202,7 @@ def container(settings: Settings) -> AppContainer:
         analytics=analytics,
         transmission=transmission,
         market_power=market_power,
+        apim_http=AsyncMock(),
         public_reports_http=AsyncMock(),
     )
 

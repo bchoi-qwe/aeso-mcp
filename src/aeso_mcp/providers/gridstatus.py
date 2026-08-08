@@ -25,9 +25,10 @@ from aeso_mcp.errors import (
 from aeso_mcp.models.assets import AssetRecord
 from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.generation import FuelMixComponent, GenerationInterval
-from aeso_mcp.models.grid import InterchangePathFlow, OutageRecord
+from aeso_mcp.models.grid import GeneratorOutageInterval, InterchangePathFlow
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
-from aeso_mcp.models.transmission import TransmissionOutageRecord
+from aeso_mcp.providers.csd import parse_csd_payload
+from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.timeutil import MARKET_TZ, to_market
 
 logger = logging.getLogger(__name__)
@@ -69,9 +70,15 @@ def _translate_gridstatus_error(exc: Exception) -> Exception:
 class GridStatusProvider:
     """Adapter around ``gridstatus.AESO``."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        apim_http: AesoHttpClient | None = None,
+    ) -> None:
         self._settings = settings
         self._client: Any | None = None
+        self._apim_http = apim_http
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -192,13 +199,13 @@ class GridStatusProvider:
     async def get_supply_demand_snapshot(
         self,
     ) -> tuple[datetime, dict[str, object], dict[str, str]]:
-        """Fetch Current Supply Demand once and derive all snapshot fields."""
-        client = self._get_client()
-        data = await self._run(
-            client._make_request,
-            "currentsupplydemand-api/v2/csd/summary/current",
-        )
-        observed_at, payload = _parse_csd_payload(data)
+        """Fetch Current Supply Demand once via authenticated APIM (not GridStatus private APIs)."""
+        if self._apim_http is None:
+            raise UpstreamUnavailableError(
+                "APIM HTTP client is required for market snapshot CSD retrieval."
+            )
+        data = await self._apim_http.get_json("currentsupplydemand-api/v2/csd/summary/current")
+        observed_at, payload = parse_csd_payload(data)
         return observed_at, payload, _provenance("Current Supply Demand API", "v2")
 
     async def get_assets(
@@ -223,10 +230,10 @@ class GridStatusProvider:
         self,
         start: datetime,
         end: datetime,
-    ) -> tuple[list[OutageRecord], dict[str, str]]:
+    ) -> tuple[list[GeneratorOutageInterval], dict[str, str]]:
         client = self._get_client()
         df = await self._run(client.get_generator_outages_hourly, date=start, end=end)
-        outages = _parse_outages(df)
+        outages = _parse_generator_outage_intervals(df)
         start_m, end_m = to_market(start), to_market(end)
         outages = [
             o
@@ -234,34 +241,6 @@ class GridStatusProvider:
             if o.interval_start is not None and start_m <= to_market(o.interval_start) < end_m
         ]
         return outages, _provenance("Generator Outages API")
-
-    async def get_approved_transmission_outages(
-        self,
-        start: datetime | None = None,
-        end: datetime | None = None,
-    ) -> tuple[list[TransmissionOutageRecord], datetime | None, dict[str, str]]:
-        """Approved transmission planned outages via GridStatus's ETS CSV path."""
-        client = self._get_client()
-        if start is None and end is None:
-            df = await self._run(client.get_transmission_outages, date="latest")
-        else:
-            if start is None or end is None:
-                from aeso_mcp.errors import InvalidDateRangeError
-
-                raise InvalidDateRangeError(
-                    "Provide both start and end for historical approved transmission outages."
-                )
-            df = await self._run(
-                client.get_transmission_outages,
-                date=to_market(start),
-                end=to_market(end),
-            )
-        records, publication_time = _parse_transmission_outages(df, approval_status="approved")
-        return (
-            records,
-            publication_time,
-            _provenance("Approved Transmission Outages (ETS public report)"),
-        )
 
 
 def _series_to_market_dt(value: Any) -> datetime:
@@ -490,7 +469,7 @@ def _parse_interchange(
         value = _safe_float(row[col])
         if value is None:
             continue
-        paths.append(InterchangePathFlow(path=str(col), flow_mw=value))
+        paths.append(InterchangePathFlow(path=_normalize_interchange_path(str(col)), flow_mw=value))
     net = _safe_float(row.get("Net Interchange"))
     if net is None:
         net = _safe_float(row.get("Net Interchange Flow"))
@@ -533,72 +512,6 @@ def _extract_ail_from_supply(df: pd.DataFrame) -> float | None:
     return None
 
 
-def _parse_csd_payload(data: Any) -> tuple[datetime, dict[str, object]]:
-    """Normalize a raw Current Supply Demand JSON payload into snapshot fields."""
-    if not isinstance(data, dict) or not isinstance(data.get("return"), dict):
-        raise DataValidationError("Unexpected Current Supply Demand response shape.")
-    payload = data["return"]
-    observed_raw = payload.get("effective_datetime_utc")
-    if observed_raw is None:
-        raise DataValidationError("CSD response missing effective_datetime_utc.")
-    observed_at = _series_to_market_dt(observed_raw)
-
-    components: list[FuelMixComponent] = []
-    for item in payload.get("generation_data_list") or []:
-        if not isinstance(item, dict):
-            continue
-        fuel = str(item.get("fuel_type", "Unknown")).replace("_", " ").title()
-        net = _safe_float(item.get("aggregated_net_generation"))
-        if net is None:
-            continue
-        components.append(
-            FuelMixComponent(
-                fuel_type=fuel,
-                generation_mw=net,
-                maximum_capability_mw=_safe_float(item.get("aggregated_maximum_capability")),
-            )
-        )
-
-    paths: list[InterchangePathFlow] = []
-    for item in payload.get("interchange_list") or []:
-        if not isinstance(item, dict):
-            continue
-        flow = _safe_float(item.get("actual_flow"))
-        if flow is None:
-            continue
-        paths.append(InterchangePathFlow(path=str(item.get("path", "Unknown")), flow_mw=flow))
-    net = sum(p.flow_mw for p in paths)
-
-    reserves = {
-        "contingency_reserve_required_mw": _safe_float(payload.get("contingency_reserve_required")),
-        "dispatched_contingency_reserve_total_mw": _safe_float(
-            payload.get("dispatched_contigency_reserve_total")
-        ),
-        "dispatched_contingency_reserve_gen_mw": _safe_float(
-            payload.get("dispatched_contingency_reserve_gen")
-        ),
-        "dispatched_contingency_reserve_other_mw": _safe_float(
-            payload.get("dispatched_contingency_reserve_other")
-        ),
-        "fast_frequency_response_dispatched_mw": _safe_float(payload.get("ffr_armed_dispatch")),
-        "fast_frequency_response_offered_mw": _safe_float(payload.get("ffr_offered_volume")),
-        "long_lead_time_volume_mw": _safe_float(payload.get("long_lead_time_volume")),
-    }
-
-    load_mw = _safe_float(payload.get("alberta_internal_load"))
-    if load_mw is None:
-        load_mw = _safe_float(payload.get("total_ail"))
-
-    return observed_at, {
-        "generation_by_fuel": components,
-        "total_generation_mw": sum(c.generation_mw for c in components),
-        "interchange_paths": paths,
-        "net_interchange_mw": net,
-        "reserves": reserves,
-        "alberta_internal_load_mw": load_mw,
-    }
-
-
 def _parse_assets(df: pd.DataFrame) -> list[AssetRecord]:
     if df is None or df.empty:
         return []
@@ -622,99 +535,65 @@ def _parse_assets(df: pd.DataFrame) -> list[AssetRecord]:
     return records
 
 
-def _parse_outages(df: pd.DataFrame) -> list[OutageRecord]:
+def _parse_generator_outage_intervals(df: pd.DataFrame) -> list[GeneratorOutageInterval]:
+    """Parse GridStatus aggregated hourly generator outage capacity by technology."""
     if df is None or df.empty:
         return []
-    time_col = "Interval Start" if "Interval Start" in df.columns else "Time"
-    records: list[OutageRecord] = []
-    for _, row in df.iterrows():
-        if time_col not in df.columns:
-            continue
-        start = _series_to_market_dt(row[time_col])
-        raw: dict[str, str | float | int | None] = {}
-        for col in df.columns:
-            val = row[col]
-            if isinstance(val, pd.Timestamp):
-                raw[str(col)] = None if bool(pd.isna(val)) else val.isoformat()
-            elif isinstance(val, datetime):
-                raw[str(col)] = val.isoformat()
-            elif not _is_present(val):
-                raw[str(col)] = None
-            elif isinstance(val, (str, int, float)):
-                raw[str(col)] = val
-            else:
-                raw[str(col)] = str(val)
-        interval_end = (
-            _series_to_market_dt(row["Interval End"]) if _row_has_interval_end(df, row) else None
+    if "Interval Start" not in df.columns:
+        raise DataValidationError(
+            "Generator outages response missing Interval Start; upstream schema may have changed."
         )
+    if "Total Outage" not in df.columns:
+        raise DataValidationError(
+            "Generator outages response missing Total Outage; expected aggregated "
+            "hourly capacity by fuel/technology (not per-asset rows)."
+        )
+
+    records: list[GeneratorOutageInterval] = []
+    for _, row in df.iterrows():
+        if not _is_present(row.get("Interval Start")):
+            continue
+        start = _series_to_market_dt(row["Interval Start"])
+        end = (
+            _series_to_market_dt(row["Interval End"])
+            if _row_has_interval_end(df, row)
+            else start + timedelta(hours=1)
+        )
+        pub = (
+            _series_to_market_dt(row["Publish Time"])
+            if "Publish Time" in df.columns and _is_present(row.get("Publish Time"))
+            else None
+        )
+        total = _safe_float(row.get("Total Outage"))
+        if total is None:
+            continue
         records.append(
-            OutageRecord(
+            GeneratorOutageInterval(
                 interval_start=start,
-                interval_end=interval_end,
-                asset_id=_optional_str(row.get("Asset ID") or row.get("asset_ID")),
-                asset_name=_optional_str(row.get("Asset Name") or row.get("asset_name")),
-                fuel_type=_optional_str(row.get("Fuel Type") or row.get("fuel_type")),
-                outage_mw=_safe_float(row.get("Outage") or row.get("outage_mw")),
-                maximum_capability_mw=_safe_float(
-                    row.get("Maximum Capability") or row.get("maximum_capability")
-                ),
-                raw=raw,
+                interval_end=end,
+                publication_time=pub,
+                total_outage_mw=total,
+                mothball_outage_mw=_safe_float(row.get("Mothball Outage")) or 0.0,
+                simple_cycle_mw=_safe_float(row.get("Simple Cycle")) or 0.0,
+                combined_cycle_mw=_safe_float(row.get("Combined Cycle")) or 0.0,
+                cogeneration_mw=_safe_float(row.get("Cogeneration")) or 0.0,
+                gas_fired_steam_mw=_safe_float(row.get("Gas Fired Steam")) or 0.0,
+                coal_mw=_safe_float(row.get("Coal")) or 0.0,
+                hydro_mw=_safe_float(row.get("Hydro")) or 0.0,
+                wind_mw=_safe_float(row.get("Wind")) or 0.0,
+                solar_mw=_safe_float(row.get("Solar")) or 0.0,
+                energy_storage_mw=_safe_float(row.get("Energy Storage")) or 0.0,
+                biomass_and_other_mw=_safe_float(row.get("Biomass and Other")) or 0.0,
             )
         )
     return records
 
 
-def _parse_transmission_outages(
-    df: pd.DataFrame,
-    *,
-    approval_status: str,
-) -> tuple[list[TransmissionOutageRecord], datetime | None]:
-    if df is None or df.empty:
-        return [], None
-    publication_time: datetime | None = None
-    if "Publish Time" in df.columns:
-        for value in df["Publish Time"]:
-            if _is_present(value):
-                publication_time = _series_to_market_dt(value)
-                break
-    records: list[TransmissionOutageRecord] = []
-    for _, row in df.iterrows():
-        element = _optional_str(row.get("Element"))
-        if not element:
-            continue
-        if "Interval Start" not in df.columns or not _is_present(row.get("Interval Start")):
-            continue
-        start = _series_to_market_dt(row["Interval Start"])
-        end = (
-            _series_to_market_dt(row["Interval End"])
-            if "Interval End" in df.columns and _is_present(row.get("Interval End"))
-            else None
-        )
-        pub = (
-            _series_to_market_dt(row["Publish Time"])
-            if "Publish Time" in df.columns and _is_present(row.get("Publish Time"))
-            else publication_time
-        )
-        records.append(
-            TransmissionOutageRecord(
-                interval_start=start,
-                interval_end=end,
-                publication_time=pub,
-                transmission_owner=_optional_str(row.get("Transmission Owner") or row.get("Owner")),
-                element_type=_optional_str(row.get("Type")),
-                element=element,
-                scheduled_activity=_optional_str(row.get("Scheduled Activity")),
-                comments=_optional_str(
-                    row.get("Date Time Comments") or row.get("Date/Time Comments")
-                ),
-                interconnection=_optional_str(
-                    row.get("Interconnection") or row.get("Affected Intertie")
-                ),
-                approval_status="approved" if approval_status == "approved" else "tentative",
-                duration_note=_optional_str(row.get("Date Time Comments")),
-            )
-        )
-    return records, publication_time
+def _normalize_interchange_path(name: str) -> str:
+    text = name.strip()
+    if text.endswith(" Flow"):
+        return text[: -len(" Flow")].strip()
+    return text
 
 
 def _optional_str(value: Any) -> str | None:

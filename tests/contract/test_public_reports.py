@@ -83,6 +83,8 @@ async def test_mcsinr_and_soc_csv_parsing(public_provider: AesoPublicReportsProv
     assert populated
     assert populated[0].secondary_offer_price_limit_triggered is False
     assert populated[0].interval_start.tzinfo is not None
+    negative = next(i for i in intervals if i.hour_ending_label.strip().endswith("20"))
+    assert negative.cumulative_net_revenue_cad == pytest.approx(-46931.24)
 
     soc_rows, soc_time, soc_meta = await public_provider.get_secondary_offer_price_limit()
     assert soc_meta["provider"] == "aeso_public_report"
@@ -110,3 +112,30 @@ async def test_public_client_rejects_api_key_in_url() -> None:
             await client.get_text("http://ets.aeso.ca/outage_reports/x.csv?API-KEY=secret")
     finally:
         await client.aclose()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_public_client_rejects_cross_host_redirect() -> None:
+    respx.get("http://ets.aeso.ca/report").mock(
+        return_value=httpx.Response(302, headers={"Location": "https://evil.example/x"})
+    )
+    client = AesoPublicReportsHttpClient(_settings())
+    try:
+        with pytest.raises(DataValidationError, match="allow-listed"):
+            await client.get_text("http://ets.aeso.ca/report")
+    finally:
+        await client.aclose()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_mcsinr_schema_drift_fails_loudly(
+    public_provider: AesoPublicReportsProvider,
+) -> None:
+    bad = b'Monthly\n"Report Time: Friday, August 07 2026 06:48:39 PM"\nDate (HE),Wrong Column\n'
+    respx.get(url__regex=r".*MCSINRReportServlet.*").mock(
+        return_value=httpx.Response(200, content=bad)
+    )
+    with pytest.raises(DataValidationError, match="schema changed"):
+        await public_provider.get_monthly_cumulative_net_revenue()

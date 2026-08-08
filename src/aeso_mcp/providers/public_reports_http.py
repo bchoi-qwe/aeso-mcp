@@ -24,7 +24,9 @@ from aeso_mcp.errors import DataValidationError, RateLimitError, UpstreamUnavail
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_PUBLIC_REPORT_HOSTS = frozenset({"ets.aeso.ca", "itc.aeso.ca"})
+# Only hosts we actually call today. Do not add speculative hosts.
+ALLOWED_PUBLIC_REPORT_HOSTS = frozenset({"ets.aeso.ca"})
+_MAX_REDIRECTS = 5
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -57,7 +59,8 @@ class AesoPublicReportsHttpClient:
                 write=settings.http_read_timeout_s,
                 pool=settings.http_connect_timeout_s,
             ),
-            follow_redirects=True,
+            # Manual redirect following so every Location is allow-list checked.
+            follow_redirects=False,
         )
 
     async def aclose(self) -> None:
@@ -105,32 +108,48 @@ class AesoPublicReportsHttpClient:
         raise UpstreamUnavailableError("AESO public report request failed after retries.")
 
     async def _get_once(self, url: str) -> httpx.Response:
-        try:
-            response = await self._client.get(url)
-        except httpx.TimeoutException as exc:
-            raise UpstreamUnavailableError("AESO public report request timed out.") from exc
-        except httpx.TransportError as exc:
-            raise UpstreamUnavailableError("Failed to connect to AESO public reports.") from exc
+        current = url
+        for _ in range(_MAX_REDIRECTS + 1):
+            self._assert_allowed_url(current)
+            try:
+                response = await self._client.get(current)
+            except httpx.TimeoutException as exc:
+                raise UpstreamUnavailableError("AESO public report request timed out.") from exc
+            except httpx.TransportError as exc:
+                raise UpstreamUnavailableError("Failed to connect to AESO public reports.") from exc
 
-        status = response.status_code
-        path = urlparse(str(response.url)).path
-        logger.info(
-            "aeso_public_report_get path=%s status=%s duration_ms=%.1f",
-            path,
-            status,
-            response.elapsed.total_seconds() * 1000,
+            status = response.status_code
+            path = urlparse(str(response.url)).path
+            logger.info(
+                "aeso_public_report_get path=%s status=%s duration_ms=%.1f",
+                path,
+                status,
+                response.elapsed.total_seconds() * 1000,
+            )
+            if status in {301, 302, 303, 307, 308}:
+                location = response.headers.get("Location")
+                if not location:
+                    raise DataValidationError(
+                        f"AESO public report redirect missing Location (HTTP {status})."
+                    )
+                current = urljoin(str(response.url), location)
+                continue
+            if status == 404:
+                raise DataValidationError(f"AESO public report not found: {path}")
+            if status == 429:
+                retry_after = response.headers.get("Retry-After")
+                retry_s = float(retry_after) if retry_after and retry_after.isdigit() else None
+                raise RateLimitError(retry_after_s=retry_s)
+            if status >= 500:
+                raise UpstreamUnavailableError(f"AESO public report returned HTTP {status}.")
+            if status >= 400:
+                raise DataValidationError(
+                    f"AESO public report rejected the request (HTTP {status})."
+                )
+            return response
+        raise DataValidationError(
+            f"AESO public report exceeded {_MAX_REDIRECTS} redirects while staying allow-listed."
         )
-        if status == 404:
-            raise DataValidationError(f"AESO public report not found: {path}")
-        if status == 429:
-            retry_after = response.headers.get("Retry-After")
-            retry_s = float(retry_after) if retry_after and retry_after.isdigit() else None
-            raise RateLimitError(retry_after_s=retry_s)
-        if status >= 500:
-            raise UpstreamUnavailableError(f"AESO public report returned HTTP {status}.")
-        if status >= 400:
-            raise DataValidationError(f"AESO public report rejected the request (HTTP {status}).")
-        return response
 
     def _assert_allowed_url(self, url: str) -> None:
         parsed = urlparse(url)

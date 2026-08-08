@@ -24,7 +24,7 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | Operating reserves | `get_reserves` | APIM CSD | key | Yes | None | implemented |
 | Generator outages | `get_outages` | APIM / GridStatus | key | Yes | None | implemented |
 | Assets | `get_assets` | APIM | key | Yes | None | implemented |
-| Approved Tx outages | `get_approved_transmission_outages` | ETS CSV via GridStatus | none* | Yes | GridStatus HTML→CSV | implemented |
+| Approved Tx outages | `get_approved_transmission_outages` | ETS CSV via public-reports client | none* | No | HTML→CSV with timeouts | implemented |
 | Long-range Tx outages | `get_long_range_transmission_outages` | Public report CSV | none | No | direct public-reports client | implemented |
 | MCSINR | `get_monthly_cumulative_net_revenue` | ETS public CSV | none | No | direct | implemented |
 | Secondary Offer Price Limit | `get_secondary_offer_price_limit` | ETS public CSV | none | No | direct | implemented |
@@ -34,7 +34,7 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | UC Summary settlement | — | ETS public | none | No | direct | backlog |
 | Intertie ATC / TTC outages | — | APIM Intertie API first | key | TBD | Compare before scrape | backlog |
 
-\*GridStatus fetches ETS public HTML/CSV without sending the APIM key to `ets.aeso.ca`. The MCP still requires `AESO_API_KEY` for the overall server because other tools use APIM.
+\*Public-report tools contact `ets.aeso.ca` without sending the APIM key. The MCP still requires `AESO_API_KEY` for the overall server because other tools use APIM.
 
 ## Semantic notes
 

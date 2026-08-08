@@ -137,6 +137,29 @@ async def test_cache_single_flight() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cache_cancels_coalesced_waiters_when_owner_cancelled() -> None:
+    import asyncio
+
+    cache = AsyncTTLCache()
+    started = asyncio.Event()
+
+    async def factory() -> str:
+        started.set()
+        await asyncio.sleep(60)
+        return "value"
+
+    owner = asyncio.create_task(cache.get_or_set("k", factory, ttl_s=60))
+    await started.wait()
+    waiter = asyncio.create_task(cache.get_or_set("k", factory, ttl_s=60))
+    await asyncio.sleep(0)
+    owner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await owner
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(waiter, timeout=1.0)
+
+
+@pytest.mark.asyncio
 async def test_compare_periods() -> None:
     provider = AsyncMock()
 

@@ -146,4 +146,4 @@ async def test_live_transmission_public_reports(live_settings: Settings) -> None
         assert soc.intervals
         assert soc.limit_in_effect is not None
     finally:
-        await container.public_reports_http.aclose()
+        await container.aclose()

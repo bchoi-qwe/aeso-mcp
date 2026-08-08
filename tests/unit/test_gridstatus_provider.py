@@ -236,11 +236,19 @@ async def test_parse_outages_dataframe() -> None:
             {
                 "Interval Start": start,
                 "Interval End": start + pd.Timedelta(hours=1),
-                "Asset ID": "WND1",
-                "Asset Name": "Wind One",
-                "Fuel Type": "Wind",
-                "Outage": 50.0,
-                "Maximum Capability": 100.0,
+                "Publish Time": start - pd.Timedelta(hours=1),
+                "Total Outage": 500.0,
+                "Simple Cycle": 50.0,
+                "Combined Cycle": 100.0,
+                "Cogeneration": 200.0,
+                "Gas Fired Steam": 0.0,
+                "Coal": 0.0,
+                "Hydro": 25.0,
+                "Wind": 75.0,
+                "Solar": 50.0,
+                "Energy Storage": 0.0,
+                "Biomass and Other": 0.0,
+                "Mothball Outage": 10.0,
             }
         ]
     )
@@ -250,8 +258,9 @@ async def test_parse_outages_dataframe() -> None:
     outages, meta = await provider.get_outages(start, start + pd.Timedelta(days=1).to_pytimedelta())
     assert meta["provider"] == "gridstatus"
     assert len(outages) == 1
-    assert outages[0].asset_id == "WND1"
-    assert outages[0].outage_mw == 50.0
+    assert outages[0].total_outage_mw == 500.0
+    assert outages[0].wind_mw == 75.0
+    assert outages[0].mothball_outage_mw == 10.0
     assert outages[0].interval_start.tzinfo is not None
 
 

@@ -8,32 +8,5 @@
     "source": "github"
   },
   "version": "0.1.1",
-  "packages": [
-    {
-      "registryType": "pypi",
-      "identifier": "aeso-mcp",
-      "version": "0.1.1",
-      "transport": {
-        "type": "stdio"
-      },
-      "runtimeHint": "uvx",
-      "environmentVariables": [
-        {
-          "name": "AESO_API_KEY",
-          "description": "AESO APIM subscription key from https://developer-apim.aeso.ca/",
-          "isRequired": true,
-          "isSecret": true,
-          "format": "string"
-        },
-        {
-          "name": "AESO_MCP_LOG_LEVEL",
-          "description": "Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
-          "isRequired": false,
-          "isSecret": false,
-          "format": "string",
-          "default": "INFO"
-        }
-      ]
-    }
-  ]
+  "packages": []
 }

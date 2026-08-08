@@ -7,26 +7,53 @@ import csv
 import io
 import logging
 import re
-from datetime import datetime, timedelta
+from collections.abc import Sequence
+from datetime import date, datetime
 from typing import Any
 
 from bs4 import BeautifulSoup
 
-from aeso_mcp.errors import DataValidationError
+from aeso_mcp.errors import DataValidationError, InvalidDateRangeError
 from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.market_power import McsinrInterval, SecondaryOfferPriceLimitInterval
 from aeso_mcp.models.transmission import TransmissionOutageRecord
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, to_market
+from aeso_mcp.timeutil import MARKET_TZ, parse_aeso_hour_ending, to_market
 
 logger = logging.getLogger(__name__)
 
+APPROVED_TX_LANDING_URL = "http://ets.aeso.ca/outage_reports/qryOpPlanTransmissionTable_1.html"
 LONG_RANGE_LANDING_URL = "http://ets.aeso.ca/outage_reports/Longterm_Critical_Outages.html"
 MCSINR_CSV_URL = "http://ets.aeso.ca/ets_web/ip/Market/Reports/MCSINRReportServlet?contentType=csv"
 SOC_CSV_URL = "http://ets.aeso.ca/ets_web/ip/Market/Reports/CurrentSOCReportServlet?contentType=csv"
+
 _PUBLISH_RE = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})")
 _REPORT_TIME_RE = re.compile(r"Report Time:\s*(.+?)\"?\s*$", re.IGNORECASE | re.MULTILINE)
-_HE_RE = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2})$")
+_EARLIEST_APPROVED_TX = date(2024, 1, 31)
+_ARCHIVE_JUMP_URL = (
+    "http://ets.aeso.ca/outage_reports/archives/"
+    "_2025-01-17_14-10-25_qryOpPlanTransmissionTable_1.html"
+)
+_MAX_NAVIGATION_ATTEMPTS = 500
+
+_LONG_RANGE_REQUIRED = frozenset({"Element", "From"})
+_APPROVED_TX_REQUIRED = frozenset({"Element", "From", "To", "Owner", "Type"})
+_MCSINR_REQUIRED = frozenset(
+    {
+        "Date (HE)",
+        "Monthly Cumulative Settlement Interval Net Revenue ($)",
+        "1/6 Annualized Unavoidable Costs ($)",
+        "Secondary Offer Price Limit Triggered",
+    }
+)
+_SOC_REQUIRED = frozenset(
+    {
+        "Effective Begin (HE)",
+        "Effective End (HE)",
+        "Secondary Offer Price Limit in Effect",
+        "Secondary Offer Price Limit ($)",
+    }
+)
 
 
 def _provenance(product: str) -> dict[str, str]:
@@ -41,6 +68,28 @@ class AesoPublicReportsProvider:
 
     def __init__(self, http: AesoPublicReportsHttpClient) -> None:
         self._http = http
+
+    async def get_approved_transmission_outages(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> tuple[list[TransmissionOutageRecord], datetime | None, dict[str, str]]:
+        """Fetch AESO-approved planned transmission outages from ETS HTML→CSV."""
+        if start is None and end is None:
+            records, publication_time = await self._fetch_approved_latest()
+        else:
+            if start is None or end is None:
+                raise InvalidDateRangeError(
+                    "Provide both start and end for historical approved transmission outages."
+                )
+            records, publication_time = await self._fetch_approved_historical(
+                to_market(start), to_market(end)
+            )
+        return (
+            records,
+            publication_time,
+            _provenance("Approved Transmission Outages (ETS public report)"),
+        )
 
     async def get_long_range_transmission_outages(
         self,
@@ -66,6 +115,7 @@ class AesoPublicReportsProvider:
         """Fetch current Monthly Cumulative Settlement Interval Net Revenue CSV."""
         raw = await self._http.get_bytes(MCSINR_CSV_URL)
         intervals, report_time = _parse_mcsinr_csv(raw)
+        intervals.sort(key=lambda i: i.interval_start, reverse=True)
         return (
             intervals,
             report_time,
@@ -78,7 +128,104 @@ class AesoPublicReportsProvider:
         """Fetch current Secondary Offer Price Limit CSV."""
         raw = await self._http.get_bytes(SOC_CSV_URL)
         intervals, report_time = _parse_soc_csv(raw)
+        intervals.sort(
+            key=lambda i: (
+                i.public_notification_time
+                or i.effective_begin
+                or datetime.min.replace(tzinfo=MARKET_TZ)
+            ),
+            reverse=True,
+        )
         return intervals, report_time, _provenance("Secondary Offer Price Limit")
+
+    async def _fetch_approved_latest(
+        self,
+    ) -> tuple[list[TransmissionOutageRecord], datetime | None]:
+        html = await self._http.get_text(APPROVED_TX_LANDING_URL)
+        href, publication_time = _csv_href_and_publish_time(html)
+        csv_url = self._http.resolve_outage_report_url(href, base=APPROVED_TX_LANDING_URL)
+        raw = await self._http.get_bytes(csv_url)
+        return _parse_approved_tx_csv(raw, publication_time=publication_time), publication_time
+
+    async def _fetch_approved_historical(
+        self,
+        start: datetime,
+        end: datetime,
+    ) -> tuple[list[TransmissionOutageRecord], datetime | None]:
+        start_d = start.date()
+        end_d = end.date()
+        if end_d < _EARLIEST_APPROVED_TX:
+            raise DataValidationError(
+                "Approved transmission outage archives are only available from "
+                f"{_EARLIEST_APPROVED_TX.isoformat()} onwards."
+            )
+        if start_d < _EARLIEST_APPROVED_TX:
+            logger.warning(
+                "approved_tx_history_clamped requested_start=%s earliest=%s",
+                start_d.isoformat(),
+                _EARLIEST_APPROVED_TX.isoformat(),
+            )
+            start_d = _EARLIEST_APPROVED_TX
+
+        current_url = APPROVED_TX_LANDING_URL
+        historical: list[tuple[str, datetime]] = []
+        jumped_to_archives = False
+
+        for _ in range(_MAX_NAVIGATION_ATTEMPTS):
+            html = await self._http.get_text(current_url)
+            soup = BeautifulSoup(html, "html.parser")
+            csv_link = soup.find("a", href=lambda x: isinstance(x, str) and "csvData" in x)
+            if csv_link is not None and csv_link.get("href"):
+                href = str(csv_link["href"])
+                publication_time = _publication_time_from_href(href)
+                if publication_time is not None:
+                    pub_d = publication_time.date()
+                    if start_d <= pub_d <= end_d:
+                        csv_url = self._http.resolve_outage_report_url(href, base=current_url)
+                        historical.append((csv_url, publication_time))
+                    if pub_d < start_d:
+                        break
+                    if pub_d <= date(2025, 1, 22) and not jumped_to_archives:
+                        current_url = _ARCHIVE_JUMP_URL
+                        jumped_to_archives = True
+                        continue
+
+            prev_link = soup.find(
+                "a",
+                string=lambda text: isinstance(text, str) and "Previous Version" in text,
+            )
+            if prev_link is None or not prev_link.get("href"):
+                break
+            current_url = self._http.resolve_outage_report_url(
+                str(prev_link["href"]), base=current_url
+            )
+
+        if not historical:
+            raise DataValidationError(
+                "No approved transmission outage publications found in the requested window."
+            )
+
+        all_records: list[TransmissionOutageRecord] = []
+        latest_pub: datetime | None = None
+        for csv_url, publication_time in historical:
+            raw = await self._http.get_bytes(csv_url)
+            all_records.extend(_parse_approved_tx_csv(raw, publication_time=publication_time))
+            if latest_pub is None or publication_time > latest_pub:
+                latest_pub = publication_time
+        all_records.sort(
+            key=lambda r: r.publication_time or datetime.min.replace(tzinfo=MARKET_TZ),
+            reverse=True,
+        )
+        return all_records, latest_pub
+
+
+def _csv_href_and_publish_time(html: str) -> tuple[str, datetime | None]:
+    soup = BeautifulSoup(html, "html.parser")
+    csv_link = soup.find("a", href=lambda x: isinstance(x, str) and "csvData" in x)
+    if csv_link is None or not csv_link.get("href"):
+        raise DataValidationError("Approved Transmission Outages page has no CSV download link.")
+    href = str(csv_link["href"])
+    return href, _publication_time_from_href(href)
 
 
 def _publication_time_from_href(href: str) -> datetime | None:
@@ -89,6 +236,19 @@ def _publication_time_from_href(href: str) -> datetime | None:
     return datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S").replace(tzinfo=MARKET_TZ)
 
 
+def _require_columns(
+    fieldnames: Sequence[str] | None, required: frozenset[str], report: str
+) -> None:
+    if fieldnames is None:
+        raise DataValidationError(f"{report} CSV has no header row.")
+    normalized = {name.strip() for name in fieldnames if name}
+    missing = sorted(col for col in required if col not in normalized)
+    if missing:
+        raise DataValidationError(
+            f"{report} CSV schema changed; missing required column(s): {', '.join(missing)}."
+        )
+
+
 def _parse_long_range_csv(
     raw: bytes,
     *,
@@ -96,8 +256,7 @@ def _parse_long_range_csv(
 ) -> list[TransmissionOutageRecord]:
     text = raw.decode("utf-8-sig", errors="replace")
     reader = csv.DictReader(io.StringIO(text))
-    if reader.fieldnames is None:
-        return []
+    _require_columns(reader.fieldnames, _LONG_RANGE_REQUIRED, "Long Range Transmission Outages")
     records: list[TransmissionOutageRecord] = []
     for row in reader:
         element = _cell(row, "Element")
@@ -125,27 +284,64 @@ def _parse_long_range_csv(
     return records
 
 
+def _parse_approved_tx_csv(
+    raw: bytes,
+    *,
+    publication_time: datetime | None,
+) -> list[TransmissionOutageRecord]:
+    text = raw.decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(text))
+    _require_columns(reader.fieldnames, _APPROVED_TX_REQUIRED, "Approved Transmission Outages")
+    records: list[TransmissionOutageRecord] = []
+    for row in reader:
+        element = _cell(row, "Element")
+        if not element:
+            continue
+        start = _parse_aeso_outage_dt(_cell(row, "From"))
+        if start is None:
+            continue
+        end = _parse_aeso_outage_dt(_cell(row, "To"))
+        records.append(
+            TransmissionOutageRecord(
+                interval_start=to_market(start),
+                interval_end=to_market(end) if end is not None else None,
+                publication_time=publication_time,
+                transmission_owner=_cell(row, "Owner"),
+                element_type=_cell(row, "Type"),
+                element=element,
+                scheduled_activity=_cell(row, "Scheduled Activity"),
+                comments=_cell(row, "Date/Time Comments") or _cell(row, "Date Time Comments"),
+                interconnection=_cell(row, "Interconnection"),
+                approval_status="approved",
+                duration_note=_cell(row, "Date/Time Comments") or _cell(row, "Date Time Comments"),
+            )
+        )
+    return records
+
+
 def _parse_mcsinr_csv(raw: bytes) -> tuple[list[McsinrInterval], datetime | None]:
     text = raw.decode("utf-8-sig", errors="replace")
     report_time = _parse_report_time(text)
     table = _csv_table_after_headers(text)
     reader = csv.DictReader(io.StringIO(table))
-    if reader.fieldnames is None:
-        return [], report_time
-    field_map = {name: name.strip() for name in reader.fieldnames if name}
+    _require_columns(reader.fieldnames, _MCSINR_REQUIRED, "MCSINR")
+    field_map = {name: name.strip() for name in reader.fieldnames or [] if name}
     intervals: list[McsinrInterval] = []
     for raw_row in reader:
         row = {field_map.get(k, k): v for k, v in raw_row.items()}
         label = _cell(row, "Date (HE)")
-        bounds = _parse_hour_ending(label)
-        if bounds is None:
+        if not label:
             continue
-        start, end = bounds
+        try:
+            start, end = parse_aeso_hour_ending(label)
+        except ValueError:
+            logger.warning("unparseable_mcsinr_hour_ending value=%s", label[:40])
+            continue
         intervals.append(
             McsinrInterval(
                 interval_start=start,
                 interval_end=end,
-                hour_ending_label=label or "",
+                hour_ending_label=label,
                 cumulative_net_revenue_cad=_parse_optional_float(
                     _cell(row, "Monthly Cumulative Settlement Interval Net Revenue ($)")
                 ),
@@ -167,20 +363,29 @@ def _parse_soc_csv(
     report_time = _parse_report_time(text)
     table = _csv_table_after_headers(text)
     reader = csv.DictReader(io.StringIO(table))
-    if reader.fieldnames is None:
-        return [], report_time
-    field_map = {name: name.strip() for name in reader.fieldnames if name}
+    _require_columns(reader.fieldnames, _SOC_REQUIRED, "Secondary Offer Price Limit")
+    field_map = {name: name.strip() for name in reader.fieldnames or [] if name}
     intervals: list[SecondaryOfferPriceLimitInterval] = []
     for raw_row in reader:
         row = {field_map.get(k, k): v for k, v in raw_row.items()}
         begin_label = _first_cell(row, ("Effective Begin (HE)",))
         end_label = _first_cell(row, ("Effective End (HE)",))
-        begin = _parse_hour_ending(begin_label)
-        end = _parse_hour_ending(end_label)
+        begin = None
+        end = None
+        if begin_label:
+            try:
+                begin = parse_aeso_hour_ending(begin_label)[0]
+            except ValueError:
+                logger.warning("unparseable_soc_begin value=%s", begin_label[:40])
+        if end_label:
+            try:
+                end = parse_aeso_hour_ending(end_label)[1]
+            except ValueError:
+                logger.warning("unparseable_soc_end value=%s", end_label[:40])
         intervals.append(
             SecondaryOfferPriceLimitInterval(
-                effective_begin=begin[0] if begin else None,
-                effective_end=end[1] if end else None,
+                effective_begin=begin,
+                effective_end=end,
                 begin_label=begin_label,
                 end_label=end_label,
                 limit_in_effect=_parse_optional_bool(
@@ -219,22 +424,6 @@ def _parse_report_time(text: str) -> datetime | None:
     return None
 
 
-def _parse_hour_ending(label: str | None) -> tuple[datetime, datetime] | None:
-    if not label:
-        return None
-    match = _HE_RE.match(label.strip())
-    if not match:
-        return None
-    month, day, year, hour = (int(match.group(i)) for i in range(1, 5))
-    if hour < 1 or hour > 24:
-        return None
-    if hour == 24:
-        end = datetime(year, month, day, 0, 0, tzinfo=MARKET_TZ) + timedelta(days=1)
-    else:
-        end = datetime(year, month, day, hour, 0, tzinfo=MARKET_TZ)
-    return end - timedelta(hours=1), end
-
-
 def _parse_aeso_outage_dt(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -263,15 +452,21 @@ def _parse_notification_time(value: str | None) -> datetime | None:
 
 
 def _parse_optional_float(value: str | None) -> float | None:
+    """Parse floats including accounting negatives like ``(46931.24)``."""
     if value is None:
         return None
-    text = value.strip().replace(",", "").replace("$", "")
+    text = value.strip().replace(",", "").replace("$", "").replace(" ", "")
     if not text or text in {"-", "—", "n/a", "N/A"}:
         return None
+    negative = False
+    if text.startswith("(") and text.endswith(")"):
+        negative = True
+        text = text[1:-1]
     try:
-        return float(text)
+        number = float(text)
     except ValueError:
         return None
+    return -number if negative else number
 
 
 def _parse_optional_bool(value: str | None) -> bool | None:

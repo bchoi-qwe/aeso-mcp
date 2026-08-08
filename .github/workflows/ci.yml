@@ -60,8 +60,6 @@ jobs:
   mcp-conformance:
     name: MCP conformance (server)
     runs-on: ubuntu-latest
-    # Keep non-blocking while FastMCP / suite expectations evolve.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

@@ -31,7 +31,7 @@
 | Generation / fuel mix | `get_generation` | Current all fuels; historical wind/solar |
 | Interchange | `get_interchange` | Current path flows MW |
 | Operating reserves | `get_reserves` | Current MW indicators |
-| Generator outages | `get_outages` | When upstream data available |
+| Generator outages | `get_outages` | Hourly outage capacity by fuel/technology |
 | Approved Tx outages | `get_approved_transmission_outages` | AESO-approved planned transmission outages |
 | Long-range Tx outages | `get_long_range_transmission_outages` | Tentative ~24-month significant outages |
 | MCSINR | `get_monthly_cumulative_net_revenue` | Cumulative net revenue vs offer-cap trigger |
@@ -165,7 +165,7 @@ uv run aeso-mcp --transport http --host 127.0.0.1 --port 8000
 | `get_generation` | Fuel mix / renewable history |
 | `get_interchange` | Intertie flows |
 | `get_reserves` | Operating reserve indicators |
-| `get_outages` | Generator outages |
+| `get_outages` | Hourly generator outage capacity by fuel |
 | `get_assets` | Asset registry |
 | `compare_market_periods` | Aggregate period comparison |
 | `find_price_events` | High-price event detection |

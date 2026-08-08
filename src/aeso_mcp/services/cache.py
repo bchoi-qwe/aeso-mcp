@@ -47,7 +47,6 @@ class AsyncTTLCache:
         for key in expired:
             self._store.pop(key, None)
         while len(self._store) >= self._max_entries:
-            # Drop the entry that expires soonest (approximation of LRU for TTL caches).
             oldest_key = min(self._store, key=lambda k: self._store[k].expires_at)
             self._store.pop(oldest_key, None)
             logger.debug("cache_evict key=%s size=%s", oldest_key, len(self._store))
@@ -94,10 +93,16 @@ class AsyncTTLCache:
             now = time.monotonic()
             self._evict_if_needed(now)
             self._store[key] = _CacheEntry(value=value, expires_at=now + ttl_s)
-            inflight.set_result(value)
+            if not inflight.done():
+                inflight.set_result(value)
             return value
+        except asyncio.CancelledError:
+            if not inflight.done():
+                inflight.cancel()
+            raise
         except Exception as exc:
-            inflight.set_exception(exc)
+            if not inflight.done():
+                inflight.set_exception(exc)
             raise
         finally:
             async with self._lock:

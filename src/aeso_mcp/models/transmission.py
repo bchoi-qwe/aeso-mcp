@@ -59,12 +59,12 @@ class LongRangeTransmissionOutagesRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    # Current publication only in v0.2; reserved for future archive navigation.
-    include_tentative_only: bool = Field(
+    # Current publication only; historical archive navigation is not implemented.
+    include_tentative_only: Literal[True] = Field(
         default=True,
         description=(
             "Long-range reports are tentative/coordination listings. "
-            "Kept explicit so clients do not confuse them with approved outages."
+            "Only the current publication is supported."
         ),
     )
 

@@ -52,14 +52,16 @@ class TransmissionService:
                 label="approved transmission outage history",
             )
             cache_key = ("approved_tx_outages", start.isoformat(), end.isoformat())
+            ttl_s = self._settings.cache_ttl_historical_public_report_s
         else:
             start = end = None
             cache_key = ("approved_tx_outages", "latest")
+            ttl_s = self._settings.cache_ttl_public_report_s
 
         outages, publication_time, prov = await self._cache.get_or_set(
             cache_key,
             lambda: self._approved.get_approved_transmission_outages(start, end),
-            ttl_s=self._settings.cache_ttl_public_report_s,
+            ttl_s=ttl_s,
         )
         warnings: list[str] = [
             "These are AESO-approved planned transmission outages "
@@ -82,7 +84,7 @@ class TransmissionService:
                 request_start=start,
                 request_end=end,
                 publication_time=publication_time,
-                provider=ProviderName(prov.get("provider", ProviderName.GRIDSTATUS.value)),
+                provider=ProviderName(prov.get("provider", ProviderName.AESO_PUBLIC_REPORT.value)),
                 observation_count=len(outages),
             ),
             warnings=warnings,

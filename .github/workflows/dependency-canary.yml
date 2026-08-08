@@ -27,10 +27,25 @@ jobs:
       - name: Sync locked baseline first
         run: uv sync --locked --group dev
 
-      - name: Attempt newer FastMCP/MCP within policy
+      - name: Attempt newer FastMCP/MCP beyond exact pin
         run: |
-          uv lock --upgrade-package fastmcp --upgrade-package mcp || true
+          # Exact pins in pyproject.toml prevent `uv lock --upgrade-package` from
+          # seeing newer FastMCP prereleases. Rewrite to a lower-bound so the
+          # canary can actually probe newer MCP stacks.
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("pyproject.toml")
+          text = path.read_text()
+          old = 'fastmcp==4.0.0b2'
+          new = 'fastmcp>=4.0.0b2'
+          if old not in text:
+              raise SystemExit(f"Expected {old!r} in pyproject.toml")
+          path.write_text(text.replace(old, new, 1))
+          print(f"Rewrote dependency constraint: {old} -> {new}")
+          PY
+          uv lock --upgrade-package fastmcp --upgrade-package mcp
           uv sync --group dev
+          uv pip show fastmcp mcp
 
       - name: Run tests against canary graph
         env:

@@ -7,10 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Generator outages model matches GridStatus aggregated hourly capacity by fuel/technology
+- MCSINR accounting negatives like `(46931.24)` parse as negative floats
+- AESO hour-ending parser supports `HE 02*` / DST fold semantics; range validation compares in UTC
+- Public-report schema drift raises `DataValidationError` instead of silent empty results
+- Public-report HTTP client re-validates redirect targets against the host allow-list
+- Cache single-flight cancels waiters when the owner task is cancelled
+- Market snapshot CSD fetch uses APIM HTTP instead of GridStatus private `_make_request`
+- Approved transmission outages use the timeout-controlled public-reports client
+- Dependency canary rewrites the exact FastMCP pin so upgrades are actually tested
+- MCP conformance job is blocking; `server.json` no longer claims a published PyPI package
+
 ### Added
 
 - `docs/data-sources.md` coverage matrix (APIM-first resolution order)
-- Approved transmission outages via GridStatus (`get_approved_transmission_outages`)
+- Approved transmission outages (`get_approved_transmission_outages`) via public-reports client
 - Credential-free public-reports HTTP client and Long Range Significant Transmission Outages
   (`get_long_range_transmission_outages`, `approval_status=tentative`)
 - Market-power public reports: `get_monthly_cumulative_net_revenue` (MCSINR) and
@@ -28,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Direct APIM adapter raises `UnsupportedDatasetError` for outages and historical generation instead of returning empty lists
 - GridStatus renewable/history and optional load-forecast paths no longer swallow authentication failures
 - Snapshot / analytics optional enrichment no longer swallows authentication failures
+- Unsupported request flags locked to `Literal[True]` until historical support exists
 
 ## [0.1.1] - 2026-08-07
 

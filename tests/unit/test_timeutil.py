@@ -14,6 +14,7 @@ from aeso_mcp.timeutil import (
     is_dst_fall_back_day,
     is_dst_spring_forward_day,
     market_day_hours,
+    parse_aeso_hour_ending,
     start_of_market_day,
     to_market,
     to_utc,
@@ -83,3 +84,38 @@ def test_start_of_market_day_midnight_boundary() -> None:
     assert start.hour == 0
     assert start.minute == 0
     assert start.year == 2025
+
+
+def test_parse_aeso_hour_ending_he24_rolls_next_day() -> None:
+    start, end = parse_aeso_hour_ending("08/06/2026 24")
+    assert start.day == 6
+    assert start.hour == 23
+    assert end.day == 7
+    assert end.hour == 0
+    assert (to_utc(end) - to_utc(start)).total_seconds() == 3600
+
+
+def test_parse_aeso_hour_ending_fall_back_starred_hour() -> None:
+    # Alberta fall-back 2024-11-03 has HE02 and HE02*.
+    first_start, first_end = parse_aeso_hour_ending("11/03/2024 02")
+    starred_start, starred_end = parse_aeso_hour_ending("11/03/2024 02*")
+    assert first_start.fold == 0
+    assert starred_start.fold == 1
+    assert to_utc(starred_start) > to_utc(first_start)
+    assert (to_utc(first_end) - to_utc(first_start)).total_seconds() == 3600
+    assert (to_utc(starred_end) - to_utc(starred_start)).total_seconds() == 3600
+
+
+def test_parse_aeso_hour_ending_spring_forward_rejects_he02() -> None:
+    with pytest.raises(ValueError, match="spring-forward"):
+        parse_aeso_hour_ending("03/10/2024 02")
+
+
+def test_validate_range_ambiguous_fall_back_uses_utc_order() -> None:
+    # Chronologically later MST 01:15 must validate after earlier MDT 01:30.
+    earlier = datetime(2024, 11, 3, 1, 30, tzinfo=MARKET_TZ, fold=0)
+    later = datetime(2024, 11, 3, 1, 15, tzinfo=MARKET_TZ, fold=1)
+    assert to_utc(later) > to_utc(earlier)
+    start, end = validate_range(earlier, later)
+    assert start == to_market(earlier)
+    assert end == to_market(later)

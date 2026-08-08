@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from aeso_mcp.config import Settings
 from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
 from aeso_mcp.models.market_power import (
@@ -12,7 +14,7 @@ from aeso_mcp.models.market_power import (
 )
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.services.cache import AsyncTTLCache
-from aeso_mcp.timeutil import utc_now
+from aeso_mcp.timeutil import MARKET_TZ, utc_now
 
 
 class MarketPowerService:
@@ -38,7 +40,9 @@ class MarketPowerService:
             lambda: self._provider.get_monthly_cumulative_net_revenue(),
             ttl_s=self._settings.cache_ttl_market_power_s,
         )
-        latest = next((i for i in intervals if i.cumulative_net_revenue_cad is not None), None)
+        # Prefer the chronologically latest populated cumulative value.
+        populated = [i for i in intervals if i.cumulative_net_revenue_cad is not None]
+        latest = max(populated, key=lambda i: i.interval_start, default=None)
         threshold = None
         triggered = None
         headroom = None
@@ -89,7 +93,16 @@ class MarketPowerService:
             lambda: self._provider.get_secondary_offer_price_limit(),
             ttl_s=self._settings.cache_ttl_market_power_s,
         )
-        current = intervals[0] if intervals else None
+        current = None
+        if intervals:
+            current = max(
+                intervals,
+                key=lambda i: (
+                    i.effective_begin
+                    or i.public_notification_time
+                    or datetime.min.replace(tzinfo=MARKET_TZ)
+                ),
+            )
         warnings = [
             "Secondary Offer Price Limit is an AESO public ETS report. "
             "A null limit means the secondary offer cap is not in effect."
