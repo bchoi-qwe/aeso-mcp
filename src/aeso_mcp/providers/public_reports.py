@@ -20,6 +20,7 @@ from aeso_mcp.models.transmission import TransmissionOutageRecord
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 from aeso_mcp.timeutil import (
     MARKET_TZ,
+    chronological_instant,
     in_half_open_range,
     parse_aeso_hour_ending,
     to_market,
@@ -121,7 +122,7 @@ class AesoPublicReportsProvider:
         """Fetch current Monthly Cumulative Settlement Interval Net Revenue CSV."""
         raw = await self._http.get_bytes(MCSINR_CSV_URL)
         intervals, report_time = _parse_mcsinr_csv(raw)
-        intervals.sort(key=lambda i: i.interval_start, reverse=True)
+        intervals.sort(key=lambda i: chronological_instant(i.interval_start), reverse=True)
         return (
             intervals,
             report_time,
@@ -135,7 +136,7 @@ class AesoPublicReportsProvider:
         raw = await self._http.get_bytes(SOC_CSV_URL)
         intervals, report_time = _parse_soc_csv(raw)
         intervals.sort(
-            key=lambda i: (
+            key=lambda i: chronological_instant(
                 i.public_notification_time
                 or i.effective_begin
                 or datetime.min.replace(tzinfo=MARKET_TZ)
@@ -221,10 +222,12 @@ class AesoPublicReportsProvider:
         for csv_url, publication_time in historical:
             raw = await self._http.get_bytes(csv_url)
             all_records.extend(_parse_approved_tx_csv(raw, publication_time=publication_time))
-            if latest_pub is None or publication_time > latest_pub:
+            if latest_pub is None or to_utc(publication_time) > to_utc(latest_pub):
                 latest_pub = publication_time
         all_records.sort(
-            key=lambda r: r.publication_time or datetime.min.replace(tzinfo=MARKET_TZ),
+            key=lambda r: chronological_instant(
+                r.publication_time or datetime.min.replace(tzinfo=MARKET_TZ)
+            ),
             reverse=True,
         )
         return all_records, latest_pub

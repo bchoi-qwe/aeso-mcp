@@ -29,7 +29,7 @@ from aeso_mcp.models.prices import (
 from aeso_mcp.providers.base import AesoDataProvider
 from aeso_mcp.services.cache import AsyncTTLCache
 from aeso_mcp.services.ttl import historical_ttl_s
-from aeso_mcp.timeutil import market_now, utc_now, validate_range
+from aeso_mcp.timeutil import chronological_instant, market_now, utc_now, validate_range
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +258,9 @@ class MarketService:
                 now - timedelta(hours=6), now + timedelta(hours=1)
             )
             if prices:
-                pool_price = max(prices, key=lambda i: i.interval_start).pool_price_cad_per_mwh
+                pool_price = max(
+                    prices, key=lambda i: chronological_instant(i.interval_start)
+                ).pool_price_cad_per_mwh
         except AuthenticationError:
             raise
         except AesoMcpError:
@@ -270,7 +272,9 @@ class MarketService:
                 now - timedelta(hours=2), now + timedelta(hours=1)
             )
             if smps:
-                smp = max(smps, key=lambda i: i.interval_start).system_marginal_price_cad_per_mwh
+                smp = max(
+                    smps, key=lambda i: chronological_instant(i.interval_start)
+                ).system_marginal_price_cad_per_mwh
         except AuthenticationError:
             raise
         except AesoMcpError:

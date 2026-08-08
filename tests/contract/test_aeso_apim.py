@@ -227,3 +227,37 @@ async def test_apim_stubs_raise_unsupported(provider: AesoApimProvider) -> None:
         await provider.get_generation_history(start, end)
     with pytest.raises(UnsupportedDatasetError, match="outages"):
         await provider.get_outages(start, end)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_apim_rejects_cross_host_redirect(provider: AesoApimProvider) -> None:
+    respx.get(url__regex=r".*poolPrice.*").mock(
+        return_value=httpx.Response(302, headers={"Location": "https://evil.example/x"})
+    )
+    start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
+    end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
+    with pytest.raises(DataValidationError, match="allow-listed"):
+        await provider.get_pool_prices(start, end)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_apim_follows_same_host_redirect(provider: AesoApimProvider) -> None:
+    respx.get(url__regex=r".*poolPrice.*").mock(
+        side_effect=[
+            httpx.Response(
+                302,
+                headers={
+                    "Location": (
+                        "https://apimgw.aeso.ca/public/poolprice-api/v1.1/price/poolPrice?ok=1"
+                    )
+                },
+            ),
+            httpx.Response(200, json=_load("pool_price_ok.json")),
+        ]
+    )
+    start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
+    end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
+    intervals, _ = await provider.get_pool_prices(start, end)
+    assert len(intervals) == 2

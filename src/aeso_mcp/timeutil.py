@@ -120,6 +120,11 @@ def elapsed_hours(start: datetime, end: datetime) -> float:
     return (to_utc(end) - to_utc(start)).total_seconds() / 3600
 
 
+def chronological_instant(value: datetime) -> datetime:
+    """Return a UTC instant suitable as a sort/max key (DST/fold-safe)."""
+    return to_utc(value)
+
+
 def format_aeso_date(value: datetime) -> str:
     """Format a market datetime as AESO API date (YYYY-MM-DD)."""
     return to_market(value).strftime("%Y-%m-%d")

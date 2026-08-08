@@ -29,7 +29,7 @@ from aeso_mcp.models.grid import GeneratorOutageInterval, InterchangePathFlow
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
 from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, in_half_open_range
+from aeso_mcp.timeutil import MARKET_TZ, chronological_instant, in_half_open_range
 
 logger = logging.getLogger(__name__)
 
@@ -130,14 +130,19 @@ class GridStatusProvider:
         if include_forecast:
             try:
                 forecast_df = await self._run(client.get_load_forecast, date=start, end=end)
-                forecast_rows = {
-                    r["interval_start"]: r.get("load_forecast_mw")
-                    for r in _parse_load_forecast(forecast_df)
-                }
+                forecast_rows: dict[datetime, object] = {}
+                for forecast_row in _parse_load_forecast(forecast_df):
+                    forecast_start = forecast_row.get("interval_start")
+                    if isinstance(forecast_start, datetime):
+                        forecast_rows[chronological_instant(forecast_start)] = forecast_row.get(
+                            "load_forecast_mw"
+                        )
                 for row in rows:
-                    key = row["interval_start"]
-                    if key in forecast_rows:
-                        row["load_forecast_mw"] = forecast_rows[key]
+                    start_raw = row["interval_start"]
+                    if isinstance(start_raw, datetime):
+                        key = chronological_instant(start_raw)
+                        if key in forecast_rows:
+                            row["load_forecast_mw"] = forecast_rows[key]
             except AuthenticationError:
                 raise
             except AesoMcpError:
@@ -285,31 +290,40 @@ def _require_float(value: Any, field: str) -> float:
 def _parse_pool_prices(df: pd.DataFrame) -> list[PoolPriceInterval]:
     if df is None or df.empty:
         return []
+    if "Interval Start" not in df.columns:
+        raise DataValidationError("Pool price response missing Interval Start column.")
     intervals: list[PoolPriceInterval] = []
-    for _, row in df.iterrows():
-        start = _series_to_market_dt(row["Interval Start"])
-        end = (
-            _series_to_market_dt(row["Interval End"])
-            if _row_has_interval_end(df, row)
-            else start + timedelta(hours=1)
-        )
-        intervals.append(
-            PoolPriceInterval(
-                interval_start=start,
-                interval_end=end,
-                pool_price_cad_per_mwh=_require_float(row.get("Pool Price"), "Pool Price"),
-                forecast_pool_price_cad_per_mwh=_safe_float(row.get("Forecast Pool Price")),
-                rolling_30day_avg_cad_per_mwh=_safe_float(
-                    row.get("Rolling 30 Day Average Pool Price")
-                ),
+    try:
+        for _, row in df.iterrows():
+            start = _series_to_market_dt(row["Interval Start"])
+            end = (
+                _series_to_market_dt(row["Interval End"])
+                if _row_has_interval_end(df, row)
+                else start + timedelta(hours=1)
             )
-        )
+            intervals.append(
+                PoolPriceInterval(
+                    interval_start=start,
+                    interval_end=end,
+                    pool_price_cad_per_mwh=_require_float(row.get("Pool Price"), "Pool Price"),
+                    forecast_pool_price_cad_per_mwh=_safe_float(row.get("Forecast Pool Price")),
+                    rolling_30day_avg_cad_per_mwh=_safe_float(
+                        row.get("Rolling 30 Day Average Pool Price")
+                    ),
+                )
+            )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DataValidationError(
+            f"Pool price response could not be normalized: {type(exc).__name__}."
+        ) from exc
     return intervals
 
 
 def _parse_smp(df: pd.DataFrame) -> list[SystemMarginalPriceInterval]:
     if df is None or df.empty:
         return []
+    if "Interval Start" not in df.columns:
+        raise DataValidationError("SMP response missing Interval Start column.")
     price_col = "System Marginal Price" if "System Marginal Price" in df.columns else None
     if price_col is None:
         for candidate in df.columns:
@@ -320,19 +334,24 @@ def _parse_smp(df: pd.DataFrame) -> list[SystemMarginalPriceInterval]:
         raise DataValidationError("SMP response missing price column.")
 
     intervals: list[SystemMarginalPriceInterval] = []
-    for _, row in df.iterrows():
-        start = _series_to_market_dt(row["Interval Start"])
-        if _row_has_interval_end(df, row):
-            end = _series_to_market_dt(row["Interval End"])
-        else:
-            end = start + timedelta(minutes=1)
-        intervals.append(
-            SystemMarginalPriceInterval(
-                interval_start=start,
-                interval_end=end,
-                system_marginal_price_cad_per_mwh=_require_float(row.get(price_col), price_col),
+    try:
+        for _, row in df.iterrows():
+            start = _series_to_market_dt(row["Interval Start"])
+            if _row_has_interval_end(df, row):
+                end = _series_to_market_dt(row["Interval End"])
+            else:
+                end = start + timedelta(minutes=1)
+            intervals.append(
+                SystemMarginalPriceInterval(
+                    interval_start=start,
+                    interval_end=end,
+                    system_marginal_price_cad_per_mwh=_require_float(row.get(price_col), price_col),
+                )
             )
-        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DataValidationError(
+            f"SMP response could not be normalized: {type(exc).__name__}."
+        ) from exc
     return intervals
 
 

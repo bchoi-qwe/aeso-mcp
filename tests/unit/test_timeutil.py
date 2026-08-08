@@ -10,6 +10,7 @@ import pytest
 from aeso_mcp.errors import InvalidDateRangeError
 from aeso_mcp.timeutil import (
     MARKET_TZ,
+    chronological_instant,
     elapsed_hours,
     ensure_aware,
     in_half_open_range,
@@ -135,3 +136,10 @@ def test_in_half_open_range_and_elapsed_hours_are_dst_safe() -> None:
     next_midnight = datetime(2024, 11, 4, 0, 0, tzinfo=MARKET_TZ)
     assert (next_midnight - day_start).total_seconds() / 3600 == 24.0
     assert elapsed_hours(day_start, next_midnight) == 25.0
+
+
+def test_chronological_instant_orders_fall_back_fold() -> None:
+    earlier = datetime(2024, 11, 3, 1, 30, tzinfo=MARKET_TZ, fold=0)
+    later = datetime(2024, 11, 3, 1, 15, tzinfo=MARKET_TZ, fold=1)
+    assert max([earlier, later]) is earlier  # wall-clock / fold-blind
+    assert max([earlier, later], key=chronological_instant) is later

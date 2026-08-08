@@ -90,11 +90,12 @@ class AsyncTTLCache:
         logger.debug("cache_miss key=%s", key)
         try:
             value = await factory()
-            now = time.monotonic()
-            self._evict_if_needed(now)
-            self._store[key] = _CacheEntry(value=value, expires_at=now + ttl_s)
-            if not inflight.done():
-                inflight.set_result(value)
+            async with self._lock:
+                now = time.monotonic()
+                self._evict_if_needed(now)
+                self._store[key] = _CacheEntry(value=value, expires_at=now + ttl_s)
+                if not inflight.done():
+                    inflight.set_result(value)
             return value
         except asyncio.CancelledError:
             if not inflight.done():

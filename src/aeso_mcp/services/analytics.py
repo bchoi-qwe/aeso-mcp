@@ -25,7 +25,14 @@ from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.prices import PoolPriceRequest
 from aeso_mcp.services.market import MarketService
-from aeso_mcp.timeutil import elapsed_hours, to_market, to_utc, utc_now, validate_range
+from aeso_mcp.timeutil import (
+    chronological_instant,
+    elapsed_hours,
+    to_market,
+    to_utc,
+    utc_now,
+    validate_range,
+)
 
 
 class AnalyticsService:
@@ -107,7 +114,9 @@ class AnalyticsService:
         load_by_start: dict = {}
         try:
             load = await self._market.get_load(LoadRequest(start=start, end=end))
-            load_by_start = {i.interval_start: i.load_mw for i in load.intervals}
+            load_by_start = {
+                chronological_instant(i.interval_start): i.load_mw for i in load.intervals
+            }
         except AuthenticationError:
             raise
         except AesoMcpError:
@@ -115,7 +124,8 @@ class AnalyticsService:
 
         events: list[PriceEvent] = []
         active: list = []
-        for interval in prices.intervals:
+        ordered = sorted(prices.intervals, key=lambda i: chronological_instant(i.interval_start))
+        for interval in ordered:
             if interval.pool_price_cad_per_mwh >= threshold:
                 active.append(interval)
             elif active:
@@ -335,7 +345,11 @@ def _close_event(active: list, load_by_start: dict, min_hours: float) -> PriceEv
     if duration < min_hours:
         return None
     prices = [i.pool_price_cad_per_mwh for i in active]
-    loads = [load_by_start[i.interval_start] for i in active if i.interval_start in load_by_start]
+    loads = [
+        load_by_start[chronological_instant(i.interval_start)]
+        for i in active
+        if chronological_instant(i.interval_start) in load_by_start
+    ]
     return PriceEvent(
         start=start,
         end=end,

@@ -114,6 +114,16 @@ async def test_public_client_rejects_api_key_in_url() -> None:
         await client.aclose()
 
 
+@pytest.mark.asyncio
+async def test_public_client_rejects_userinfo_in_url() -> None:
+    client = AesoPublicReportsHttpClient(_settings())
+    try:
+        with pytest.raises(DataValidationError, match="Credentials"):
+            await client.get_text("http://user:pass@ets.aeso.ca/outage_reports/x.csv")
+    finally:
+        await client.aclose()
+
+
 @respx.mock
 @pytest.mark.asyncio
 async def test_public_client_rejects_cross_host_redirect() -> None:

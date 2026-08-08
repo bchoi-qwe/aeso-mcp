@@ -174,7 +174,8 @@ class AesoApimProvider:
         data = await self._http.get_json("currentsupplydemand-api/v2/csd/summary/current")
         observed_at, payload = parse_csd_payload(data)
         components = payload["generation_by_fuel"]
-        assert isinstance(components, list)
+        if not isinstance(components, list):
+            raise DataValidationError("CSD payload generation_by_fuel must be a list.")
         return observed_at, components, _prov("Current Supply Demand API", "v2")
 
     async def get_generation_history(
@@ -197,15 +198,18 @@ class AesoApimProvider:
         observed_at, payload = parse_csd_payload(data)
         paths = payload["interchange_paths"]
         net = payload["net_interchange_mw"]
-        assert isinstance(paths, list)
-        assert isinstance(net, int | float)
+        if not isinstance(paths, list):
+            raise DataValidationError("CSD payload interchange_paths must be a list.")
+        if not isinstance(net, int | float):
+            raise DataValidationError("CSD payload net_interchange_mw must be numeric.")
         return observed_at, paths, float(net), _prov("Current Supply Demand API", "v2")
 
     async def get_reserves(self) -> tuple[datetime, dict[str, float | None], dict[str, str]]:
         data = await self._http.get_json("currentsupplydemand-api/v2/csd/summary/current")
         observed_at, payload = parse_csd_payload(data)
         reserves = payload["reserves"]
-        assert isinstance(reserves, dict)
+        if not isinstance(reserves, dict):
+            raise DataValidationError("CSD payload reserves must be an object.")
         return observed_at, reserves, _prov("Current Supply Demand API", "v2")
 
     async def get_supply_demand_snapshot(

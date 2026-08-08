@@ -157,6 +157,8 @@ class AesoPublicReportsHttpClient:
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"}:
             raise DataValidationError("Public report URLs must be http(s).")
+        if parsed.username is not None or parsed.password is not None:
+            raise DataValidationError("Credentials must not appear in public report URLs.")
         host = (parsed.hostname or "").lower()
         if host not in ALLOWED_PUBLIC_REPORT_HOSTS:
             raise DataValidationError(f"Upstream host not allow-listed for public reports: {host}")

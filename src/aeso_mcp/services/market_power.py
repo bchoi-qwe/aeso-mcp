@@ -14,7 +14,7 @@ from aeso_mcp.models.market_power import (
 )
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.services.cache import AsyncTTLCache
-from aeso_mcp.timeutil import MARKET_TZ, utc_now
+from aeso_mcp.timeutil import MARKET_TZ, chronological_instant, utc_now
 
 
 class MarketPowerService:
@@ -42,7 +42,7 @@ class MarketPowerService:
         )
         # Prefer the chronologically latest populated cumulative value.
         populated = [i for i in intervals if i.cumulative_net_revenue_cad is not None]
-        latest = max(populated, key=lambda i: i.interval_start, default=None)
+        latest = max(populated, key=lambda i: chronological_instant(i.interval_start), default=None)
         threshold = None
         triggered = None
         headroom = None
@@ -97,7 +97,7 @@ class MarketPowerService:
         if intervals:
             current = max(
                 intervals,
-                key=lambda i: (
+                key=lambda i: chronological_instant(
                     i.effective_begin
                     or i.public_notification_time
                     or datetime.min.replace(tzinfo=MARKET_TZ)
