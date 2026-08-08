@@ -64,6 +64,8 @@ class AesoPublicReportsHttpClient:
         )
 
     async def aclose(self) -> None:
+        if self._client.is_closed:
+            return
         await self._client.aclose()
 
     async def get_text(self, url: str) -> str:

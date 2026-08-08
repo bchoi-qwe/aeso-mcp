@@ -57,9 +57,9 @@ async def test_parse_fuel_mix_and_interchange() -> None:
         [
             {
                 "Time": observed,
-                "British Columbia": 100.0,
-                "Saskatchewan": -20.0,
-                "Net Interchange": 80.0,
+                "British Columbia Flow": 100.0,
+                "Saskatchewan Flow": -20.0,
+                "Net Interchange Flow": 80.0,
             }
         ]
     )

@@ -35,9 +35,12 @@ class AppContainer:
     public_reports_http: AesoPublicReportsHttpClient
 
     async def aclose(self) -> None:
-        """Close outbound HTTP clients."""
-        await self.public_reports_http.aclose()
-        await self.apim_http.aclose()
+        """Close outbound HTTP clients (idempotent)."""
+        for client in (self.public_reports_http, self.apim_http):
+            close = getattr(client, "aclose", None)
+            if close is None:
+                continue
+            await close()
 
 
 def build_container(settings: Settings) -> AppContainer:

@@ -56,59 +56,74 @@ async def test_live_fuel_mix(live_settings: Settings) -> None:
 @pytest.mark.asyncio
 async def test_live_market_snapshot_via_services(live_settings: Settings) -> None:
     container = build_container(live_settings)
-    snap = await container.market.get_market_snapshot()
-    assert snap.observed_at.tzinfo is not None
-    assert snap.alberta_internal_load_mw is not None
-    assert snap.alberta_internal_load_mw > 0
-    assert snap.total_generation_mw is not None
-    assert snap.generation_by_fuel
-    assert snap.pool_price_cad_per_mwh is not None
-    assert snap.metadata.market_timezone == "America/Edmonton"
+    try:
+        snap = await container.market.get_market_snapshot()
+        assert snap.observed_at.tzinfo is not None
+        assert snap.alberta_internal_load_mw is not None
+        assert snap.alberta_internal_load_mw > 0
+        assert snap.total_generation_mw is not None
+        assert snap.generation_by_fuel
+        assert snap.pool_price_cad_per_mwh is not None
+        assert snap.metadata.market_timezone == "America/Edmonton"
+    finally:
+        await container.aclose()
 
 
 @pytest.mark.asyncio
 async def test_live_load_and_smp_short_windows(live_settings: Settings) -> None:
     container = build_container(live_settings)
-    end = market_now()
-    start = end - timedelta(hours=6)
-    load = await container.market.get_load(LoadRequest(start=start, end=end))
-    assert load.intervals
-    assert all(i.load_mw >= 0 for i in load.intervals)
+    try:
+        end = market_now()
+        start = end - timedelta(hours=6)
+        load = await container.market.get_load(LoadRequest(start=start, end=end))
+        assert load.intervals
+        assert all(i.load_mw >= 0 for i in load.intervals)
 
-    smp_start = end - timedelta(hours=2)
-    smp = await container.market.get_system_marginal_prices(
-        SystemMarginalPriceRequest(start=smp_start, end=end)
-    )
-    assert smp.intervals
-    assert smp.intervals[0].system_marginal_price_cad_per_mwh >= 0
+        smp_start = end - timedelta(hours=2)
+        smp = await container.market.get_system_marginal_prices(
+            SystemMarginalPriceRequest(start=smp_start, end=end)
+        )
+        assert smp.intervals
+        assert smp.intervals[0].system_marginal_price_cad_per_mwh >= 0
+    finally:
+        await container.aclose()
 
 
 @pytest.mark.asyncio
 async def test_live_interchange_reserves_assets(live_settings: Settings) -> None:
     container = build_container(live_settings)
-    interchange = await container.grid.get_interchange()
-    assert interchange.observed_at.tzinfo is not None
-    assert interchange.paths
+    try:
+        interchange = await container.grid.get_interchange()
+        assert interchange.observed_at.tzinfo is not None
+        assert interchange.paths
+        assert all(not p.path.endswith(" Flow") for p in interchange.paths)
 
-    reserves = await container.grid.get_reserves()
-    assert reserves.observed_at.tzinfo is not None
-    assert reserves.contingency_reserve_required_mw is not None
+        reserves = await container.grid.get_reserves()
+        assert reserves.observed_at.tzinfo is not None
+        assert reserves.contingency_reserve_required_mw is not None
 
-    assets = await container.assets.get_assets(AssetsRequest(limit=25))
-    assert assets.assets
-    assert assets.assets[0].asset_id
+        assets = await container.assets.get_assets(AssetsRequest(limit=25))
+        assert assets.assets
+        assert assets.assets[0].asset_id
+    finally:
+        await container.aclose()
 
 
 @pytest.mark.asyncio
 async def test_live_outages_recent_day(live_settings: Settings) -> None:
     container = build_container(live_settings)
-    end = market_now()
-    start = end - timedelta(hours=24)
-    result = await container.grid.get_outages(OutagesRequest(start=start, end=end))
-    # Upstream may legitimately return zero outages; require a well-formed response.
-    assert result.metadata.observation_count == len(result.outages)
-    if not result.outages:
-        assert result.warnings
+    try:
+        end = market_now()
+        start = end - timedelta(hours=24)
+        result = await container.grid.get_outages(OutagesRequest(start=start, end=end))
+        # Upstream may legitimately return zero outages; require a well-formed response.
+        assert result.metadata.observation_count == len(result.outages)
+        if result.outages:
+            assert hasattr(result.outages[0], "total_outage_mw")
+        if not result.outages:
+            assert result.warnings
+    finally:
+        await container.aclose()
 
 
 @pytest.mark.asyncio

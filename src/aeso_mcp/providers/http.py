@@ -62,6 +62,8 @@ class AesoHttpClient:
         )
 
     async def aclose(self) -> None:
+        if self._client.is_closed:
+            return
         await self._client.aclose()
 
     async def get_json(self, endpoint: str, *, params: dict[str, Any] | None = None) -> Any:

@@ -165,7 +165,12 @@ class AesoPublicReportsProvider:
                 start_d.isoformat(),
                 _EARLIEST_APPROVED_TX.isoformat(),
             )
-            start_d = _EARLIEST_APPROVED_TX
+            start = datetime(
+                _EARLIEST_APPROVED_TX.year,
+                _EARLIEST_APPROVED_TX.month,
+                _EARLIEST_APPROVED_TX.day,
+                tzinfo=MARKET_TZ,
+            )
 
         current_url = APPROVED_TX_LANDING_URL
         historical: list[tuple[str, datetime]] = []
@@ -179,13 +184,13 @@ class AesoPublicReportsProvider:
                 href = str(csv_link["href"])
                 publication_time = _publication_time_from_href(href)
                 if publication_time is not None:
-                    pub_d = publication_time.date()
-                    if start_d <= pub_d <= end_d:
+                    # Match service-layer half-open [start, end) semantics.
+                    if start <= publication_time < end:
                         csv_url = self._http.resolve_outage_report_url(href, base=current_url)
                         historical.append((csv_url, publication_time))
-                    if pub_d < start_d:
+                    if publication_time < start:
                         break
-                    if pub_d <= date(2025, 1, 22) and not jumped_to_archives:
+                    if publication_time.date() <= date(2025, 1, 22) and not jumped_to_archives:
                         current_url = _ARCHIVE_JUMP_URL
                         jumped_to_archives = True
                         continue

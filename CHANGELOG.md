@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Approved transmission outages use the timeout-controlled public-reports client
 - Dependency canary rewrites the exact FastMCP pin so upgrades are actually tested
 - MCP conformance job is blocking; `server.json` no longer claims a published PyPI package
+- Historical approved transmission publication windows use half-open `[start, end)` matching
+  other date-range tools; live tests always close HTTP clients
 
 ### Added
 
@@ -42,8 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GridStatus renewable/history and optional load-forecast paths no longer swallow authentication failures
 - Snapshot / analytics optional enrichment no longer swallows authentication failures
 - Unsupported request flags locked to `Literal[True]` until historical support exists
-
-## [0.1.1] - 2026-08-07
 
 ## [0.1.1] - 2026-08-07
 
