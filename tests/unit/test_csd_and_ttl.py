@@ -12,7 +12,13 @@ from aeso_mcp.config import Settings
 from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.gridstatus import GridStatusProvider
 from aeso_mcp.services.ttl import historical_ttl_s
-from aeso_mcp.timeutil import MARKET_TZ, as_market_date, market_now, start_of_market_day
+from aeso_mcp.timeutil import (
+    MARKET_TZ,
+    as_market_date,
+    end_of_market_day,
+    market_now,
+    start_of_market_day,
+)
 
 
 def _settings() -> Settings:
@@ -36,6 +42,14 @@ def test_ttl_uses_long_for_completed_past_days() -> None:
     start = datetime(2024, 1, 1, tzinfo=MARKET_TZ)
     end = datetime(2024, 1, 3, tzinfo=MARKET_TZ)
     assert historical_ttl_s(settings, start, end) == settings.cache_ttl_historical_s
+
+
+def test_ttl_uses_short_for_future_ranges() -> None:
+    settings = _settings()
+    today = as_market_date(market_now())
+    start = end_of_market_day(today)
+    end = start + timedelta(days=1)
+    assert historical_ttl_s(settings, start, end) == settings.cache_ttl_snapshot_s
 
 
 def test_parse_csd_payload_extracts_ail_and_mix() -> None:

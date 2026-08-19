@@ -20,7 +20,8 @@ from aeso_mcp.errors import (
 )
 from aeso_mcp.providers.aeso_apim import AesoApimProvider
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.timeutil import MARKET_TZ
+from aeso_mcp.providers.http import _parse_retry_after as parse_retry_after
+from aeso_mcp.timeutil import MARKET_TZ, elapsed_hours
 
 FIXTURES = Path(__file__).parent / "fixtures"
 BASE = "https://apimgw.aeso.ca/public"
@@ -72,6 +73,33 @@ async def test_pool_price_empty_response(provider: AesoApimProvider) -> None:
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_pool_price_fall_back_interval_is_one_elapsed_hour(
+    provider: AesoApimProvider,
+) -> None:
+    payload = {
+        "return": {
+            "Pool Price Report": [
+                {
+                    "begin_datetime_utc": "2024-11-03T07:00:00Z",
+                    "pool_price": 50.0,
+                }
+            ]
+        }
+    }
+    respx.get(url__regex=r".*poolPrice.*").mock(return_value=httpx.Response(200, json=payload))
+    start = datetime(2024, 11, 3, 0, 0, tzinfo=MARKET_TZ)
+    end = datetime(2024, 11, 3, 3, 0, tzinfo=MARKET_TZ)
+
+    intervals, _ = await provider.get_pool_prices(start, end)
+
+    assert len(intervals) == 1
+    assert intervals[0].interval_end.hour == 1
+    assert intervals[0].interval_end.fold == 1
+    assert elapsed_hours(intervals[0].interval_start, intervals[0].interval_end) == 1.0
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_auth_401(provider: AesoApimProvider) -> None:
     respx.get(url__regex=r".*poolPrice.*").mock(return_value=httpx.Response(401, json={}))
     start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
@@ -112,6 +140,31 @@ async def test_429(provider: AesoApimProvider) -> None:
     end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
     with pytest.raises(RateLimitError):
         await provider.get_pool_prices(start, end)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_429_retry_after_is_honored_before_retry(provider: AesoApimProvider) -> None:
+    provider._http._settings.http_max_retries = 1  # type: ignore[attr-defined]
+    route = respx.get(url__regex=r".*poolPrice.*").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "0"}, json={}),
+            httpx.Response(200, json=_load("pool_price_ok.json")),
+        ]
+    )
+    start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
+    end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
+
+    intervals, _ = await provider.get_pool_prices(start, end)
+
+    assert len(intervals) == 2
+    assert route.call_count == 2
+
+
+def test_retry_after_http_date_and_invalid_values() -> None:
+    assert parse_retry_after("0") == 0
+    assert parse_retry_after("not-a-date") is None
+    assert parse_retry_after("Wed, 21 Oct 2015 07:28:00 GMT") == 0
 
 
 @respx.mock
@@ -238,6 +291,21 @@ async def test_apim_rejects_cross_host_redirect(provider: AesoApimProvider) -> N
     start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
     end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
     with pytest.raises(DataValidationError, match="allow-listed"):
+        await provider.get_pool_prices(start, end)
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_apim_rejects_https_downgrade_redirect(provider: AesoApimProvider) -> None:
+    respx.get(url__regex=r".*poolPrice.*").mock(
+        return_value=httpx.Response(
+            302,
+            headers={"Location": "http://apimgw.aeso.ca/public/poolprice-api/v1.1/price"},
+        )
+    )
+    start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
+    end = datetime(2024, 1, 16, tzinfo=MARKET_TZ)
+    with pytest.raises(DataValidationError, match="HTTPS"):
         await provider.get_pool_prices(start, end)
 
 

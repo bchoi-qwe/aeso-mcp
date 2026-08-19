@@ -8,7 +8,10 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Hashable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TypeVar
+
+from aeso_mcp.timeutil import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,25 @@ T = TypeVar("T")
 class _CacheEntry[T]:
     value: T
     expires_at: float
+    retrieved_at: datetime
+
+
+@dataclass(frozen=True)
+class CacheInfo:
+    """Timing and hit information for one cache-served response."""
+
+    retrieved_at: datetime
+    served_at: datetime
+    cache_hit: bool
+    cache_age: float | None
+
+
+@dataclass(frozen=True)
+class CacheResult[T]:
+    """A cached value together with its provider-fetch provenance."""
+
+    value: T
+    info: CacheInfo
 
 
 class AsyncTTLCache:
@@ -58,21 +80,66 @@ class AsyncTTLCache:
         *,
         ttl_s: float,
     ) -> T:
+        """Return a value while preserving the historical value-only API."""
+        result = await self.get_or_set_with_metadata(key, factory, ttl_s=ttl_s)
+        return result.value
+
+    async def get_or_set_with_metadata(
+        self,
+        key: Hashable,
+        factory: Callable[[], Awaitable[T]],
+        *,
+        ttl_s: float,
+    ) -> CacheResult[T]:
+        """Return a value and timing metadata for the cache operation.
+
+        ``retrieved_at`` is captured when the factory finishes, so a later
+        cache hit can retain the actual provider-fetch time instead of
+        replacing it with the response-serving time.
+        """
         if ttl_s <= 0:
-            return await factory()
+            value = await factory()
+            retrieved_at = utc_now()
+            return CacheResult(
+                value=value,
+                info=CacheInfo(
+                    retrieved_at=retrieved_at,
+                    served_at=retrieved_at,
+                    cache_hit=False,
+                    cache_age=None,
+                ),
+            )
 
         now = time.monotonic()
         entry = self._store.get(key)
         if entry is not None and entry.expires_at > now:
             logger.debug("cache_hit key=%s", key)
-            return entry.value  # type: ignore[return-value]
+            served_at = utc_now()
+            return CacheResult(
+                value=entry.value,  # type: ignore[arg-type]
+                info=CacheInfo(
+                    retrieved_at=entry.retrieved_at,
+                    served_at=served_at,
+                    cache_hit=True,
+                    cache_age=max((served_at - entry.retrieved_at).total_seconds(), 0.0),
+                ),
+            )
 
         async with self._lock:
             entry = self._store.get(key)
             now = time.monotonic()
             if entry is not None and entry.expires_at > now:
                 logger.debug("cache_hit key=%s", key)
-                return entry.value  # type: ignore[return-value]
+                served_at = utc_now()
+                return CacheResult(
+                    value=entry.value,  # type: ignore[arg-type]
+                    info=CacheInfo(
+                        retrieved_at=entry.retrieved_at,
+                        served_at=served_at,
+                        cache_hit=True,
+                        cache_age=max((served_at - entry.retrieved_at).total_seconds(), 0.0),
+                    ),
+                )
 
             inflight = self._inflight.get(key)
             if inflight is None:
@@ -85,18 +152,58 @@ class AsyncTTLCache:
 
         if not owner:
             logger.debug("cache_coalesce key=%s", key)
-            return await inflight  # type: ignore[return-value]
+            # A canceled waiter must not cancel the shared future for the owner
+            # or other coalesced callers.
+            result = await asyncio.shield(inflight)
+            if isinstance(result, CacheResult):
+                served_at = utc_now()
+                return CacheResult(
+                    value=result.value,
+                    info=CacheInfo(
+                        retrieved_at=result.info.retrieved_at,
+                        served_at=served_at,
+                        cache_hit=True,
+                        cache_age=max((served_at - result.info.retrieved_at).total_seconds(), 0.0),
+                    ),
+                )
+            # This branch is only defensive for futures created by an older
+            # in-process caller; the cache itself always stores CacheResult.
+            served_at = utc_now()
+            return CacheResult(
+                value=result,  # type: ignore[arg-type]
+                info=CacheInfo(
+                    retrieved_at=served_at,
+                    served_at=served_at,
+                    cache_hit=True,
+                    cache_age=0.0,
+                ),
+            )
 
         logger.debug("cache_miss key=%s", key)
         try:
             value = await factory()
+            retrieved_at = utc_now()
             async with self._lock:
                 now = time.monotonic()
                 self._evict_if_needed(now)
-                self._store[key] = _CacheEntry(value=value, expires_at=now + ttl_s)
-                if not inflight.done():
-                    inflight.set_result(value)
-            return value
+                self._store[key] = _CacheEntry(
+                    value=value,
+                    expires_at=now + ttl_s,
+                    retrieved_at=retrieved_at,
+                )
+            served_at = utc_now()
+            result = CacheResult(
+                value=value,
+                info=CacheInfo(
+                    retrieved_at=retrieved_at,
+                    served_at=served_at,
+                    cache_hit=False,
+                    cache_age=max((served_at - retrieved_at).total_seconds(), 0.0),
+                ),
+            )
+            if not inflight.done():
+                inflight.set_result(result)
+            return result
         except asyncio.CancelledError:
             if not inflight.done():
                 inflight.cancel()
@@ -104,6 +211,9 @@ class AsyncTTLCache:
         except Exception as exc:
             if not inflight.done():
                 inflight.set_exception(exc)
+                # The owner returns the exception directly rather than awaiting
+                # the future. Mark it retrieved while preserving it for waiters.
+                inflight.exception()
             raise
         finally:
             async with self._lock:

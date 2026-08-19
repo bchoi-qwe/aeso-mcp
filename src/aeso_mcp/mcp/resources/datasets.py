@@ -26,6 +26,14 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | MCSINR | `get_monthly_cumulative_net_revenue` | hourly HE | CAD | preliminary | ETS MCSINR CSV |
 | Secondary Offer Limit | `get_secondary_offer_price_limit` | publication | CAD/MWh | preliminary | ETS Current SOC CSV |
 | Assets | `get_assets` | catalog | — | actual | Asset List API v1 |
+| Energy Merit Order | `get_energy_merit_order` | historical hourly report | CAD/MWh, MW | final | Authenticated Energy Merit Order Report |
+| Unit Commitments | `get_unit_commitments` | directive | — | preliminary | Authenticated Unit Commitment Data |
+| Generation Capacity | `get_generation_capacity` | hourly by fuel class | MW | actual / forecast | Authenticated AIES Generation Capacity and Outages |
+| Load Outage Forecast | `get_load_outage_forecast` | hourly | MW | forecast | Authenticated Load Outage Forecast |
+| Intertie Capability | `get_intertie_capability` | hourly by path/direction | MW | preliminary | Authenticated Intertie Capability |
+| Intertie Outages | `get_intertie_outages` | interval event | — | preliminary | Authenticated Intertie Outages |
+| Metered Volumes | `get_metered_volumes` | hourly by asset | MWh | actual | Authenticated Metered Volumes |
+| Operating Reserve Offer Control | `get_operating_reserve_offer_control` | historical hourly report | CAD/MWh, MW | final | Authenticated Operating Reserve Offer Control |
 
 ## Analytics (derived)
 
@@ -35,6 +43,8 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Price event detection | `find_price_events` | Threshold/percentile high-price events |
 | Condition evidence | `explain_market_conditions` | Structured associated changes (not causes) |
 | Forecast accuracy | `compare_forecast_to_actual` | AIL forecast vs actual error metrics |
+| Market history summary | `summarize_market_history` | Compact price/load buckets for long windows |
+| Supply tightness | `assess_supply_tightness` | Supply-margin arithmetic and screening signal |
 
 ## Timezone
 All market timestamps are normalized to **America/Edmonton**. DST spring-forward days have

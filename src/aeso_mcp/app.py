@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from aeso_mcp.config import Settings
 from aeso_mcp.providers.gridstatus import GridStatusProvider
 from aeso_mcp.providers.http import AesoHttpClient
+from aeso_mcp.providers.operations import AesoOperationsProvider
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 from aeso_mcp.services.analytics import AnalyticsService
@@ -16,6 +17,7 @@ from aeso_mcp.services.cache import AsyncTTLCache
 from aeso_mcp.services.grid import GridService
 from aeso_mcp.services.market import MarketService
 from aeso_mcp.services.market_power import MarketPowerService
+from aeso_mcp.services.operations import OperationsService
 from aeso_mcp.services.transmission import TransmissionService
 
 
@@ -31,6 +33,7 @@ class AppContainer:
     analytics: AnalyticsService
     transmission: TransmissionService
     market_power: MarketPowerService
+    operations: OperationsService
     apim_http: AesoHttpClient
     public_reports_http: AesoPublicReportsHttpClient
 
@@ -61,6 +64,8 @@ def build_container(settings: Settings) -> AppContainer:
         cache=cache,
     )
     market_power = MarketPowerService(public_reports, settings, cache)
+    operations_provider = AesoOperationsProvider(apim_http)
+    operations = OperationsService(operations_provider, market, settings, cache)
     return AppContainer(
         settings=settings,
         cache=cache,
@@ -70,6 +75,7 @@ def build_container(settings: Settings) -> AppContainer:
         analytics=analytics,
         transmission=transmission,
         market_power=market_power,
+        operations=operations,
         apim_http=apim_http,
         public_reports_http=public_http,
     )

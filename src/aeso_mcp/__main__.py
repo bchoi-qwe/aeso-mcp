@@ -18,6 +18,14 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _suppress_fastmcp_startup_noise() -> None:
+    """Keep framework banners and release checks out of normal server logs."""
+    import fastmcp
+
+    fastmcp.settings.show_server_banner = False
+    fastmcp.settings.check_for_updates = "off"
+
+
 def main(argv: list[str] | None = None) -> None:
     """Run the AESO MCP server."""
     parser = argparse.ArgumentParser(
@@ -55,13 +63,26 @@ def main(argv: list[str] | None = None) -> None:
     settings = get_settings()
     log_level = args.log_level or settings.log_level
     _configure_logging(log_level)
+    _suppress_fastmcp_startup_noise()
 
     mcp = create_mcp_server(settings)
 
     if args.transport == "stdio":
-        mcp.run(transport="stdio")
+        mcp.run(transport="stdio", show_banner=False)
     else:
-        mcp.run(transport="http", host=args.host, port=args.port)
+        from aeso_mcp.http_runtime import build_http_runtime
+
+        runtime = build_http_runtime(mcp, settings)
+        mcp.run(
+            transport="http",
+            host=args.host,
+            port=args.port,
+            show_banner=False,
+            middleware=runtime.middleware,
+            host_origin_protection=runtime.host_origin_protection,
+            allowed_hosts=runtime.allowed_hosts,
+            allowed_origins=runtime.allowed_origins,
+        )
 
 
 if __name__ == "__main__":

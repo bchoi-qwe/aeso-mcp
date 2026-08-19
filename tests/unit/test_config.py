@@ -36,8 +36,42 @@ def test_invalid_log_level_rejected() -> None:
         Settings.model_validate({"aeso_api_key": "x", "log_level": "VERBOSE"})
 
 
+def test_configuration_error_does_not_echo_invalid_values(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    secret = "query-secret-must-not-leak"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AESO_API_KEY", "test-api-key")
+    monkeypatch.setenv(
+        "AESO_MCP_BASE_URL",
+        f"https://apimgw.aeso.ca/public?subscription-key={secret}",
+    )
+    clear_settings_cache()
+
+    with pytest.raises(ConfigurationError) as exc_info:
+        get_settings()
+
+    assert secret not in str(exc_info.value)
+    assert "query string or fragment" in str(exc_info.value)
+
+
 def test_non_apim_base_url_rejected() -> None:
     with pytest.raises(ValidationError, match=r"apimgw\.aeso\.ca"):
         Settings.model_validate(
             {"aeso_api_key": "x", "aeso_base_url": "https://ets.aeso.ca/public"}
         )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://apimgw.aeso.ca/public",
+        "https://user:pass@apimgw.aeso.ca/public",
+        "https://apimgw.aeso.ca/public?subscription-key=secret",
+        "https://apimgw.aeso.ca/public#fragment",
+    ],
+)
+def test_noncanonical_apim_base_url_rejected(base_url: str) -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"aeso_api_key": "x", "aeso_base_url": base_url})

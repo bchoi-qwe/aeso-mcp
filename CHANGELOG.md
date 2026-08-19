@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Cache waiter cancellation no longer cancels shared single-flight work for other callers
+- High-price event detection splits runs at missing intervals; partial explicit baselines are rejected
+- Synthesized interval ends use elapsed UTC time across DST transitions
+- AESO spring `HE 03` bridges the clock change; starred `HE 02*` is limited to fall-back days
+- Current and future ranges use short cache TTLs instead of being treated as immutable history
+- Authenticated APIM base URLs and redirects require HTTPS; invalid configuration values are not echoed
+- The packaged glossary resource is Markdown rather than Python source; typed wheels include `py.typed`
 - Generator outages model matches GridStatus aggregated hourly capacity by fuel/technology
 - MCSINR accounting negatives like `(46931.24)` parse as negative floats
 - AESO hour-ending parser supports `HE 02*` / DST fold semantics; range validation compares in UTC
@@ -27,9 +34,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Authenticated operational APIM tools for Energy Merit Order, unit commitments, AIES generation
+  capacity/outages, load-outage forecasts, intertie capability/outages, metered volumes, and
+  Operating Reserve Offer Control
+- `summarize_market_history` compact aggregation and `assess_supply_tightness` transparent
+  reserve-adjusted supply-margin indicators
+- Offset/limit pagination for raw market and operational series
+- Fetch/serve/cache timing, completeness, available/missing series, and separate observation-type
+  and finality metadata
+- Stable machine-readable MCP error envelopes with upstream retry timing
+- Hardened HTTP runtime controls: Host/Origin validation, optional bearer auth, rate/concurrency
+  limits, request-size bounds, secret-free probes, and correlation IDs
+- Reusable daily brief, price-event investigation, and market-day comparison prompts; expanded
+  capabilities and methodology resources
+- Installed-wheel and Docker runtime smoke checks, release-version consistency validation, and a
+  scheduled protected live AESO canary
 - `docs/data-sources.md` coverage matrix (APIM-first resolution order)
 - Approved transmission outages (`get_approved_transmission_outages`) via public-reports client
-- Credential-free public-reports HTTP client and Long Range Significant Transmission Outages
+- Isolated public-reports HTTP client and Long Range Significant Transmission Outages
   (`get_long_range_transmission_outages`, `approval_status=tentative`)
 - Market-power public reports: `get_monthly_cumulative_net_revenue` (MCSINR) and
   `get_secondary_offer_price_limit`
@@ -42,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The project remains one complete, API-key-required server package; public-report access is an
+  internal source adapter and is not exposed as a credential-free runtime mode
+- Long raw series default to bounded pages; server-side analytics explicitly operate on complete
+  cached series rather than a returned page
 - PyPI publish workflow is **manual only** (`workflow_dispatch`); no auto-publish on GitHub releases
 - Direct APIM adapter raises `UnsupportedDatasetError` for outages and historical generation instead of returning empty lists
 - GridStatus renewable/history and optional load-forecast paths no longer swallow authentication failures

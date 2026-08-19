@@ -14,11 +14,18 @@
 
 - Typed MCP tools with Pydantic inputs/outputs and structured results
 - Current market snapshot combining price, load, generation, interchange, and reserves
-- Historical Pool Price and System Marginal Price retrieval with explicit units and timezones
-- Deterministic analytics: period comparison, price-event detection, condition evidence
-- GridStatus-backed AESO adapters plus a direct APIM httpx client for contracts (not a full second production stack)
-- Query bounds, caching, retries, and secret-safe error handling
-- Resources for glossary, dataset catalog, and methodology notes
+- Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
+- Authenticated APIM reports for merit order, commitments, capability/outages, interties,
+  metered volumes, and operating-reserve offer control
+- Deterministic analytics: compact history summaries, period comparison, event detection,
+  condition evidence, forecast accuracy, and transparent supply-tightness indicators
+- One complete server package and startup path: `AESO_API_KEY` is always required; there is no
+  reduced credential-free server mode
+- Query bounds, cache provenance, completeness metadata, upstream `Retry-After` handling, and
+  secret-safe machine-readable errors
+- Hardened HTTP transport with Host/Origin validation, optional bearer authentication, rate and
+  concurrency limits, request-size bounds, probes, and correlation IDs
+- Reusable MCP prompts plus glossary, capability, dataset, and methodology resources
 
 ## Implemented datasets
 
@@ -32,14 +39,22 @@
 | Interchange | `get_interchange` | Current path flows MW |
 | Operating reserves | `get_reserves` | Current MW indicators |
 | Generator outages | `get_outages` | Hourly outage capacity by fuel/technology |
+| AIES capacity/outages | `get_generation_capacity` | Hourly MC, AC, operating, and mothball outage MW |
+| Load outage forecast | `get_load_outage_forecast` | Hourly forecast MW |
+| Energy Merit Order | `get_energy_merit_order` | Historical blocks; 60-day publication delay |
+| Unit commitments | `get_unit_commitments` | Generating-unit commitment directives |
+| Intertie capability | `get_intertie_capability` | Import/export ATC, TTC, margins, gross offers |
+| Intertie capability outages | `get_intertie_outages` | Outages affecting interties/flowgates |
+| Metered volumes | `get_metered_volumes` | Hourly MWh by asset; optional ID filters |
+| OR offer control | `get_operating_reserve_offer_control` | Historical reserve offer blocks; 60-day delay |
 | Approved Tx outages | `get_approved_transmission_outages` | AESO-approved planned transmission outages |
 | Long-range Tx outages | `get_long_range_transmission_outages` | Tentative ~24-month significant outages |
 | MCSINR | `get_monthly_cumulative_net_revenue` | Cumulative net revenue vs offer-cap trigger |
 | Secondary offer limit | `get_secondary_offer_price_limit` | Whether secondary offer cap is in effect |
 | Assets | `get_assets` | Registry with filters |
 
-Analytics: `compare_market_periods`, `find_price_events`, `explain_market_conditions`,
-`compare_forecast_to_actual`.
+Analytics: `summarize_market_history`, `assess_supply_tightness`, `compare_market_periods`,
+`find_price_events`, `explain_market_conditions`, and `compare_forecast_to_actual`.
 
 ## Architecture
 
@@ -50,20 +65,22 @@ MCP clients
 FastMCP adapter (aeso_mcp/mcp)
     |
     v
-Domain services (market, grid, assets, analytics)
+Domain services (market, grid, assets, operations, analytics, transmission, market power)
     |
-    +------------------+
-    |                  |
-    v                  v
-GridStatus provider    Direct AESO APIM (httpx)
-    |                  |
-    +---------+--------+
-              |
-              v
-          AESO APIs
+    +---------------------+------------------------+
+    |                     |                        |
+    v                     v                        v
+GridStatus provider    Direct AESO APIM    Public-reports client
+    |                     |                        |
+    +----------+----------+                        |
+               |                                   |
+               v                                   v
+       AESO APIM gateway                       ets.aeso.ca
 ```
 
 Domain code does not depend on FastMCP. Framework changes should stay in `aeso_mcp/mcp/`.
+Both upstream clients are implementation details of this single server: the APIM key is sent only
+to `apimgw.aeso.ca` and is never sent to the allow-listed `ets.aeso.ca` report host.
 
 ## Requirements
 
@@ -143,6 +160,11 @@ Missing credentials produce an actionable startup error. The key is never return
 uv run aeso-mcp --transport http --host 127.0.0.1 --port 8000
 ```
 
+HTTP always validates Host and Origin. For a remotely reachable deployment, explicitly set
+`AESO_MCP_HTTP_ALLOWED_HOSTS` and `AESO_MCP_HTTP_ALLOWED_ORIGINS`; set
+`AESO_MCP_HTTP_BEARER_TOKEN` to require bearer authentication. `/healthz` and `/readyz` contain no
+market data or secrets. See [.env.example](.env.example) for all bounded runtime settings.
+
 ## Example prompts
 
 - What is Alberta's current grid situation?
@@ -166,11 +188,25 @@ uv run aeso-mcp --transport http --host 127.0.0.1 --port 8000
 | `get_interchange` | Intertie flows |
 | `get_reserves` | Operating reserve indicators |
 | `get_outages` | Hourly generator outage capacity by fuel |
+| `get_generation_capacity` | AIES capability and outage grouping by fuel |
+| `get_load_outage_forecast` | Hourly load-outage forecast |
+| `get_energy_merit_order` | Historical energy merit-order blocks |
+| `get_unit_commitments` | Generating-unit commitment directives |
+| `get_intertie_capability` | Intertie/flowgate ATC, TTC, and margins |
+| `get_intertie_outages` | Outages affecting intertie capability |
+| `get_metered_volumes` | Metered energy by asset |
+| `get_operating_reserve_offer_control` | Historical reserve offer-control blocks |
+| `get_approved_transmission_outages` | Approved planned transmission outages |
+| `get_long_range_transmission_outages` | Tentative long-range transmission outages |
 | `get_assets` | Asset registry |
+| `get_monthly_cumulative_net_revenue` | Current MCSINR publication |
+| `get_secondary_offer_price_limit` | Current secondary offer-cap status |
 | `compare_market_periods` | Aggregate period comparison |
 | `find_price_events` | High-price event detection |
 | `explain_market_conditions` | Structured evidence (not causal prose) |
 | `compare_forecast_to_actual` | AIL forecast vs actual accuracy |
+| `summarize_market_history` | Compact hourly/daily/weekly/monthly price and load summaries |
+| `assess_supply_tightness` | Transparent reserve-adjusted supply-margin screening |
 
 All tools are read-only, non-destructive, and network-dependent.
 
@@ -182,6 +218,10 @@ All tools are read-only, non-destructive, and network-dependent.
 | `aeso://datasets` | Dataset catalog |
 | `aeso://methodology/pool-price` | Pool Price interpretation |
 | `aeso://methodology/system-marginal-price` | SMP interpretation |
+| `aeso://capabilities` | Complete tool, prompt, and resource surface |
+| `aeso://methodology/{dataset}` | Dataset-specific interpretation and caveats |
+
+Prompts: `daily_market_brief`, `investigate_price_event`, and `compare_market_days`.
 
 ## Data semantics
 
@@ -190,6 +230,13 @@ All tools are read-only, non-destructive, and network-dependent.
 - **Units**: Pool Price / SMP → CAD/MWh; load / generation / interchange / reserves → MW.
 - **Status**: Metadata includes `actual` / `forecast` / etc. Forecasts are never implied to be settled actuals.
 - **Finality**: Operational feeds may be preliminary; do not assume final settlement.
+- **Completeness**: Metadata reports available/missing series and expected/missing observations
+  where the source cadence is known. Optional enrichment failures are surfaced as partial or
+  degraded results with warnings.
+- **Pagination**: Raw price, SMP, load, generation, and operational reports return `page` metadata
+  with `next_offset`. Use `summarize_market_history` before retrieving long raw series.
+- **Cache timing**: `retrieved_at` identifies the upstream fetch; `served_at`, `cache_hit`, and
+  `cache_age` identify when and how the response was served.
 
 ## Development
 
@@ -229,8 +276,6 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 ## Roadmap
 
 - Human review against [LIMITATIONS.md](LIMITATIONS.md) before any PyPI / MCP Registry publish
-- See [docs/data-sources.md](docs/data-sources.md) for APIM vs public-report backlog (MCSINR, secondary offer cap, merit order via APIM)
-- Merit order, metered volumes, and unit commitments via **APIM** (do not scrape ETS copies)
 - Optional DuckDB/Parquet historical analytics store
 - Broader forecast vs actual tools
 

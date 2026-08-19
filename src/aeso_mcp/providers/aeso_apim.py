@@ -18,7 +18,7 @@ from aeso_mcp.models.grid import InterchangePathFlow, OutageRecord
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
 from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, format_aeso_date, in_half_open_range
+from aeso_mcp.timeutil import MARKET_TZ, add_elapsed, format_aeso_date, in_half_open_range
 
 
 def _prov(product: str, api_version: str | None = None) -> dict[str, str]:
@@ -66,7 +66,7 @@ class AesoApimProvider:
             intervals.append(
                 PoolPriceInterval(
                     interval_start=start_dt,
-                    interval_end=start_dt + timedelta(hours=1),
+                    interval_end=add_elapsed(start_dt, timedelta(hours=1)),
                     pool_price_cad_per_mwh=float(price),
                     forecast_pool_price_cad_per_mwh=_opt_float(item.get("forecast_pool_price")),
                     rolling_30day_avg_cad_per_mwh=_opt_float(item.get("rolling_30day_avg")),
@@ -103,7 +103,9 @@ class AesoApimProvider:
                 continue
             start_dt = _parse_utc(str(begin))
             end_raw = item.get("end_datetime_utc")
-            end_dt = _parse_utc(str(end_raw)) if end_raw else start_dt + timedelta(minutes=1)
+            end_dt = (
+                _parse_utc(str(end_raw)) if end_raw else add_elapsed(start_dt, timedelta(minutes=1))
+            )
             intervals.append(
                 SystemMarginalPriceInterval(
                     interval_start=start_dt,
@@ -157,7 +159,7 @@ class AesoApimProvider:
             rows.append(
                 {
                     "interval_start": start_dt,
-                    "interval_end": start_dt + timedelta(hours=1),
+                    "interval_end": add_elapsed(start_dt, timedelta(hours=1)),
                     "load_mw": float(load),
                     "load_forecast_mw": forecast,
                 }

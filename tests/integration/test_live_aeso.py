@@ -17,6 +17,12 @@ from aeso_mcp.config import Settings, clear_settings_cache
 from aeso_mcp.models.assets import AssetsRequest
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.grid import OutagesRequest
+from aeso_mcp.models.operations import (
+    DailyPageRequest,
+    DateRangePageRequest,
+    IntertieCapabilityRequest,
+    MeteredVolumeRequest,
+)
 from aeso_mcp.models.prices import SystemMarginalPriceRequest
 from aeso_mcp.providers.gridstatus import GridStatusProvider
 from aeso_mcp.timeutil import market_now
@@ -160,5 +166,47 @@ async def test_live_transmission_public_reports(live_settings: Settings) -> None
         )
         assert soc.intervals
         assert soc.limit_in_effect is not None
+    finally:
+        await container.aclose()
+
+
+@pytest.mark.asyncio
+async def test_live_authenticated_operational_reports(live_settings: Settings) -> None:
+    """Smoke representative historical, current, intertie, and participant APIM products."""
+    container = build_container(live_settings)
+    try:
+        today = market_now().date()
+        historical = today - timedelta(days=61)
+
+        merit = await container.operations.get_energy_merit_order(
+            DailyPageRequest(report_date=historical, limit=5)
+        )
+        assert merit.metadata.provider.value == "aeso_apim"
+        assert merit.page.total >= len(merit.blocks)
+
+        capacity = await container.operations.get_generation_capacity(
+            DateRangePageRequest(start_date=today, end_date=today, limit=25)
+        )
+        assert capacity.metadata.provider.value == "aeso_apim"
+        assert capacity.page.total >= len(capacity.intervals)
+
+        capability = await container.operations.get_intertie_capability(
+            IntertieCapabilityRequest(start_date=today, end_date=today, limit=10)
+        )
+        assert capability.metadata.provider.value == "aeso_apim"
+        assert capability.page.total >= len(capability.intervals)
+
+        assets = await container.assets.get_assets(AssetsRequest(limit=1))
+        assert assets.assets
+        metered = await container.operations.get_metered_volumes(
+            MeteredVolumeRequest(
+                start_date=today - timedelta(days=1),
+                end_date=today - timedelta(days=1),
+                asset_ids=[assets.assets[0].asset_id],
+                limit=10,
+            )
+        )
+        assert metered.metadata.provider.value == "aeso_apim"
+        assert metered.page.total >= len(metered.intervals)
     finally:
         await container.aclose()

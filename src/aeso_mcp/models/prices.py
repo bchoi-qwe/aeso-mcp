@@ -8,6 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from aeso_mcp.models.common import DatasetMetadata, DateRangeRequest, WarningMixin
+from aeso_mcp.models.operations import PageInfo
 
 
 class PoolPriceRequest(DateRangeRequest):
@@ -17,6 +18,8 @@ class PoolPriceRequest(DateRangeRequest):
         default=False,
         description="When true, also include AESO forecast pool price when present.",
     )
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=500, ge=1, le=2_000)
 
 
 class PoolPriceInterval(BaseModel):
@@ -35,11 +38,15 @@ class PoolPriceResponse(WarningMixin):
     """Hourly Pool Price observations in CAD/MWh."""
 
     intervals: list[PoolPriceInterval]
+    page: PageInfo
     metadata: DatasetMetadata
 
 
 class SystemMarginalPriceRequest(DateRangeRequest):
     """Request minute-level System Marginal Price (SMP) observations."""
+
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=500, ge=1, le=2_000)
 
 
 class SystemMarginalPriceInterval(BaseModel):
@@ -56,4 +63,5 @@ class SystemMarginalPriceResponse(WarningMixin):
     """Minute-level System Marginal Price observations in CAD/MWh."""
 
     intervals: list[SystemMarginalPriceInterval]
+    page: PageInfo
     metadata: DatasetMetadata

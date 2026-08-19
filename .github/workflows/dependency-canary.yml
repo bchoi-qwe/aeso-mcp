@@ -36,8 +36,8 @@ jobs:
           from pathlib import Path
           path = Path("pyproject.toml")
           text = path.read_text()
-          old = 'fastmcp==4.0.0b2'
-          new = 'fastmcp>=4.0.0b2'
+          old = 'fastmcp==4.0.0b3'
+          new = 'fastmcp>=4.0.0b3'
           if old not in text:
               raise SystemExit(f"Expected {old!r} in pyproject.toml")
           path.write_text(text.replace(old, new, 1))

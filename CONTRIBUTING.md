@@ -20,6 +20,7 @@ uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pyright src
 uv run pytest tests/unit tests/contract tests/mcp --cov=aeso_mcp
+uv run python tests/packaging/check_release_metadata.py
 uv build
 ```
 
@@ -29,6 +30,9 @@ Live AESO tests (optional):
 AESO_API_KEY=... uv run pytest tests/integration -m integration
 ```
 
+The scheduled live canary uses the protected `aeso-live` GitHub environment and its
+`AESO_API_KEY` secret. Pull-request CI remains deterministic and does not contact AESO.
+
 ## Design guidelines
 
 - Keep FastMCP code inside `aeso_mcp/mcp/`
@@ -37,6 +41,8 @@ AESO_API_KEY=... uv run pytest tests/integration -m integration
 - Prefer GridStatus when it already covers a dataset
 - Document timezone, units, and forecast vs actual semantics
 - Add contract fixtures for new upstream payloads
+- Keep the server a single API-key-required package; source-specific upstream clients are internal
+  implementation details, not alternate server modes
 
 ## Pull requests
 

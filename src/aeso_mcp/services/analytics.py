@@ -21,7 +21,13 @@ from aeso_mcp.models.analytics import (
     PeriodStatistics,
     PriceEvent,
 )
-from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
+from aeso_mcp.models.common import (
+    DataCompleteness,
+    DatasetMetadata,
+    DataStatus,
+    ObservationType,
+    ProviderName,
+)
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.prices import PoolPriceRequest
 from aeso_mcp.services.market import MarketService
@@ -46,8 +52,9 @@ class AnalyticsService:
         self,
         request: CompareMarketPeriodsRequest,
     ) -> CompareMarketPeriodsResponse:
-        a = await self._period_stats(request.period_a_start, request.period_a_end)
-        b = await self._period_stats(request.period_b_start, request.period_b_end)
+        a, warnings_a = await self._period_stats(request.period_a_start, request.period_a_end)
+        b, warnings_b = await self._period_stats(request.period_b_start, request.period_b_end)
+        warnings = warnings_a + warnings_b
 
         price_delta = None
         price_pct = None
@@ -70,17 +77,13 @@ class AnalyticsService:
             price_avg_pct_change=price_pct,
             load_avg_delta_mw=load_delta,
             load_avg_pct_change=load_pct,
-            metadata=DatasetMetadata(
-                dataset="Market Period Comparison",
-                source_product="Derived from Pool Price + AIL",
-                retrieved_at=utc_now(),
-                status=DataStatus.ACTUAL,
-                units={
-                    "pool_price_cad_per_mwh": "CAD/MWh",
-                    "load_mw": "MW",
-                },
-                provider=ProviderName.DERIVED,
+            metadata=_derived_meta(
+                "Market Period Comparison",
+                completeness=(DataCompleteness.DEGRADED if warnings else DataCompleteness.COMPLETE),
+                available_series=["pool_price"] if warnings else ["pool_price", "load"],
+                missing_series=["load"] if warnings else [],
             ),
+            warnings=warnings,
         )
 
     async def find_price_events(
@@ -94,14 +97,22 @@ class AnalyticsService:
             label="price event range",
         )
         prices = await self._market.get_pool_prices(
-            PoolPriceRequest(start=start, end=end, include_forecast=False)
+            PoolPriceRequest(start=start, end=end, include_forecast=False),
+            paginate=False,
         )
         values = [i.pool_price_cad_per_mwh for i in prices.intervals]
+        warnings: list[str] = []
+        missing_series: list[str] = []
         if not values:
             return FindPriceEventsResponse(
                 threshold_cad_per_mwh=request.threshold_cad_per_mwh or 0.0,
                 events=[],
-                metadata=_derived_meta("Price Event Detection", count=0),
+                metadata=_derived_meta(
+                    "Price Event Detection",
+                    count=0,
+                    completeness=DataCompleteness.EMPTY,
+                    available_series=[],
+                ),
                 warnings=["No pool price observations in the requested range."],
             )
 
@@ -113,20 +124,45 @@ class AnalyticsService:
 
         load_by_start: dict = {}
         try:
-            load = await self._market.get_load(LoadRequest(start=start, end=end))
+            load = await self._market.get_load(
+                LoadRequest(start=start, end=end),
+                paginate=False,
+            )
             load_by_start = {
                 chronological_instant(i.interval_start): i.load_mw for i in load.intervals
             }
+            if not load.intervals:
+                warnings.append(
+                    "Load context was unavailable for price events; price-only events are returned."
+                )
+                missing_series.append("load")
+            elif load.metadata.completeness in {
+                DataCompleteness.PARTIAL,
+                DataCompleteness.DEGRADED,
+            }:
+                warnings.append(
+                    "Load context was partial for price events; event statistics use available load observations."
+                )
+                missing_series.append("load")
         except AuthenticationError:
             raise
         except AesoMcpError:
             load_by_start = {}
+            warnings.append(
+                "Load context was unavailable for price events; price-only events are returned."
+            )
+            missing_series.append("load")
 
         events: list[PriceEvent] = []
         active: list = []
         ordered = sorted(prices.intervals, key=lambda i: chronological_instant(i.interval_start))
         for interval in ordered:
             if interval.pool_price_cad_per_mwh >= threshold:
+                if active and to_utc(active[-1].interval_end) != to_utc(interval.interval_start):
+                    event = _close_event(active, load_by_start, request.min_duration_hours)
+                    if event:
+                        events.append(event)
+                    active = []
                 active.append(interval)
             elif active:
                 event = _close_event(active, load_by_start, request.min_duration_hours)
@@ -141,7 +177,16 @@ class AnalyticsService:
         return FindPriceEventsResponse(
             threshold_cad_per_mwh=threshold,
             events=events,
-            metadata=_derived_meta("Price Event Detection", count=len(events)),
+            metadata=_derived_meta(
+                "Price Event Detection",
+                count=len(events),
+                completeness=(
+                    DataCompleteness.DEGRADED if missing_series else DataCompleteness.COMPLETE
+                ),
+                available_series=["pool_price"] if missing_series else ["pool_price", "load"],
+                missing_series=missing_series,
+            ),
+            warnings=warnings,
         )
 
     async def explain_market_conditions(
@@ -155,6 +200,11 @@ class AnalyticsService:
             label="focus window",
         )
         duration = to_utc(focus_end) - to_utc(focus_start)
+        if (request.baseline_start is None) ^ (request.baseline_end is None):
+            raise InvalidDateRangeError(
+                "Provide both baseline_start and baseline_end, or omit both to use the "
+                "immediately preceding equal-length window."
+            )
         if request.baseline_start is not None and request.baseline_end is not None:
             baseline_start, baseline_end = validate_range(
                 request.baseline_start,
@@ -168,8 +218,8 @@ class AnalyticsService:
             if to_utc(baseline_end) <= to_utc(baseline_start):
                 raise InvalidDateRangeError("Unable to infer a valid baseline window.")
 
-        focus = await self._period_stats(focus_start, focus_end)
-        baseline = await self._period_stats(baseline_start, baseline_end)
+        focus, focus_warnings = await self._period_stats(focus_start, focus_end)
+        baseline, baseline_warnings = await self._period_stats(baseline_start, baseline_end)
 
         changes = [
             _change(
@@ -226,10 +276,25 @@ class AnalyticsService:
             observed_conditions=observed,
             associated_changes=changes,
             notable_movements=notable,
-            metadata=_derived_meta("Market Condition Evidence"),
+            metadata=_derived_meta(
+                "Market Condition Evidence",
+                completeness=(
+                    DataCompleteness.DEGRADED
+                    if focus_warnings or baseline_warnings
+                    else DataCompleteness.COMPLETE
+                ),
+                available_series=(
+                    ["pool_price"]
+                    if focus_warnings or baseline_warnings
+                    else ["pool_price", "load"]
+                ),
+                missing_series=["load"] if focus_warnings or baseline_warnings else [],
+            ),
             warnings=[
                 "Associated changes are correlational evidence only; "
-                "they do not establish causation."
+                "they do not establish causation.",
+                *focus_warnings,
+                *baseline_warnings,
             ],
         )
 
@@ -243,7 +308,11 @@ class AnalyticsService:
             max_days=self._settings.max_load_days,
             label="forecast comparison range",
         )
-        load = await self._market.get_load(LoadRequest(start=start, end=end, include_forecast=True))
+        load = await self._market.get_load(
+            LoadRequest(start=start, end=end, include_forecast=True),
+            paginate=False,
+        )
+        missing_series = list(load.metadata.missing_series)
         pairs: list[ForecastActualInterval] = []
         for interval in load.intervals:
             if interval.load_forecast_mw is None:
@@ -264,6 +333,13 @@ class AnalyticsService:
             )
 
         warnings: list[str] = []
+        warnings.extend(load.warnings)
+        if missing_series:
+            warnings.append(
+                "Forecast comparison is partial because the following series were unavailable: "
+                + ", ".join(missing_series)
+                + "."
+            )
         if not pairs:
             warnings.append(
                 "No paired forecast/actual load observations were available for this range."
@@ -271,7 +347,13 @@ class AnalyticsService:
             return CompareForecastToActualResponse(
                 observation_count=0,
                 intervals=[],
-                metadata=_derived_meta("Load Forecast vs Actual", count=0),
+                metadata=_derived_meta(
+                    "Load Forecast vs Actual",
+                    count=0,
+                    completeness=DataCompleteness.EMPTY,
+                    available_series=["actual_load"] if load.intervals else [],
+                    missing_series=missing_series or ["load_forecast"],
+                ),
                 warnings=warnings,
             )
 
@@ -297,11 +379,19 @@ class AnalyticsService:
             mean_abs_pct_error=mean(abs_pcts) if abs_pcts else None,
             max_abs_error_mw=max(abs_errors),
             intervals=pairs[:max_intervals],
-            metadata=_derived_meta("Load Forecast vs Actual", count=len(pairs)),
+            metadata=_derived_meta(
+                "Load Forecast vs Actual",
+                count=len(pairs),
+                completeness=(
+                    DataCompleteness.DEGRADED if missing_series else DataCompleteness.COMPLETE
+                ),
+                available_series=["actual_load"] + ([] if missing_series else ["load_forecast"]),
+                missing_series=missing_series,
+            ),
             warnings=warnings,
         )
 
-    async def _period_stats(self, start, end) -> PeriodStatistics:
+    async def _period_stats(self, start, end) -> tuple[PeriodStatistics, list[str]]:
         start_m, end_m = validate_range(
             start,
             end,
@@ -309,30 +399,55 @@ class AnalyticsService:
             label="analytics period",
         )
         prices = await self._market.get_pool_prices(
-            PoolPriceRequest(start=start_m, end=end_m, include_forecast=False)
+            PoolPriceRequest(start=start_m, end=end_m, include_forecast=False),
+            paginate=False,
         )
         price_vals = [i.pool_price_cad_per_mwh for i in prices.intervals]
 
         load_vals: list[float] = []
+        warnings: list[str] = []
         try:
-            load = await self._market.get_load(LoadRequest(start=start_m, end=end_m))
+            load = await self._market.get_load(
+                LoadRequest(start=start_m, end=end_m),
+                paginate=False,
+            )
             load_vals = [i.load_mw for i in load.intervals]
+            if not load.intervals:
+                warnings.append(
+                    f"Load context was unavailable for {start_m.isoformat()} to {end_m.isoformat()}; "
+                    "price statistics remain available."
+                )
+            elif load.metadata.completeness in {
+                DataCompleteness.PARTIAL,
+                DataCompleteness.DEGRADED,
+            }:
+                warnings.append(
+                    f"Load context was partial for {start_m.isoformat()} to {end_m.isoformat()}; "
+                    "statistics use available load observations."
+                )
         except AuthenticationError:
             raise
         except AesoMcpError:
             load_vals = []
+            warnings.append(
+                f"Load context was unavailable for {start_m.isoformat()} to {end_m.isoformat()}; "
+                "price statistics remain available."
+            )
 
-        return PeriodStatistics(
-            start=start_m,
-            end=end_m,
-            observation_count=len(price_vals),
-            avg_pool_price_cad_per_mwh=mean(price_vals) if price_vals else None,
-            min_pool_price_cad_per_mwh=min(price_vals) if price_vals else None,
-            max_pool_price_cad_per_mwh=max(price_vals) if price_vals else None,
-            median_pool_price_cad_per_mwh=median(price_vals) if price_vals else None,
-            avg_load_mw=mean(load_vals) if load_vals else None,
-            min_load_mw=min(load_vals) if load_vals else None,
-            max_load_mw=max(load_vals) if load_vals else None,
+        return (
+            PeriodStatistics(
+                start=start_m,
+                end=end_m,
+                observation_count=len(price_vals),
+                avg_pool_price_cad_per_mwh=mean(price_vals) if price_vals else None,
+                min_pool_price_cad_per_mwh=min(price_vals) if price_vals else None,
+                max_pool_price_cad_per_mwh=max(price_vals) if price_vals else None,
+                median_pool_price_cad_per_mwh=median(price_vals) if price_vals else None,
+                avg_load_mw=mean(load_vals) if load_vals else None,
+                min_load_mw=min(load_vals) if load_vals else None,
+                max_load_mw=max(load_vals) if load_vals else None,
+            ),
+            warnings,
         )
 
 
@@ -398,12 +513,27 @@ def _change(
     )
 
 
-def _derived_meta(dataset: str, count: int | None = None) -> DatasetMetadata:
+def _derived_meta(
+    dataset: str,
+    count: int | None = None,
+    *,
+    completeness: DataCompleteness = DataCompleteness.UNKNOWN,
+    available_series: list[str] | None = None,
+    missing_series: list[str] | None = None,
+) -> DatasetMetadata:
+    served_at = utc_now()
     return DatasetMetadata(
         dataset=dataset,
         source_product="Derived analytics",
-        retrieved_at=utc_now(),
+        retrieved_at=served_at,
+        served_at=served_at,
         status=DataStatus.ACTUAL,
+        observation_type=ObservationType.DERIVED,
+        completeness=completeness,
+        available_series=(
+            list(available_series) if available_series is not None else ["pool_price", "load"]
+        ),
+        missing_series=list(missing_series) if missing_series is not None else [],
         units={"pool_price_cad_per_mwh": "CAD/MWh", "load_mw": "MW"},
         provider=ProviderName.DERIVED,
         observation_count=count,

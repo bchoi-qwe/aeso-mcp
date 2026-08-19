@@ -125,6 +125,15 @@ def chronological_instant(value: datetime) -> datetime:
     return to_utc(value)
 
 
+def add_elapsed(value: datetime, delta: timedelta) -> datetime:
+    """Add elapsed time and return the result in market time.
+
+    Direct arithmetic on a zone-aware ``datetime`` uses wall-clock semantics,
+    which can create nonexistent times or two-hour intervals at DST boundaries.
+    """
+    return to_market(to_utc(value) + delta)
+
+
 def format_aeso_date(value: datetime) -> str:
     """Format a market datetime as AESO API date (YYYY-MM-DD)."""
     return to_market(value).strftime("%Y-%m-%d")
@@ -167,12 +176,18 @@ def parse_aeso_hour_ending(label: str) -> tuple[datetime, datetime]:
     starred = match.group("star") is not None
     if hour < 1 or hour > 24:
         raise ValueError(f"AESO hour-ending hour out of range: {label!r}")
-    if starred and hour != 2:
-        raise ValueError(f"AESO starred hour-ending is only valid for HE 02*: {label!r}")
-
     day_value = date(year, month, day_n)
+    if starred and (hour != 2 or not is_dst_fall_back_day(day_value)):
+        raise ValueError(
+            f"AESO starred hour-ending is only valid for HE 02* on a fall-back day: {label!r}"
+        )
     if is_dst_spring_forward_day(day_value) and hour == 2:
         raise ValueError(f"AESO hour-ending {label!r} does not exist on a spring-forward day.")
+
+    if is_dst_spring_forward_day(day_value) and hour == 3:
+        end = datetime(year, month, day_n, 3, 0, tzinfo=MARKET_TZ)
+        start = to_market(to_utc(end) - timedelta(hours=1))
+        return start, end
 
     if hour == 24:
         end = start_of_market_day(day_value + timedelta(days=1))

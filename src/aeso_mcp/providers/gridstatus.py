@@ -27,20 +27,31 @@ from aeso_mcp.models.common import ProviderName
 from aeso_mcp.models.generation import FuelMixComponent, GenerationInterval
 from aeso_mcp.models.grid import GeneratorOutageInterval, InterchangePathFlow
 from aeso_mcp.models.prices import PoolPriceInterval, SystemMarginalPriceInterval
+from aeso_mcp.providers.base import ProviderMetadata
 from aeso_mcp.providers.csd import parse_csd_payload
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.timeutil import MARKET_TZ, chronological_instant, in_half_open_range
+from aeso_mcp.timeutil import (
+    MARKET_TZ,
+    add_elapsed,
+    chronological_instant,
+    in_half_open_range,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _provenance(product: str, api_version: str | None = None) -> dict[str, str]:
-    meta = {
+def _provenance(
+    product: str,
+    api_version: str | None = None,
+    **extra: object,
+) -> ProviderMetadata:
+    meta: ProviderMetadata = {
         "provider": ProviderName.GRIDSTATUS.value,
         "source_product": product,
     }
     if api_version:
         meta["api_version"] = api_version
+    meta.update(extra)
     return meta
 
 
@@ -98,7 +109,7 @@ class GridStatusProvider:
         self,
         start: datetime,
         end: datetime,
-    ) -> tuple[list[PoolPriceInterval], dict[str, str]]:
+    ) -> tuple[list[PoolPriceInterval], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_pool_price, date=start, end=end)
         intervals = _parse_pool_prices(df)
@@ -110,7 +121,7 @@ class GridStatusProvider:
         self,
         start: datetime,
         end: datetime,
-    ) -> tuple[list[SystemMarginalPriceInterval], dict[str, str]]:
+    ) -> tuple[list[SystemMarginalPriceInterval], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_system_marginal_price, date=start, end=end)
         intervals = _parse_smp(df)
@@ -123,10 +134,12 @@ class GridStatusProvider:
         end: datetime,
         *,
         include_forecast: bool = False,
-    ) -> tuple[list[dict[str, object]], dict[str, str]]:
+    ) -> tuple[list[dict[str, object]], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_load, date=start, end=end)
         rows = _parse_load(df)
+        available_series = ["load"]
+        missing_series: list[str] = []
         if include_forecast:
             try:
                 forecast_df = await self._run(client.get_load_forecast, date=start, end=end)
@@ -145,18 +158,30 @@ class GridStatusProvider:
                             row["load_forecast_mw"] = forecast_rows[key]
             except AuthenticationError:
                 raise
-            except AesoMcpError:
+            except (AesoMcpError, KeyError, TypeError, ValueError):
                 # Forecast is optional enrichment; keep actual load if forecast fails.
                 logger.warning("load_forecast_unavailable")
+                missing_series.append("load_forecast")
+            if not any(row.get("load_forecast_mw") is not None for row in rows):
+                if "load_forecast" not in missing_series:
+                    missing_series.append("load_forecast")
+            else:
+                available_series.append("load_forecast")
         rows = [
             r
             for r in rows
             if isinstance(r["interval_start"], datetime)
             and in_half_open_range(r["interval_start"], start, end)
         ]
-        return rows, _provenance("Alberta Internal Load API", "v1")
+        return rows, _provenance(
+            "Alberta Internal Load API",
+            "v1",
+            available_series=available_series,
+            missing_series=missing_series,
+            completeness="partial" if missing_series else "complete",
+        )
 
-    async def get_fuel_mix(self) -> tuple[datetime, list[FuelMixComponent], dict[str, str]]:
+    async def get_fuel_mix(self) -> tuple[datetime, list[FuelMixComponent], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_fuel_mix)
         observed_at, components = _parse_fuel_mix(df)
@@ -166,10 +191,12 @@ class GridStatusProvider:
         self,
         start: datetime,
         end: datetime,
-    ) -> tuple[list[GenerationInterval], dict[str, str]]:
+    ) -> tuple[list[GenerationInterval], ProviderMetadata]:
         client = self._get_client()
         intervals: list[GenerationInterval] = []
         failures: list[AesoMcpError] = []
+        available_series: list[str] = []
+        missing_series: list[str] = []
         for fuel, method in (
             ("Wind", client.get_wind_hourly),
             ("Solar", client.get_solar_hourly),
@@ -177,32 +204,45 @@ class GridStatusProvider:
             try:
                 df = await self._run(method, date=start, end=end)
                 intervals.extend(_parse_renewable_hourly(df, fuel_type=fuel))
+                available_series.append(fuel)
             except AuthenticationError:
                 raise
             except AesoMcpError as exc:
                 # One renewable series may be temporarily unavailable; keep the other.
                 logger.warning("generation_history_unavailable fuel=%s error=%s", fuel, exc.code)
                 failures.append(exc)
+                missing_series.append(fuel)
         if not intervals and failures:
             raise failures[-1]
         intervals = [i for i in intervals if in_half_open_range(i.interval_start, start, end)]
-        return intervals, _provenance("Wind/Solar Generation API")
+        return intervals, _provenance(
+            "Wind/Solar Generation API",
+            available_series=available_series,
+            missing_series=missing_series,
+            completeness=(
+                "partial"
+                if missing_series and available_series
+                else "degraded"
+                if missing_series
+                else "complete"
+            ),
+        )
 
     async def get_interchange(
         self,
-    ) -> tuple[datetime, list[InterchangePathFlow], float, dict[str, str]]:
+    ) -> tuple[datetime, list[InterchangePathFlow], float, ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_interchange)
         return (*_parse_interchange(df), _provenance("Current Supply Demand API", "v2"))
 
-    async def get_reserves(self) -> tuple[datetime, dict[str, float | None], dict[str, str]]:
+    async def get_reserves(self) -> tuple[datetime, dict[str, float | None], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_reserves)
         return (*_parse_reserves(df), _provenance("Current Supply Demand API", "v2"))
 
     async def get_supply_demand_snapshot(
         self,
-    ) -> tuple[datetime, dict[str, object], dict[str, str]]:
+    ) -> tuple[datetime, dict[str, object], ProviderMetadata]:
         """Fetch Current Supply Demand once via authenticated APIM (not GridStatus private APIs)."""
         if self._apim_http is None:
             raise UpstreamUnavailableError(
@@ -219,7 +259,7 @@ class GridStatusProvider:
         pool_participant_id: str | None = None,
         operating_status: str | None = None,
         asset_type: str | None = None,
-    ) -> tuple[list[AssetRecord], dict[str, str]]:
+    ) -> tuple[list[AssetRecord], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(
             client.get_asset_list,
@@ -234,7 +274,7 @@ class GridStatusProvider:
         self,
         start: datetime,
         end: datetime,
-    ) -> tuple[list[GeneratorOutageInterval], dict[str, str]]:
+    ) -> tuple[list[GeneratorOutageInterval], ProviderMetadata]:
         client = self._get_client()
         df = await self._run(client.get_generator_outages_hourly, date=start, end=end)
         outages = _parse_generator_outage_intervals(df)
@@ -299,7 +339,7 @@ def _parse_pool_prices(df: pd.DataFrame) -> list[PoolPriceInterval]:
             end = (
                 _series_to_market_dt(row["Interval End"])
                 if _row_has_interval_end(df, row)
-                else start + timedelta(hours=1)
+                else add_elapsed(start, timedelta(hours=1))
             )
             intervals.append(
                 PoolPriceInterval(
@@ -340,7 +380,7 @@ def _parse_smp(df: pd.DataFrame) -> list[SystemMarginalPriceInterval]:
             if _row_has_interval_end(df, row):
                 end = _series_to_market_dt(row["Interval End"])
             else:
-                end = start + timedelta(minutes=1)
+                end = add_elapsed(start, timedelta(minutes=1))
             intervals.append(
                 SystemMarginalPriceInterval(
                     interval_start=start,
@@ -377,7 +417,7 @@ def _parse_load(df: pd.DataFrame) -> list[dict[str, object]]:
         end = (
             _series_to_market_dt(row["Interval End"])
             if _row_has_interval_end(df, row)
-            else start + timedelta(hours=1)
+            else add_elapsed(start, timedelta(hours=1))
         )
         rows.append(
             {
@@ -454,7 +494,7 @@ def _parse_renewable_hourly(df: pd.DataFrame, *, fuel_type: str) -> list[Generat
         end = (
             _series_to_market_dt(row["Interval End"])
             if _row_has_interval_end(df, row)
-            else start + timedelta(hours=1)
+            else add_elapsed(start, timedelta(hours=1))
         )
         intervals.append(
             GenerationInterval(
@@ -570,7 +610,7 @@ def _parse_generator_outage_intervals(df: pd.DataFrame) -> list[GeneratorOutageI
         end = (
             _series_to_market_dt(row["Interval End"])
             if _row_has_interval_end(df, row)
-            else start + timedelta(hours=1)
+            else add_elapsed(start, timedelta(hours=1))
         )
         pub = (
             _series_to_market_dt(row["Publish Time"])

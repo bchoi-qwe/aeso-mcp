@@ -117,6 +117,41 @@ async def test_find_price_events_detects_run() -> None:
 
 
 @pytest.mark.asyncio
+async def test_find_price_events_does_not_bridge_missing_intervals() -> None:
+    provider = AsyncMock()
+    start = datetime(2024, 6, 1, tzinfo=MARKET_TZ)
+    provider.get_pool_prices.return_value = (
+        [
+            PoolPriceInterval(
+                interval_start=start,
+                interval_end=start + timedelta(hours=1),
+                pool_price_cad_per_mwh=200.0,
+            ),
+            PoolPriceInterval(
+                interval_start=start + timedelta(hours=2),
+                interval_end=start + timedelta(hours=3),
+                pool_price_cad_per_mwh=200.0,
+            ),
+        ],
+        {"provider": "gridstatus", "source_product": "Pool Price API"},
+    )
+    provider.get_load.return_value = ([], {"provider": "gridstatus", "source_product": "Load"})
+    settings = _settings()
+    analytics = AnalyticsService(MarketService(provider, settings), settings)
+
+    result = await analytics.find_price_events(
+        FindPriceEventsRequest(
+            start=start,
+            end=start + timedelta(hours=3),
+            threshold_cad_per_mwh=100.0,
+            min_duration_hours=2.0,
+        )
+    )
+
+    assert result.events == []
+
+
+@pytest.mark.asyncio
 async def test_cache_single_flight() -> None:
     cache = AsyncTTLCache()
     calls = {"n": 0}
@@ -157,6 +192,55 @@ async def test_cache_cancels_coalesced_waiters_when_owner_cancelled() -> None:
         await owner
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(waiter, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_cache_cancelled_waiter_does_not_cancel_shared_work() -> None:
+    import asyncio
+
+    cache = AsyncTTLCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def factory() -> str:
+        started.set()
+        await release.wait()
+        return "value"
+
+    owner = asyncio.create_task(cache.get_or_set("k", factory, ttl_s=60))
+    await started.wait()
+    cancelled_waiter = asyncio.create_task(cache.get_or_set("k", factory, ttl_s=60))
+    surviving_waiter = asyncio.create_task(cache.get_or_set("k", factory, ttl_s=60))
+    await asyncio.sleep(0)
+
+    cancelled_waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cancelled_waiter
+
+    release.set()
+    assert await owner == "value"
+    assert await surviving_waiter == "value"
+
+
+@pytest.mark.asyncio
+async def test_explain_conditions_rejects_partial_baseline() -> None:
+    from aeso_mcp.models.analytics import ExplainMarketConditionsRequest
+
+    provider = AsyncMock()
+    settings = _settings()
+    analytics = AnalyticsService(MarketService(provider, settings), settings)
+    start = datetime(2024, 6, 1, tzinfo=MARKET_TZ)
+
+    with pytest.raises(InvalidDateRangeError, match="both baseline_start and baseline_end"):
+        await analytics.explain_market_conditions(
+            ExplainMarketConditionsRequest(
+                start=start,
+                end=start + timedelta(hours=1),
+                baseline_start=start - timedelta(days=1),
+            )
+        )
+
+    provider.get_pool_prices.assert_not_awaited()
 
 
 @pytest.mark.asyncio

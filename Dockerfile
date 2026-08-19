@@ -25,7 +25,9 @@ COPY --chown=aeso:aeso pyproject.toml README.md LICENSE server.json ./
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    AESO_MCP_LOG_LEVEL=INFO
+    AESO_MCP_LOG_LEVEL=INFO \
+    FASTMCP_SHOW_SERVER_BANNER=false \
+    FASTMCP_CHECK_FOR_UPDATES=off
 
 USER aeso
 

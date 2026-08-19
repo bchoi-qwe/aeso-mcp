@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""AESO public-report provider (credential-free, allow-listed hosts only)."""
+"""AESO public-report provider using its own allow-listed upstream client."""
 
 from __future__ import annotations
 

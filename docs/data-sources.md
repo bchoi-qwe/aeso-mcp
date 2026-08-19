@@ -28,13 +28,19 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | Long-range Tx outages | `get_long_range_transmission_outages` | Public report CSV | none | No | direct public-reports client | implemented |
 | MCSINR | `get_monthly_cumulative_net_revenue` | ETS public CSV | none | No | direct | implemented |
 | Secondary Offer Price Limit | `get_secondary_offer_price_limit` | ETS public CSV | none | No | direct | implemented |
-| Energy Merit Order | — | APIM | key | TBD | Do not scrape | backlog |
-| Metered volumes | — | APIM | key | TBD | Do not scrape | backlog |
-| Unit commitment directives | — | APIM | key | TBD | Do not scrape | backlog |
+| AIES generation capacity/outages | `get_generation_capacity` | APIM | key | Yes for hourly outages | None | implemented |
+| Load outage forecast | `get_load_outage_forecast` | APIM | key | No | None | implemented |
+| Energy Merit Order | `get_energy_merit_order` | APIM | key | No | Do not scrape | implemented |
+| Metered volumes | `get_metered_volumes` | APIM | key | No | Do not scrape | implemented |
+| Unit commitment directives | `get_unit_commitments` | APIM | key | No | Do not scrape | implemented |
 | UC Summary settlement | — | ETS public | none | No | direct | backlog |
-| Intertie ATC / TTC outages | — | APIM Intertie API first | key | TBD | Compare before scrape | backlog |
+| Intertie ATC / TTC | `get_intertie_capability` | APIM Intertie API | key | No | None | implemented |
+| Intertie capability outages | `get_intertie_outages` | APIM Intertie API | key | No | None | implemented |
+| Operating Reserve Offer Control | `get_operating_reserve_offer_control` | APIM | key | No | Do not scrape | implemented |
 
-\*Public-report tools contact `ets.aeso.ca` without sending the APIM key. The MCP still requires `AESO_API_KEY` for the overall server because other tools use APIM.
+\*Public-report tools contact `ets.aeso.ca` without sending the APIM key. This is an internal
+source-specific client, not a separate runtime mode: the complete MCP server always requires
+`AESO_API_KEY` and registers one unified tool surface.
 
 ## Semantic notes
 

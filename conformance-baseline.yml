@@ -28,4 +28,3 @@ server:
   - prompts-get-with-args
   - prompts-get-embedded-resource
   - prompts-get-with-image
-  - dns-rebinding-protection

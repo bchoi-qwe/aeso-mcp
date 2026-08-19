@@ -1,9 +1,4 @@
-# SPDX-License-Identifier: MIT
-"""Static glossary resource content (original summaries, not AESO copyrighted text)."""
-
-from __future__ import annotations
-
-GLOSSARY_MARKDOWN = """# AESO Market Glossary
+# AESO Market Glossary
 
 Concise original definitions for terms used by this MCP server. Official references:
 [AESO](https://www.aeso.ca/) · [AESO Developer Portal](https://developer-apim.aeso.ca/)
@@ -57,4 +52,3 @@ includes an explicit `status` field (`actual`, `forecast`, `preliminary`, `final
 ## Data Finality
 Public operational feeds may be preliminary. Do not assume values are final settlement
 quantities unless an official AESO settlement product says so.
-"""

@@ -14,6 +14,7 @@ from fastmcp import FastMCP
 from aeso_mcp import __version__
 from aeso_mcp.app import AppContainer, build_container
 from aeso_mcp.config import Settings
+from aeso_mcp.mcp.prompts import register_prompts
 from aeso_mcp.mcp.resources import register_resources
 from aeso_mcp.mcp.tools import (
     register_analytics_tools,
@@ -21,6 +22,7 @@ from aeso_mcp.mcp.tools import (
     register_market_power_tools,
     register_market_tools,
 )
+from aeso_mcp.mcp.tools.operations import register_operations_tools
 
 
 def create_mcp_server(
@@ -46,8 +48,10 @@ def create_mcp_server(
         name="aeso-mcp",
         version=__version__,
         instructions=(
-            "AESO MCP provides Alberta electricity market data and deterministic analytics "
-            "from official AESO APIs and allow-listed public reports. Prefer "
+            "This single AESO MCP server requires AESO_API_KEY. It provides Alberta electricity "
+            "market data and deterministic analytics from official AESO APIs and an internal "
+            "source-specific client for allow-listed public reports; that client never sends "
+            "AESO_API_KEY to ets.aeso.ca. Prefer "
             "get_market_snapshot for current conditions, get_pool_prices for hourly CAD/MWh "
             "history, transmission outage tools for planned grid work, and market-power tools "
             "for MCSINR / secondary offer cap status. All market timestamps use "
@@ -61,5 +65,7 @@ def create_mcp_server(
     register_grid_tools(mcp, container)
     register_market_power_tools(mcp, container)
     register_analytics_tools(mcp, container)
+    register_operations_tools(mcp, container)
+    register_prompts(mcp)
     register_resources(mcp)
     return mcp

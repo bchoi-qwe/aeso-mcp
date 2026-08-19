@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from aeso_mcp.errors import InvalidDateRangeError
 from aeso_mcp.timeutil import (
     MARKET_TZ,
+    add_elapsed,
     chronological_instant,
     elapsed_hours,
     ensure_aware,
@@ -114,6 +115,18 @@ def test_parse_aeso_hour_ending_spring_forward_rejects_he02() -> None:
         parse_aeso_hour_ending("03/10/2024 02")
 
 
+def test_parse_aeso_hour_ending_spring_forward_he03_bridges_clock_change() -> None:
+    start, end = parse_aeso_hour_ending("03/10/2024 03")
+    assert start.hour == 1
+    assert end.hour == 3
+    assert elapsed_hours(start, end) == 1.0
+
+
+def test_parse_aeso_hour_ending_rejects_star_on_regular_day() -> None:
+    with pytest.raises(ValueError, match="fall-back day"):
+        parse_aeso_hour_ending("08/07/2026 02*")
+
+
 def test_validate_range_ambiguous_fall_back_uses_utc_order() -> None:
     # Chronologically later MST 01:15 must validate after earlier MDT 01:30.
     earlier = datetime(2024, 11, 3, 1, 30, tzinfo=MARKET_TZ, fold=0)
@@ -143,3 +156,16 @@ def test_chronological_instant_orders_fall_back_fold() -> None:
     later = datetime(2024, 11, 3, 1, 15, tzinfo=MARKET_TZ, fold=1)
     assert max([earlier, later]) is earlier  # wall-clock / fold-blind
     assert max([earlier, later], key=chronological_instant) is later
+
+
+def test_add_elapsed_normalizes_dst_boundaries() -> None:
+    spring_start = datetime(2024, 3, 10, 1, 0, tzinfo=MARKET_TZ)
+    spring_end = add_elapsed(spring_start, timedelta(hours=1))
+    assert spring_end.hour == 3
+    assert elapsed_hours(spring_start, spring_end) == 1.0
+
+    fall_start = datetime(2024, 11, 3, 1, 0, tzinfo=MARKET_TZ, fold=0)
+    fall_end = add_elapsed(fall_start, timedelta(hours=1))
+    assert fall_end.hour == 1
+    assert fall_end.fold == 1
+    assert elapsed_hours(fall_start, fall_end) == 1.0

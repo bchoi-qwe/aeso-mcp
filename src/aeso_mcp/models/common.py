@@ -20,6 +20,38 @@ class DataStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ObservationType(StrEnum):
+    """What kind of observation a response contains.
+
+    ``DataStatus`` predates this distinction and remains available for
+    compatibility.  ``observation_type`` should be used when a client needs
+    to distinguish an actual observation from a forecast or a derived value.
+    """
+
+    ACTUAL = "actual"
+    FORECAST = "forecast"
+    DERIVED = "derived"
+    UNKNOWN = "unknown"
+
+
+class FinalityStatus(StrEnum):
+    """Whether published observations are final or still preliminary."""
+
+    FINAL = "final"
+    PRELIMINARY = "preliminary"
+    UNKNOWN = "unknown"
+
+
+class DataCompleteness(StrEnum):
+    """Completeness of the requested observations or series."""
+
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    DEGRADED = "degraded"
+    EMPTY = "empty"
+    UNKNOWN = "unknown"
+
+
 class ProviderName(StrEnum):
     """Which internal adapter produced the data."""
 
@@ -39,8 +71,25 @@ class DatasetMetadata(BaseModel):
     source_product: str | None = None
     api_version: str | None = None
     retrieved_at: datetime
+    served_at: datetime | None = None
+    cache_hit: bool = False
+    cache_age: float | None = Field(
+        default=None,
+        description="Age of the cached provider result in seconds when served.",
+    )
     market_timezone: str = "America/Edmonton"
     status: DataStatus = DataStatus.ACTUAL
+    observation_type: ObservationType = ObservationType.ACTUAL
+    finality: FinalityStatus = FinalityStatus.UNKNOWN
+    completeness: DataCompleteness = DataCompleteness.UNKNOWN
+    available_series: list[str] = Field(default_factory=list)
+    missing_series: list[str] = Field(default_factory=list)
+    expected_observations: int | None = None
+    missing_observations: int | None = None
+    # Count-named aliases keep the relationship with ``observation_count``
+    # obvious for clients that prefer explicit field names.
+    expected_observation_count: int | None = None
+    missing_observation_count: int | None = None
     units: dict[str, str] = Field(default_factory=dict)
     observation_granularity: str | None = None
     request_start: datetime | None = None

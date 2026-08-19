@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from aeso_mcp.config import Settings
-from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
+from aeso_mcp.models.common import DataCompleteness, DataStatus
 from aeso_mcp.models.market_power import (
     MarketPowerMitigationRequest,
     McsinrResponse,
@@ -14,7 +14,8 @@ from aeso_mcp.models.market_power import (
 )
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.services.cache import AsyncTTLCache
-from aeso_mcp.timeutil import MARKET_TZ, chronological_instant, utc_now
+from aeso_mcp.services.market import _meta
+from aeso_mcp.timeutil import MARKET_TZ, chronological_instant
 
 
 class MarketPowerService:
@@ -35,11 +36,12 @@ class MarketPowerService:
         request: MarketPowerMitigationRequest | None = None,
     ) -> McsinrResponse:
         _ = request or MarketPowerMitigationRequest()
-        intervals, report_time, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             ("mcsinr", "current"),
             lambda: self._provider.get_monthly_cumulative_net_revenue(),
             ttl_s=self._settings.cache_ttl_market_power_s,
         )
+        intervals, report_time, prov = cached.value
         # Prefer the chronologically latest populated cumulative value.
         populated = [i for i in intervals if i.cumulative_net_revenue_cad is not None]
         latest = max(populated, key=lambda i: chronological_instant(i.interval_start), default=None)
@@ -66,19 +68,20 @@ class MarketPowerService:
             one_sixth_annualized_unavoidable_costs_cad=threshold,
             secondary_offer_price_limit_triggered=triggered,
             headroom_to_trigger_cad=headroom,
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Monthly Cumulative Settlement Interval Net Revenue",
-                source_product=prov.get("source_product"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.PRELIMINARY,
                 units={
                     "cumulative_net_revenue_cad": "CAD",
                     "one_sixth_annualized_unavoidable_costs_cad": "CAD",
                 },
-                observation_granularity="1h",
+                granularity="1h",
                 publication_time=report_time,
-                provider=ProviderName.AESO_PUBLIC_REPORT,
-                observation_count=len(intervals),
+                count=len(intervals),
+                cache_info=cached.info,
+                available_series=["mcsinr"] if intervals else [],
+                completeness=(DataCompleteness.COMPLETE if intervals else DataCompleteness.EMPTY),
             ),
             warnings=warnings,
         )
@@ -88,11 +91,12 @@ class MarketPowerService:
         request: MarketPowerMitigationRequest | None = None,
     ) -> SecondaryOfferPriceLimitResponse:
         _ = request or MarketPowerMitigationRequest()
-        intervals, report_time, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             ("secondary_offer_price_limit", "current"),
             lambda: self._provider.get_secondary_offer_price_limit(),
             ttl_s=self._settings.cache_ttl_market_power_s,
         )
+        intervals, report_time, prov = cached.value
         current = None
         if intervals:
             current = max(
@@ -116,16 +120,17 @@ class MarketPowerService:
             secondary_offer_price_limit_cad_per_mwh=(
                 current.secondary_offer_price_limit_cad_per_mwh if current is not None else None
             ),
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Secondary Offer Price Limit",
-                source_product=prov.get("source_product"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.PRELIMINARY,
                 units={"secondary_offer_price_limit_cad_per_mwh": "CAD/MWh"},
-                observation_granularity="publication",
+                granularity="publication",
                 publication_time=report_time,
-                provider=ProviderName.AESO_PUBLIC_REPORT,
-                observation_count=len(intervals),
+                count=len(intervals),
+                cache_info=cached.info,
+                available_series=["secondary_offer_price_limit"] if intervals else [],
+                completeness=(DataCompleteness.COMPLETE if intervals else DataCompleteness.EMPTY),
             ),
             warnings=warnings,
         )

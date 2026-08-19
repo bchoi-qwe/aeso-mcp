@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from aeso_mcp.config import Settings
 from aeso_mcp.models.assets import AssetsRequest, AssetsResponse
-from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
+from aeso_mcp.models.common import DataCompleteness, DataStatus
 from aeso_mcp.providers.base import AesoDataProvider
 from aeso_mcp.services.cache import AsyncTTLCache
-from aeso_mcp.timeutil import utc_now
+from aeso_mcp.services.market import _meta
 
 
 class AssetsService:
@@ -32,7 +32,7 @@ class AssetsService:
             request.operating_status,
             request.asset_type,
         )
-        assets, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             key,
             lambda: self._provider.get_assets(
                 asset_id=request.asset_id,
@@ -42,22 +42,23 @@ class AssetsService:
             ),
             ttl_s=self._settings.cache_ttl_assets_s,
         )
+        assets, prov = cached.value
         truncated = len(assets) > request.limit
         if truncated:
             assets = assets[: request.limit]
         return AssetsResponse(
             assets=assets,
             truncated=truncated,
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Asset List",
-                source_product=prov.get("source_product"),
-                api_version=prov.get("api_version"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.ACTUAL,
                 units={},
-                observation_granularity="catalog",
-                provider=ProviderName(prov.get("provider", "gridstatus")),
-                observation_count=len(assets),
+                granularity="catalog",
+                count=len(assets),
+                cache_info=cached.info,
+                available_series=["assets"] if assets else [],
+                completeness=DataCompleteness.COMPLETE,
             ),
             warnings=(["Result truncated to the requested limit."] if truncated else []),
         )

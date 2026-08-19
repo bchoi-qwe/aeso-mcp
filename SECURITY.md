@@ -26,10 +26,14 @@ Out of scope / residual risk:
 - Secrets only via environment / `.env` (never committed)
 - API keys are `SecretStr` and must not appear in logs or client error messages
 - No generic URL-fetch, shell, filesystem, SQL, or code-execution tools
-- Upstream host allow-list for authenticated APIM (`apimgw.aeso.ca`) and
-  credential-free public reports (`ets.aeso.ca`); redirects are re-validated
-  against the public-report allow-list
+- HTTPS-only authenticated APIM access (`apimgw.aeso.ca`) and an isolated, unauthenticated
+  upstream client for public reports (`ets.aeso.ca`); the server still requires `AESO_API_KEY`
+  at startup, and redirects are re-validated against the corresponding host allow-list
 - Bounded date ranges, observation caps, HTTP timeouts, and selective retries
+- Raw-series pagination plus compact server-side aggregation for long historical requests
+- HTTP Host/Origin validation, optional bearer authentication, per-client rate limits, global
+  concurrency admission, request-body limits, and secret-free health/readiness probes
+- Correlation IDs and request timing logs that omit authorization headers, bodies, and query data
 - Stdio logging goes to **stderr** only
 
 ## Reporting a vulnerability

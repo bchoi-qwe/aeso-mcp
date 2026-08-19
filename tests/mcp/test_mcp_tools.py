@@ -26,6 +26,7 @@ from aeso_mcp.services.assets import AssetsService
 from aeso_mcp.services.cache import AsyncTTLCache
 from aeso_mcp.services.grid import GridService
 from aeso_mcp.services.market import MarketService
+from aeso_mcp.services.operations import OperationsService
 from aeso_mcp.services.transmission import TransmissionService
 from aeso_mcp.timeutil import MARKET_TZ, utc_now
 
@@ -47,6 +48,16 @@ EXPECTED_TOOLS = {
     "find_price_events",
     "explain_market_conditions",
     "compare_forecast_to_actual",
+    "get_energy_merit_order",
+    "get_unit_commitments",
+    "get_generation_capacity",
+    "get_load_outage_forecast",
+    "get_intertie_capability",
+    "get_intertie_outages",
+    "get_metered_volumes",
+    "get_operating_reserve_offer_control",
+    "summarize_market_history",
+    "assess_supply_tightness",
 }
 
 EXPECTED_RESOURCES = {
@@ -54,6 +65,28 @@ EXPECTED_RESOURCES = {
     "aeso://datasets",
     "aeso://methodology/pool-price",
     "aeso://methodology/system-marginal-price",
+    "aeso://methodology/load",
+    "aeso://methodology/generation",
+    "aeso://methodology/generator-outages",
+    "aeso://methodology/transmission-outages",
+    "aeso://methodology/market-power-mitigation",
+    "aeso://methodology/energy-merit-order",
+    "aeso://methodology/unit-commitments",
+    "aeso://methodology/generation-capacity",
+    "aeso://methodology/load-outage-forecast",
+    "aeso://methodology/intertie-capability",
+    "aeso://methodology/intertie-outages",
+    "aeso://methodology/metered-volume",
+    "aeso://methodology/operating-reserve-offer-control",
+    "aeso://methodology/market-history",
+    "aeso://methodology/supply-tightness",
+    "aeso://capabilities",
+}
+
+EXPECTED_PROMPTS = {
+    "daily_market_brief",
+    "investigate_price_event",
+    "compare_market_days",
 }
 
 
@@ -80,6 +113,7 @@ def container(settings: Settings) -> AppContainer:
     grid = GridService(provider, settings, cache)
     assets = AssetsService(provider, settings, cache)
     analytics = AnalyticsService(market, settings)
+    operations = OperationsService(provider, market, settings, cache)
 
     # Seed provider responses used by tools
     start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
@@ -202,6 +236,7 @@ def container(settings: Settings) -> AppContainer:
         analytics=analytics,
         transmission=transmission,
         market_power=market_power,
+        operations=operations,
         apim_http=AsyncMock(),
         public_reports_http=AsyncMock(),
     )
@@ -221,6 +256,30 @@ async def test_resource_discovery(container: AppContainer, settings: Settings) -
     resources = await mcp.list_resources()
     uris = {str(r.uri) for r in resources}
     assert uris == EXPECTED_RESOURCES
+
+
+@pytest.mark.asyncio
+async def test_prompt_discovery_and_rendering(container: AppContainer, settings: Settings) -> None:
+    mcp = create_mcp_server(settings, container)
+    prompts = await mcp.list_prompts()
+    assert {p.name for p in prompts} == EXPECTED_PROMPTS
+
+    prompt = await mcp.get_prompt("investigate_price_event")
+    assert prompt is not None
+    assert {argument.name for argument in prompt.arguments or []} == {
+        "market_date",
+        "threshold_cad_per_mwh",
+        "minimum_duration_hours",
+    }
+    rendered = await prompt.render(
+        {
+            "market_date": "2024-01-15",
+            "threshold_cad_per_mwh": 250.0,
+            "minimum_duration_hours": 2.0,
+        }
+    )
+    assert rendered.messages[0].content.text.find("250.0") >= 0
+    assert "find_price_events" in rendered.messages[0].content.text
 
 
 @pytest.mark.asyncio
@@ -281,6 +340,23 @@ async def test_glossary_resource(container: AppContainer, settings: Settings) ->
             text = str(content)
         assert "Pool Price" in text
         assert "America/Edmonton" in text or "AIL" in text
+        assert "GLOSSARY_MARKDOWN" not in text
+        assert "from __future__ import annotations" not in text
+
+
+@pytest.mark.asyncio
+async def test_methodology_and_capabilities_resources(
+    container: AppContainer,
+    settings: Settings,
+) -> None:
+    mcp = create_mcp_server(settings, container)
+    load = await mcp.read_resource("aeso://methodology/load")
+    outages = await mcp.read_resource("aeso://methodology/generator-outages")
+    capabilities = await mcp.read_resource("aeso://capabilities")
+
+    assert "Alberta Internal Load" in load.contents[0].content
+    assert "total_outage_mw" in outages.contents[0].content
+    assert "daily_market_brief" in capabilities.contents[0].content
 
 
 @pytest.mark.asyncio

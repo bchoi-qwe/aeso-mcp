@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -28,10 +30,23 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_HOSTS = frozenset({"apimgw.aeso.ca"})
 _MAX_REDIRECTS = 5
+_MAX_AUTOMATIC_RETRY_AFTER_S = 60.0
+_FALLBACK_RETRY_WAIT = wait_exponential_jitter(initial=0.5, max=8.0)
 
 
 def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, RateLimitError) and exc.retry_after_s is not None:
+        # Do not retry before a long server-requested delay. Return the error and
+        # its retry_after_s field so the caller can schedule the retry instead.
+        return exc.retry_after_s <= _MAX_AUTOMATIC_RETRY_AFTER_S
     return isinstance(exc, RateLimitError | UpstreamUnavailableError | httpx.TransportError)
+
+
+def _retry_wait(retry_state: RetryCallState) -> float:
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if isinstance(exc, RateLimitError) and exc.retry_after_s is not None:
+        return max(exc.retry_after_s, 0.0)
+    return float(_FALLBACK_RETRY_WAIT(retry_state))
 
 
 def _before_sleep(retry_state: RetryCallState) -> None:
@@ -78,7 +93,7 @@ class AesoHttpClient:
 
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._settings.http_max_retries + 1),
-            wait=wait_exponential_jitter(initial=0.5, max=8.0),
+            wait=_retry_wait,
             retry=retry_if_exception(_is_retryable),
             before_sleep=_before_sleep,
             reraise=True,
@@ -128,8 +143,7 @@ class AesoHttpClient:
                     f"AESO endpoint not found: {current_path.split('?', 1)[0]}"
                 )
             if status == 429:
-                retry_after = response.headers.get("Retry-After")
-                retry_s = float(retry_after) if retry_after and retry_after.isdigit() else None
+                retry_s = _parse_retry_after(response.headers.get("Retry-After"))
                 raise RateLimitError(retry_after_s=retry_s)
             if status >= 500:
                 raise UpstreamUnavailableError(f"AESO API returned HTTP {status}.")
@@ -149,8 +163,8 @@ class AesoHttpClient:
         """Resolve a redirect Location to an allow-listed absolute APIM URL."""
         absolute = urljoin(response_url, location)
         parsed = urlparse(absolute)
-        if parsed.scheme not in {"http", "https"}:
-            raise DataValidationError("AESO API redirect must be http(s).")
+        if parsed.scheme != "https":
+            raise DataValidationError("AESO API redirect must use HTTPS.")
         if parsed.username is not None or parsed.password is not None:
             raise DataValidationError("Credentials must not appear in AESO API redirect URLs.")
         host = (parsed.hostname or "").lower()
@@ -168,3 +182,21 @@ class AesoHttpClient:
         host = httpx.URL(self._settings.aeso_base_url).host
         if host not in ALLOWED_HOSTS:
             raise DataValidationError(f"Upstream host not allow-listed: {host}")
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    """Parse standard Retry-After delta-seconds or HTTP-date values."""
+    if value is None:
+        return None
+    text = value.strip()
+    try:
+        seconds = float(text)
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(text)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        return max((retry_at - datetime.now(tz=UTC)).total_seconds(), 0.0)
+    return max(seconds, 0.0)

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import InvalidDateRangeError
-from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
+from aeso_mcp.models.common import DataCompleteness, DataStatus
 from aeso_mcp.models.transmission import (
     ApprovedTransmissionOutagesRequest,
     LongRangeTransmissionOutagesRequest,
@@ -16,7 +16,8 @@ from aeso_mcp.providers.capabilities import (
     LongRangeTransmissionOutageProvider,
 )
 from aeso_mcp.services.cache import AsyncTTLCache
-from aeso_mcp.timeutil import utc_now, validate_range
+from aeso_mcp.services.market import _meta
+from aeso_mcp.timeutil import validate_range
 
 
 class TransmissionService:
@@ -58,11 +59,12 @@ class TransmissionService:
             cache_key = ("approved_tx_outages", "latest")
             ttl_s = self._settings.cache_ttl_public_report_s
 
-        outages, publication_time, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             cache_key,
             lambda: self._approved.get_approved_transmission_outages(start, end),
             ttl_s=ttl_s,
         )
+        outages, publication_time, prov = cached.value
         warnings: list[str] = [
             "These are AESO-approved planned transmission outages "
             "(approval_status=approved), not generator outages."
@@ -73,19 +75,18 @@ class TransmissionService:
             outages=outages,
             approval_status="approved",
             publication_time=publication_time,
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Approved Transmission Outages",
-                source_product=prov.get("source_product"),
-                api_version=prov.get("api_version"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.PRELIMINARY,
                 units={},
-                observation_granularity="publication",
-                request_start=start,
-                request_end=end,
-                publication_time=publication_time,
-                provider=ProviderName(prov.get("provider", ProviderName.AESO_PUBLIC_REPORT.value)),
-                observation_count=len(outages),
+                granularity="publication",
+                start=start,
+                end=end,
+                count=len(outages),
+                cache_info=cached.info,
+                available_series=["approved_transmission_outages"] if outages else [],
+                completeness=(DataCompleteness.COMPLETE if outages else DataCompleteness.EMPTY),
             ),
             warnings=warnings,
         )
@@ -95,11 +96,12 @@ class TransmissionService:
         request: LongRangeTransmissionOutagesRequest | None = None,
     ) -> TransmissionOutagesResponse:
         _ = request or LongRangeTransmissionOutagesRequest()
-        outages, publication_time, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             ("long_range_tx_outages", "current"),
             lambda: self._long_range.get_long_range_transmission_outages(),
             ttl_s=self._settings.cache_ttl_long_range_outages_s,
         )
+        outages, publication_time, prov = cached.value
         warnings = [
             "Long Range Significant Transmission Outages may be tentative and not "
             "AESO-approved (approval_status=tentative). Do not treat as approved outages."
@@ -110,16 +112,17 @@ class TransmissionService:
             outages=outages,
             approval_status="tentative",
             publication_time=publication_time,
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Long Range Significant Transmission Outages",
-                source_product=prov.get("source_product"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.PRELIMINARY,
                 units={},
-                observation_granularity="publication",
+                granularity="publication",
                 publication_time=publication_time,
-                provider=ProviderName(prov.get("provider", ProviderName.AESO_PUBLIC_REPORT.value)),
-                observation_count=len(outages),
+                count=len(outages),
+                cache_info=cached.info,
+                available_series=["long_range_transmission_outages"] if outages else [],
+                completeness=(DataCompleteness.COMPLETE if outages else DataCompleteness.EMPTY),
             ),
             warnings=warnings,
         )

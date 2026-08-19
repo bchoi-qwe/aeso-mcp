@@ -8,6 +8,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from aeso_mcp.models.common import DatasetMetadata, DateRangeRequest, WarningMixin
+from aeso_mcp.models.operations import PageInfo
 
 
 class LoadRequest(DateRangeRequest):
@@ -17,6 +18,8 @@ class LoadRequest(DateRangeRequest):
         default=False,
         description="When true, include AESO load forecast values when available.",
     )
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=500, ge=1, le=2_000)
 
 
 class LoadInterval(BaseModel):
@@ -34,6 +37,7 @@ class LoadResponse(WarningMixin):
     """Alberta Internal Load observations in MW."""
 
     intervals: list[LoadInterval]
+    page: PageInfo
     metadata: DatasetMetadata
 
 
@@ -48,6 +52,8 @@ class GenerationRequest(BaseModel):
 
     start: datetime | None = None
     end: datetime | None = None
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=500, ge=1, le=2_000)
 
 
 class FuelMixComponent(BaseModel):
@@ -90,4 +96,5 @@ class GenerationResponse(WarningMixin):
 
     snapshot: GenerationSnapshot | None = None
     intervals: list[GenerationInterval] = Field(default_factory=list)
+    page: PageInfo
     metadata: DatasetMetadata

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from aeso_mcp.config import Settings
-from aeso_mcp.models.common import DatasetMetadata, DataStatus, ProviderName
+from aeso_mcp.models.common import DataCompleteness, DataStatus
 from aeso_mcp.models.grid import (
     InterchangeResponse,
     OutagesRequest,
@@ -13,8 +13,9 @@ from aeso_mcp.models.grid import (
 )
 from aeso_mcp.providers.base import AesoDataProvider
 from aeso_mcp.services.cache import AsyncTTLCache
+from aeso_mcp.services.market import _expected_hourly_observations, _meta
 from aeso_mcp.services.ttl import historical_ttl_s
-from aeso_mcp.timeutil import utc_now, validate_range
+from aeso_mcp.timeutil import validate_range
 
 
 class GridService:
@@ -31,34 +32,38 @@ class GridService:
         self._cache = cache or AsyncTTLCache()
 
     async def get_interchange(self) -> InterchangeResponse:
-        observed_at, paths, net, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             ("interchange",),
             lambda: self._provider.get_interchange(),
             ttl_s=self._settings.cache_ttl_snapshot_s,
         )
+        observed_at, paths, net, prov = cached.value
         return InterchangeResponse(
             observed_at=observed_at,
             paths=paths,
             net_interchange_mw=net,
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Interchange Flows",
-                source_product=prov.get("source_product"),
-                api_version=prov.get("api_version"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.ACTUAL,
                 units={"flow_mw": "MW", "net_interchange_mw": "MW"},
-                observation_granularity="current",
-                provider=ProviderName(prov.get("provider", "gridstatus")),
-                observation_count=len(paths),
+                granularity="current",
+                count=len(paths),
+                cache_info=cached.info,
+                available_series=[p.path for p in paths] + ["net_interchange"],
+                completeness=DataCompleteness.COMPLETE,
             ),
         )
 
     async def get_reserves(self) -> ReservesResponse:
-        observed_at, values, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             ("reserves",),
             lambda: self._provider.get_reserves(),
             ttl_s=self._settings.cache_ttl_snapshot_s,
         )
+        observed_at, values, prov = cached.value
+        reserve_series = [key for key, value in values.items() if value is not None]
+        missing_series = [key for key, value in values.items() if value is None]
         return ReservesResponse(
             observed_at=observed_at,
             contingency_reserve_required_mw=values.get("contingency_reserve_required_mw"),
@@ -76,15 +81,19 @@ class GridService:
             ),
             fast_frequency_response_offered_mw=values.get("fast_frequency_response_offered_mw"),
             long_lead_time_volume_mw=values.get("long_lead_time_volume_mw"),
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Operating Reserves",
-                source_product=prov.get("source_product"),
-                api_version=prov.get("api_version"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.ACTUAL,
                 units={"*_mw": "MW"},
-                observation_granularity="current",
-                provider=ProviderName(prov.get("provider", "gridstatus")),
+                granularity="current",
+                count=1 if reserve_series else 0,
+                cache_info=cached.info,
+                available_series=reserve_series,
+                missing_series=missing_series,
+                completeness=(
+                    DataCompleteness.COMPLETE if not missing_series else DataCompleteness.PARTIAL
+                ),
             ),
         )
 
@@ -95,11 +104,12 @@ class GridService:
             max_days=self._settings.max_load_days,
             label="outages range",
         )
-        outages, prov = await self._cache.get_or_set(
+        cached = await self._cache.get_or_set_with_metadata(
             ("outages", start.isoformat(), end.isoformat()),
             lambda: self._provider.get_outages(start, end),
             ttl_s=historical_ttl_s(self._settings, start, end),
         )
+        outages, prov = cached.value
         warnings: list[str] = []
         if not outages:
             warnings.append(
@@ -108,21 +118,21 @@ class GridService:
             )
         return OutagesResponse(
             outages=outages,
-            metadata=DatasetMetadata(
+            metadata=_meta(
                 dataset="Generator Outage Capacity (by fuel)",
-                source_product=prov.get("source_product"),
-                api_version=prov.get("api_version"),
-                retrieved_at=utc_now(),
+                prov=prov,
                 status=DataStatus.ACTUAL,
                 units={
                     "total_outage_mw": "MW",
                     "mothball_outage_mw": "MW",
                 },
-                observation_granularity="1h",
-                request_start=start,
-                request_end=end,
-                provider=ProviderName(prov.get("provider", "gridstatus")),
-                observation_count=len(outages),
+                granularity="1h",
+                start=start,
+                end=end,
+                count=len(outages),
+                cache_info=cached.info,
+                available_series=["outages"] if outages else [],
+                expected_observations=_expected_hourly_observations(start, end),
             ),
             warnings=warnings,
         )
