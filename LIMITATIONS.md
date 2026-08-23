@@ -1,15 +1,15 @@
 # Known limitations
 
-Honest inventory of gaps and caveats for `aeso-mcp` **v0.1.x**.
-This project is intentionally **not published to PyPI** until these items have been
-human-reviewed and accepted (or fixed).
+Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 
 ## Distribution
 
-- Install from GitHub (`uvx --from git+…` or clone + `uv run`). PyPI is deferred.
-- MCP Registry listing is not published yet (`server.json` is a placeholder without a PyPI package entry until publication).
-- FastMCP is pinned to a **prerelease** (`4.0.0b2`) to target MCP protocol generation
-  `2026-07-28`; expect framework churn.
+- PyPI is the supported package source (`uvx aeso-mcp`); direct GitHub installation remains
+  available for users who intentionally want the current repository version.
+- `server.json` declares the same PyPI artifact for MCP Registry discovery; the Registry stores
+  server metadata rather than hosting package artifacts.
+- The server currently uses a **prerelease** FastMCP 4 dependency to target MCP protocol
+  generation `2026-07-28`; expect framework churn.
 
 ## Data coverage
 

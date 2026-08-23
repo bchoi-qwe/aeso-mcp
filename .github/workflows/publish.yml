@@ -30,15 +30,7 @@ jobs:
         run: uv build
 
       - name: Publish
-        # Prefer PYPI_TOKEN when set. Otherwise attempt Trusted Publisher (OIDC).
-        # Configure either a repo secret PYPI_TOKEN or a PyPI Trusted Publisher
-        # for environment "pypi" before running this workflow.
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          if [ -n "${UV_PUBLISH_TOKEN}" ]; then
-            uv publish --token "$UV_PUBLISH_TOKEN"
-          else
-            echo "No PYPI_TOKEN secret; attempting Trusted Publisher (OIDC)."
-            uv publish
-          fi
+        # Configure a PyPI Trusted Publisher for this workflow and the "pypi"
+        # environment before running it. uv exchanges GitHub's OIDC identity for
+        # a short-lived publishing credential; no permanent PyPI token is used.
+        run: uv publish

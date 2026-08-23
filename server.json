@@ -7,6 +7,24 @@
     "url": "https://github.com/bchoi-qwe/aeso-mcp",
     "source": "github"
   },
-  "version": "0.1.1",
-  "packages": []
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "aeso-mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AESO_API_KEY",
+          "description": "AESO APIM subscription key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
 }

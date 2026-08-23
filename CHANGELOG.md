@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-23
+
 ### Fixed
 
 - Cache waiter cancellation no longer cancels shared single-flight work for other callers
@@ -25,7 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Market snapshot CSD fetch uses APIM HTTP instead of GridStatus private `_make_request`
 - Approved transmission outages use the timeout-controlled public-reports client
 - Dependency canary rewrites the exact FastMCP pin so upgrades are actually tested
-- MCP conformance job is blocking; `server.json` no longer claims a published PyPI package
+- MCP conformance job is blocking; release metadata validation keeps package and Registry
+  versions aligned
 - Historical approved transmission publication windows use half-open `[start, end)` matching
   other date-range tools; live tests always close HTTP clients
 - Half-open range filters and analytics durations use UTC so fall-back fold ambiguity is safe
@@ -68,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   internal source adapter and is not exposed as a credential-free runtime mode
 - Long raw series default to bounded pages; server-side analytics explicitly operate on complete
   cached series rather than a returned page
-- PyPI publish workflow is **manual only** (`workflow_dispatch`); no auto-publish on GitHub releases
+- PyPI publish workflow is **manual only** (`workflow_dispatch`) and uses OIDC Trusted
+  Publishing; no auto-publish on GitHub releases
 - Direct APIM adapter raises `UnsupportedDatasetError` for outages and historical generation instead of returning empty lists
 - GridStatus renewable/history and optional load-forecast paths no longer swallow authentication failures
 - Snapshot / analytics optional enrichment no longer swallows authentication failures
@@ -105,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit, contract, MCP, and optional live integration tests
 - GitHub Actions CI, Dockerfile, Renovate config, and MCP registry `server.json`
 
-[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bchoi-qwe/aeso-mcp/releases/tag/v0.1.0

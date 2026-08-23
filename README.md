@@ -90,18 +90,25 @@ to `apimgw.aeso.ca` and is never sent to the allow-listed `ets.aeso.ca` report h
 
 ## Installation
 
-See [LIMITATIONS.md](LIMITATIONS.md) for an honest gap inventory. **PyPI publication is deferred** until after human review.
+See [LIMITATIONS.md](LIMITATIONS.md) for an honest gap inventory.
 
-### From GitHub (current)
+### From PyPI (recommended)
 
-Until the package is published to PyPI:
+```bash
+export AESO_API_KEY=your-key
+uvx aeso-mcp
+```
+
+### From GitHub
+
+To run the current repository version directly:
 
 ```bash
 export AESO_API_KEY=your-key
 uvx --from git+https://github.com/bchoi-qwe/aeso-mcp.git aeso-mcp
 ```
 
-Or install editable for development:
+### Development
 
 ```bash
 git clone https://github.com/bchoi-qwe/aeso-mcp.git
@@ -109,15 +116,6 @@ cd aeso-mcp
 uv sync --group dev
 cp .env.example .env   # set AESO_API_KEY
 uv run aeso-mcp
-```
-
-### From PyPI (deferred)
-
-Not published yet. After review and an intentional publish, install with:
-
-```bash
-export AESO_API_KEY=your-key
-uvx aeso-mcp
 ```
 
 ### Docker
@@ -145,7 +143,7 @@ Missing credentials produce an actionable startup error. The key is never return
   "mcpServers": {
     "aeso": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/bchoi-qwe/aeso-mcp.git", "aeso-mcp"],
+      "args": ["aeso-mcp"],
       "env": {
         "AESO_API_KEY": "your-key"
       }
@@ -275,7 +273,6 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 
 ## Roadmap
 
-- Human review against [LIMITATIONS.md](LIMITATIONS.md) before any PyPI / MCP Registry publish
 - Optional DuckDB/Parquet historical analytics store
 - Broader forecast vs actual tools
 

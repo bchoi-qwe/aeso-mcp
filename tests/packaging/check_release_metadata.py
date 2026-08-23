@@ -17,7 +17,8 @@ def main() -> None:
     """Check all source, package, registry, and citation versions for one value."""
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     package_version = pyproject["project"]["version"]
-    registry_version = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))["version"]
+    registry = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
+    registry_version = registry["version"]
 
     source = (ROOT / "src/aeso_mcp/__init__.py").read_text(encoding="utf-8")
     source_match = re.search(
@@ -41,6 +42,12 @@ def main() -> None:
         "server.json": registry_version,
         "CITATION.cff": citation_version,
     }
+    versions.update(
+        {
+            f"server.json packages[{index}]": package["version"]
+            for index, package in enumerate(registry.get("packages", []))
+        }
+    )
     if len(set(versions.values())) != 1:
         details = ", ".join(f"{path}={version}" for path, version in versions.items())
         raise SystemExit(f"Release version mismatch: {details}")
