@@ -19,8 +19,11 @@ from aeso_mcp.mcp.resources import register_resources
 from aeso_mcp.mcp.tools import (
     register_analytics_tools,
     register_grid_tools,
+    register_history_tools,
     register_market_power_tools,
     register_market_tools,
+    register_research_tools,
+    register_reserve_tools,
 )
 from aeso_mcp.mcp.tools.operations import register_operations_tools
 
@@ -66,6 +69,9 @@ def create_mcp_server(
     register_market_power_tools(mcp, container)
     register_analytics_tools(mcp, container)
     register_operations_tools(mcp, container)
+    register_history_tools(mcp, container)
+    register_research_tools(mcp, container)
+    register_reserve_tools(mcp, container)
     register_prompts(mcp)
     register_resources(mcp)
     return mcp

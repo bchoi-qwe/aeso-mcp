@@ -45,6 +45,9 @@ analytics = [
     "duckdb>=1.2.0,<2",
     "pyarrow>=19.0.0,<22",
 ]
+docs = [
+    "mkdocs>=1.6.1,<2",
+]
 
 [project.urls]
 Homepage = "https://github.com/bchoi-qwe/aeso-mcp"

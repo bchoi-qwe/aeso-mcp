@@ -3,19 +3,27 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import logging
 import re
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from bs4 import BeautifulSoup
 
 from aeso_mcp.errors import DataValidationError, InvalidDateRangeError
 from aeso_mcp.models.common import ProviderName
+from aeso_mcp.models.history import UnitCommitmentSettlementInterval
 from aeso_mcp.models.market_power import McsinrInterval, SecondaryOfferPriceLimitInterval
+from aeso_mcp.models.reserves import (
+    OperatingReserveActivationInterval,
+    OperatingReserveForecastInterval,
+    OperatingReservePriceInterval,
+    ReserveType,
+)
 from aeso_mcp.models.transmission import TransmissionOutageRecord
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 from aeso_mcp.timeutil import (
@@ -33,6 +41,17 @@ APPROVED_TX_LANDING_URL = "http://ets.aeso.ca/outage_reports/qryOpPlanTransmissi
 LONG_RANGE_LANDING_URL = "http://ets.aeso.ca/outage_reports/Longterm_Critical_Outages.html"
 MCSINR_CSV_URL = "http://ets.aeso.ca/ets_web/ip/Market/Reports/MCSINRReportServlet?contentType=csv"
 SOC_CSV_URL = "http://ets.aeso.ca/ets_web/ip/Market/Reports/CurrentSOCReportServlet?contentType=csv"
+UC_SETTLEMENT_URL = "http://ets.aeso.ca/ets_web/ip/Market/Reports/UCSettlementSummaryReportServlet"
+OR_ACTIVE_PRICE_URL = (
+    "http://ets.aeso.ca/ets_web/ip/Market/Reports/ASPActiveOperatingReservePriceReportServlet"
+)
+OR_STANDBY_PRICE_URL = (
+    "http://ets.aeso.ca/ets_web/ip/Market/Reports/ASPStandbyOperatingReservePriceReportServlet"
+)
+OR_ACTIVATION_URL = "http://ets.aeso.ca/ets_web/ip/Market/Reports/ASPActivationReportServlet"
+OR_FORECAST_URL = (
+    "http://ets.aeso.ca/ets_web/ip/Market/Reports/ASPForecastReportServlet?contentType=csv"
+)
 
 _PUBLISH_RE = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})")
 _REPORT_TIME_RE = re.compile(r"Report Time:\s*(.+?)\"?\s*$", re.IGNORECASE | re.MULTILINE)
@@ -61,6 +80,34 @@ _SOC_REQUIRED = frozenset(
         "Secondary Offer Price Limit ($)",
     }
 )
+_UC_REQUIRED = frozenset({"Date", "HE", "Total UC Amount ($)", "Total Charged Volume (MW)"})
+_OR_ACTIVATION_REQUIRED = frozenset(
+    {
+        "Service Level",
+        "Date",
+        "HE",
+        "Reserve Type",
+        "Total Volume Activated (MW)",
+        "Weighted Average Activation Price ($/MWh)",
+    }
+)
+_OR_FORECAST_REQUIRED = frozenset(
+    {
+        "Date",
+        "HE",
+        "Active Regulating",
+        "Active Spinning",
+        "Active Supplemental",
+        "Standby Regulating",
+        "Standby Spinning",
+        "Standby Supplemental",
+    }
+)
+_RESERVE_TYPES: dict[str, ReserveType] = {
+    "RR": "regulating",
+    "SR": "spinning",
+    "SUP": "supplemental",
+}
 
 
 def _provenance(product: str) -> dict[str, str]:
@@ -144,6 +191,65 @@ class AesoPublicReportsProvider:
             reverse=True,
         )
         return intervals, report_time, _provenance("Secondary Offer Price Limit")
+
+    async def get_unit_commitment_settlement_summary(
+        self,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[list[UnitCommitmentSettlementInterval], datetime | None, dict[str, str]]:
+        """Fetch the public hourly UC settlement summary for an inclusive date range."""
+        exclusive_end = end_date + timedelta(days=1)
+        url = (
+            f"{UC_SETTLEMENT_URL}?beginDate={start_date:%m%d%Y}"
+            f"&endDate={exclusive_end:%m%d%Y}&contentType=csv"
+        )
+        raw = await self._http.get_bytes(url)
+        intervals, report_time = _parse_uc_settlement_csv(raw)
+        return intervals, report_time, _provenance("Unit Commitment Settlement Summary")
+
+    async def get_operating_reserve_prices(
+        self,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[list[OperatingReservePriceInterval], datetime | None, dict[str, str]]:
+        """Fetch active and standby operating-reserve daily prices and cleared volumes."""
+        exclusive_end = end_date + timedelta(days=1)
+        query = f"beginDate={start_date:%m%d%Y}&endDate={exclusive_end:%m%d%Y}&contentType=csv"
+        active_raw, standby_raw = await asyncio.gather(
+            self._http.get_bytes(f"{OR_ACTIVE_PRICE_URL}?{query}"),
+            self._http.get_bytes(f"{OR_STANDBY_PRICE_URL}?{query}"),
+        )
+        intervals = _parse_or_active_price_csv(active_raw) + _parse_or_standby_price_csv(
+            standby_raw
+        )
+        intervals.sort(key=lambda item: (item.market_date, item.reserve_type, item.procurement))
+        return intervals, None, _provenance("Active and Standby Operating Reserve Price Reports")
+
+    async def get_operating_reserve_forecast(
+        self,
+    ) -> tuple[list[OperatingReserveForecastInterval], datetime | None, dict[str, str]]:
+        """Fetch the current seven-day operating-reserve volume forecast."""
+        raw = await self._http.get_bytes(OR_FORECAST_URL)
+        intervals = _parse_or_forecast_csv(raw)
+        return intervals, None, _provenance("Seven-day Forecast of Operating Reserves Volumes")
+
+    async def get_operating_reserve_activations(
+        self,
+        start_date: date,
+        end_date: date,
+    ) -> tuple[list[OperatingReserveActivationInterval], datetime | None, dict[str, str]]:
+        """Fetch hourly standby operating-reserve activations."""
+        exclusive_end = end_date + timedelta(days=1)
+        url = (
+            f"{OR_ACTIVATION_URL}?beginDate={start_date:%m%d%Y}"
+            f"&endDate={exclusive_end:%m%d%Y}&contentType=csv"
+        )
+        raw = await self._http.get_bytes(url)
+        return (
+            _parse_or_activation_csv(raw),
+            None,
+            _provenance("Standby Operating Reserve Activation Report"),
+        )
 
     async def _fetch_approved_latest(
         self,
@@ -414,6 +520,216 @@ def _parse_soc_csv(
             )
         )
     return intervals, report_time
+
+
+def _parse_uc_settlement_csv(
+    raw: bytes,
+) -> tuple[list[UnitCommitmentSettlementInterval], datetime | None]:
+    text = raw.decode("utf-8-sig", errors="replace")
+    report_time = _parse_named_report_date(text)
+    lines = text.splitlines()
+    table = "\n".join(
+        lines[next((index for index, line in enumerate(lines) if line.startswith("Date,HE,")), 0) :]
+    )
+    reader = csv.DictReader(io.StringIO(table))
+    _require_columns(reader.fieldnames, _UC_REQUIRED, "Unit Commitment Settlement Summary")
+    intervals: list[UnitCommitmentSettlementInterval] = []
+    for row in reader:
+        day_label = _cell(row, "Date")
+        hour = _cell(row, "HE")
+        if not day_label or not hour:
+            continue
+        if day_label.casefold() in {"date", "report date:"}:
+            continue
+        label = f"{day_label} {hour}"
+        try:
+            start, end = parse_aeso_hour_ending(label)
+        except (TypeError, ValueError):
+            logger.warning("unparseable_uc_hour_ending value=%s", label[:40])
+            continue
+        amount = _parse_optional_float(_cell(row, "Total UC Amount ($)"))
+        volume = _parse_optional_float(_cell(row, "Total Charged Volume (MW)"))
+        if amount is None or volume is None:
+            continue
+        intervals.append(
+            UnitCommitmentSettlementInterval(
+                interval_start=start,
+                interval_end=end,
+                hour_ending_label=label,
+                total_uc_amount_cad=amount,
+                total_charged_volume_mw=volume,
+            )
+        )
+    intervals.sort(key=lambda item: chronological_instant(item.interval_start))
+    return intervals, report_time
+
+
+def _parse_named_report_date(text: str) -> datetime | None:
+    match = re.search(r'Report Date:\s*"?,?\s*"?([A-Za-z]+ \d{1,2}, \d{4})', text)
+    if match is None:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%B %d, %Y").replace(tzinfo=MARKET_TZ)
+    except ValueError:
+        return None
+
+
+def _parse_or_active_price_csv(raw: bytes) -> list[OperatingReservePriceInterval]:
+    reader = _reader_from_header(raw, "Date,")
+    fieldnames = [name.strip() for name in (reader.fieldnames or []) if name]
+    if "Date" not in fieldnames or not any("$/MW" in name for name in fieldnames):
+        raise DataValidationError("Active Operating Reserve Price CSV schema changed.")
+    intervals: list[OperatingReservePriceInterval] = []
+    for raw_row in reader:
+        row = {str(key).strip(): value for key, value in raw_row.items() if key is not None}
+        market_date = _parse_market_date(_cell(row, "Date"))
+        if market_date is None:
+            continue
+        for column in fieldnames:
+            match = re.match(r"^(RR|SR|SUP)\s+(.+?)\s+\$/MW$", column)
+            if match is None:
+                continue
+            prefix, time_block = match.groups()
+            intervals.append(
+                OperatingReservePriceInterval(
+                    market_date=market_date,
+                    procurement="active",
+                    reserve_type=_RESERVE_TYPES[prefix],
+                    time_block=time_block,
+                    active_price_cad_per_mw=_parse_optional_float(_cell(row, column)),
+                    volume_mw=_parse_optional_float(_cell(row, f"{prefix} {time_block} MW")),
+                )
+            )
+    return intervals
+
+
+def _parse_or_standby_price_csv(raw: bytes) -> list[OperatingReservePriceInterval]:
+    reader = _reader_from_header(raw, "Date,")
+    fieldnames = [name.strip() for name in (reader.fieldnames or []) if name]
+    if "Date" not in fieldnames or not any("Premium Price" in name for name in fieldnames):
+        raise DataValidationError("Standby Operating Reserve Price CSV schema changed.")
+    intervals: list[OperatingReservePriceInterval] = []
+    for raw_row in reader:
+        row = {str(key).strip(): value for key, value in raw_row.items() if key is not None}
+        market_date = _parse_market_date(_cell(row, "Date"))
+        if market_date is None:
+            continue
+        for column in fieldnames:
+            match = re.match(r"^(RR|SR|SUP)\s+(.+?)\s+Premium Price$", column)
+            if match is None:
+                continue
+            prefix, time_block = match.groups()
+            stem = f"{prefix} {time_block}"
+            intervals.append(
+                OperatingReservePriceInterval(
+                    market_date=market_date,
+                    procurement="standby",
+                    reserve_type=_RESERVE_TYPES[prefix],
+                    time_block=time_block,
+                    premium_price_cad_per_mw=_parse_optional_float(_cell(row, column)),
+                    activation_price_cad_per_mwh=_parse_optional_float(
+                        _cell(row, f"{stem} Activation Price")
+                    ),
+                    clearing_blended_price_cad_per_mw=_parse_optional_float(
+                        _cell(row, f"{stem} Clearing Blended Price")
+                    ),
+                    volume_mw=_parse_optional_float(_cell(row, f"{stem} Volume")),
+                )
+            )
+    return intervals
+
+
+def _parse_or_forecast_csv(raw: bytes) -> list[OperatingReserveForecastInterval]:
+    reader = _reader_from_header(raw, "Date,HE,")
+    _require_columns(reader.fieldnames, _OR_FORECAST_REQUIRED, "Operating Reserve Forecast")
+    intervals: list[OperatingReserveForecastInterval] = []
+    for raw_row in reader:
+        row = {str(key).strip(): value for key, value in raw_row.items() if key is not None}
+        label = _date_he_label(row)
+        if label is None:
+            continue
+        try:
+            start, end = parse_aeso_hour_ending(label)
+        except ValueError:
+            continue
+        intervals.append(
+            OperatingReserveForecastInterval(
+                interval_start=start,
+                interval_end=end,
+                active_regulating_mw=_parse_optional_float(_cell(row, "Active Regulating")),
+                active_spinning_mw=_parse_optional_float(_cell(row, "Active Spinning")),
+                active_supplemental_mw=_parse_optional_float(_cell(row, "Active Supplemental")),
+                standby_regulating_mw=_parse_optional_float(_cell(row, "Standby Regulating")),
+                standby_spinning_mw=_parse_optional_float(_cell(row, "Standby Spinning")),
+                standby_supplemental_mw=_parse_optional_float(_cell(row, "Standby Supplemental")),
+            )
+        )
+    intervals.sort(key=lambda item: chronological_instant(item.interval_start))
+    return intervals
+
+
+def _parse_or_activation_csv(raw: bytes) -> list[OperatingReserveActivationInterval]:
+    reader = _reader_from_header(raw, "Service Level,Date,HE,")
+    _require_columns(reader.fieldnames, _OR_ACTIVATION_REQUIRED, "Operating Reserve Activation")
+    intervals: list[OperatingReserveActivationInterval] = []
+    for raw_row in reader:
+        row = {str(key).strip(): value for key, value in raw_row.items() if key is not None}
+        label = _date_he_label(row)
+        reserve_code = (_cell(row, "Reserve Type") or "").upper()
+        if label is None or reserve_code not in _RESERVE_TYPES:
+            continue
+        try:
+            start, end = parse_aeso_hour_ending(label)
+        except ValueError:
+            continue
+        volume = _parse_optional_float(_cell(row, "Total Volume Activated (MW)"))
+        price = _parse_optional_float(_cell(row, "Weighted Average Activation Price ($/MWh)"))
+        if volume is None or price is None:
+            continue
+        intervals.append(
+            OperatingReserveActivationInterval(
+                interval_start=start,
+                interval_end=end,
+                service_level=_cell(row, "Service Level") or "STANDBY",
+                reserve_type=_RESERVE_TYPES[reserve_code],
+                activated_volume_mw=volume,
+                weighted_average_activation_price_cad_per_mwh=price,
+            )
+        )
+    intervals.sort(key=lambda item: chronological_instant(item.interval_start))
+    return intervals
+
+
+def _reader_from_header(raw: bytes, prefix: str) -> csv.DictReader:
+    text = raw.decode("utf-8-sig", errors="replace")
+    lines = text.splitlines()
+    index = next(
+        (position for position, line in enumerate(lines) if line.strip().startswith(prefix)),
+        None,
+    )
+    if index is None:
+        raise DataValidationError("AESO public report did not contain the expected CSV header.")
+    return csv.DictReader(io.StringIO("\n".join(lines[index:])), skipinitialspace=True)
+
+
+def _parse_market_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value.strip(), "%m/%d/%Y").date()
+    except ValueError:
+        return None
+
+
+def _date_he_label(row: dict[str, Any]) -> str | None:
+    market_date = _cell(row, "Date")
+    hour = _cell(row, "HE")
+    if not market_date or not hour:
+        return None
+    try:
+        return f"{market_date} {int(hour)}"
+    except ValueError:
+        return None
 
 
 def _csv_table_after_headers(text: str) -> str:

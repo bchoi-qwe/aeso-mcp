@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">AESO MCP architecture</title>
+  <desc id="desc">MCP clients call a typed adapter, domain services, source providers, and an optional DuckDB and Parquet historical store.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#4b6470"/>
+    </marker>
+    <style>
+      .title { font: 700 30px system-ui, sans-serif; fill: #13242b; }
+      .label { font: 700 18px system-ui, sans-serif; fill: #13242b; }
+      .small { font: 14px system-ui, sans-serif; fill: #304b58; }
+      .box { stroke: #55717d; stroke-width: 2; rx: 14; }
+      .flow { stroke: #4b6470; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect width="1200" height="720" fill="#f7faf9"/>
+  <text x="600" y="46" text-anchor="middle" class="title">Typed, source-aware research pipeline</text>
+
+  <rect class="box" x="390" y="78" width="420" height="78" fill="#dcecf2"/>
+  <text x="600" y="109" text-anchor="middle" class="label">MCP clients</text>
+  <text x="600" y="134" text-anchor="middle" class="small">Codex · ChatGPT · Claude · Cursor · Inspector</text>
+
+  <path class="flow" d="M600 156 L600 198"/>
+  <rect class="box" x="330" y="202" width="540" height="92" fill="#fff1cf"/>
+  <text x="600" y="236" text-anchor="middle" class="label">FastMCP adapter</text>
+  <text x="600" y="262" text-anchor="middle" class="small">Typed requests/results · bounded output · safe errors · resources/prompts</text>
+
+  <path class="flow" d="M600 294 L600 336"/>
+  <rect class="box" x="218" y="340" width="764" height="106" fill="#e1f0df"/>
+  <text x="600" y="375" text-anchor="middle" class="label">Domain services</text>
+  <text x="600" y="402" text-anchor="middle" class="small">market · grid · operations · history · research · reserves · transmission</text>
+  <text x="600" y="426" text-anchor="middle" class="small">complete-series joins · deterministic metrics · provenance · finality/completeness</text>
+
+  <path class="flow" d="M405 446 L245 505"/>
+  <path class="flow" d="M535 446 L505 505"/>
+  <path class="flow" d="M665 446 L695 505"/>
+  <path class="flow" d="M795 446 L955 505"/>
+
+  <rect class="box" x="55" y="510" width="250" height="104" fill="#e8edf7"/>
+  <text x="180" y="544" text-anchor="middle" class="label">GridStatus</text>
+  <text x="180" y="571" text-anchor="middle" class="small">Supported official datasets</text>
+  <text x="180" y="594" text-anchor="middle" class="small">via AESO sources</text>
+
+  <rect class="box" x="335" y="510" width="250" height="104" fill="#f4e4e4"/>
+  <text x="460" y="544" text-anchor="middle" class="label">AESO APIM</text>
+  <text x="460" y="571" text-anchor="middle" class="small">Authenticated operational APIs</text>
+  <text x="460" y="594" text-anchor="middle" class="small">key sent only to APIM host</text>
+
+  <rect class="box" x="615" y="510" width="250" height="104" fill="#ece6f6"/>
+  <text x="740" y="544" text-anchor="middle" class="label">ETS reports</text>
+  <text x="740" y="571" text-anchor="middle" class="small">Fixed public CSV products</text>
+  <text x="740" y="594" text-anchor="middle" class="small">separate credential-free client</text>
+
+  <rect class="box" x="895" y="510" width="250" height="104" fill="#e8f3ee"/>
+  <text x="1020" y="544" text-anchor="middle" class="label">CSD archive</text>
+  <text x="1020" y="571" text-anchor="middle" class="small">Official Box monthly ZIPs</text>
+  <text x="1020" y="594" text-anchor="middle" class="small">hourly and five-minute assets</text>
+
+  <path class="flow" d="M600 446 L600 650"/>
+  <rect class="box" x="350" y="642" width="500" height="62" fill="#d9ece9"/>
+  <text x="600" y="670" text-anchor="middle" class="label">Optional historical boundary</text>
+  <text x="600" y="692" text-anchor="middle" class="small">DuckDB index + deterministic Parquet dataset/year/month partitions</text>
+</svg>

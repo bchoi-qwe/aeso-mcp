@@ -22,6 +22,7 @@ ENV/
 .mypy_cache/
 .pyright/
 htmlcov/
+site/
 .coverage
 coverage.xml
 .cache/

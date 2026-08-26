@@ -1,0 +1,6 @@
+[mcp_servers.aeso]
+command = "uvx"
+args = ["--from", "aeso-mcp[analytics]", "aeso-mcp"]
+env_vars = ["AESO_API_KEY"]
+startup_timeout_sec = 60
+tool_timeout_sec = 300

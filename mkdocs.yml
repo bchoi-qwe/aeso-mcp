@@ -1,0 +1,32 @@
+site_name: AESO MCP
+site_description: Typed Alberta electricity-market data and deterministic research tools for AI agents
+site_url: https://bchoi-qwe.github.io/aeso-mcp/
+repo_url: https://github.com/bchoi-qwe/aeso-mcp
+repo_name: bchoi-qwe/aeso-mcp
+docs_dir: docs
+site_dir: site
+strict: true
+theme:
+  name: readthedocs
+  highlightjs: true
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Client configurations: client-configs.md
+  - Architecture: architecture.md
+  - Historical engine: historical-engine.md
+  - Research analytics: research-analytics.md
+  - Operating reserves: operating-reserves.md
+  - Examples: examples.md
+  - Methodology: methodology.md
+  - Data sources: data-sources.md
+  - Evaluation: evals.md
+  - Generated MCP catalog: generated/mcp-catalog.md
+extra_css:
+  - stylesheets/extra.css
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+  - fenced_code
+  - admonition

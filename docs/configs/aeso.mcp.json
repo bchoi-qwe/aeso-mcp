@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aeso": {
+      "command": "uvx",
+      "args": ["--from", "aeso-mcp[analytics]", "aeso-mcp"],
+      "env": {
+        "AESO_API_KEY": "your-key"
+      }
+    }
+  }
+}

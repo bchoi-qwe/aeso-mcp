@@ -58,6 +58,26 @@ EXPECTED_TOOLS = {
     "get_operating_reserve_offer_control",
     "summarize_market_history",
     "assess_supply_tightness",
+    "get_historical_generation",
+    "sync_historical_store",
+    "get_historical_store_status",
+    "get_forecast",
+    "get_uc_settlement_summary",
+    "get_price_statistics",
+    "get_price_duration_curve",
+    "analyze_market_event",
+    "calculate_capture_prices",
+    "analyze_net_load",
+    "analyze_supply_stack",
+    "analyze_intertie_utilization",
+    "analyze_generation_mix",
+    "analyze_asset_dispatch",
+    "analyze_outage_impact",
+    "analyze_forecast_error",
+    "get_operating_reserve_prices",
+    "get_operating_reserve_forecast",
+    "get_operating_reserve_activations",
+    "summarize_operating_reserve_market",
 }
 
 EXPECTED_RESOURCES = {
@@ -80,6 +100,10 @@ EXPECTED_RESOURCES = {
     "aeso://methodology/operating-reserve-offer-control",
     "aeso://methodology/market-history",
     "aeso://methodology/supply-tightness",
+    "aeso://methodology/historical-generation",
+    "aeso://methodology/research-analytics",
+    "aeso://methodology/operating-reserve-market",
+    "aeso://methodology/uc-settlement",
     "aeso://capabilities",
 }
 
@@ -237,8 +261,12 @@ def container(settings: Settings) -> AppContainer:
         transmission=transmission,
         market_power=market_power,
         operations=operations,
+        history=AsyncMock(),
+        research=AsyncMock(),
+        reserves=AsyncMock(),
         apim_http=AsyncMock(),
         public_reports_http=AsyncMock(),
+        archive_http=AsyncMock(),
     )
 
 

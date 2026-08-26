@@ -1,0 +1,36 @@
+:root {
+  --aeso-ink: #13242b;
+  --aeso-blue: #0b6574;
+  --aeso-amber: #e6a23c;
+  --aeso-paper: #f7faf9;
+}
+
+body {
+  color: var(--aeso-ink);
+  background: var(--aeso-paper);
+}
+
+.wy-side-nav-search,
+.wy-nav-top {
+  background: var(--aeso-blue);
+}
+
+.wy-nav-content {
+  max-width: 980px;
+}
+
+a {
+  color: var(--aeso-blue);
+}
+
+code {
+  border-color: #d7e2df;
+}
+
+table.docutils th {
+  background: #e6f1ef;
+}
+
+.admonition.warning {
+  border-left-color: var(--aeso-amber);
+}

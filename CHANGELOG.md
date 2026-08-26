@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Official individual-asset Historical CSD Generation Data at hourly and five-minute resolution,
+  with fixed-MST-to-UTC DST-safe normalization and source provenance
+- Optional incremental DuckDB index, source manifests, and partitioned Parquet snapshots for CSD
+  generation, Pool Price, and AIL actual/forecast observations
+- General forecast retrieval (`ail` currently supported) and public hourly UC settlement summary
+- Deterministic price distribution, duration curve, market-event, capture-price, net-load,
+  supply-stack, intertie, generation, dispatch, outage-association, and forecast-error analytics
+- Public active/standby operating-reserve prices, seven-day volume forecast, standby activations,
+  and product-level summaries with distinct price concepts
+- Fifty-case canonical agent-use evaluation catalog with arguments, datasets, caveats, prohibited
+  interpretations and numerical relationships; an external-result scorer; a generated MCP
+  catalog; and a strict MkDocs documentation website with client configs, investigations, and
+  methodology
+
+### Changed
+
+- MCP surface expanded from 27 to 47 tools and from 20 to 24 resources
+- CI now verifies optional historical storage, the evaluation catalog, generated tool catalog,
+  and strict documentation builds
+
 ## [0.2.0] - 2026-08-23
 
 ### Fixed

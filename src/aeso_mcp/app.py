@@ -6,7 +6,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from aeso_mcp.config import Settings
+from aeso_mcp.providers.archive_http import AesoArchiveHttpClient
 from aeso_mcp.providers.gridstatus import GridStatusProvider
+from aeso_mcp.providers.historical_generation import HistoricalGenerationProvider
 from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.providers.operations import AesoOperationsProvider
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
@@ -15,9 +17,12 @@ from aeso_mcp.services.analytics import AnalyticsService
 from aeso_mcp.services.assets import AssetsService
 from aeso_mcp.services.cache import AsyncTTLCache
 from aeso_mcp.services.grid import GridService
+from aeso_mcp.services.history import HistoryService
 from aeso_mcp.services.market import MarketService
 from aeso_mcp.services.market_power import MarketPowerService
 from aeso_mcp.services.operations import OperationsService
+from aeso_mcp.services.research import ResearchService
+from aeso_mcp.services.reserves import OperatingReserveService
 from aeso_mcp.services.transmission import TransmissionService
 
 
@@ -34,12 +39,16 @@ class AppContainer:
     transmission: TransmissionService
     market_power: MarketPowerService
     operations: OperationsService
+    history: HistoryService
+    research: ResearchService
+    reserves: OperatingReserveService
     apim_http: AesoHttpClient
     public_reports_http: AesoPublicReportsHttpClient
+    archive_http: AesoArchiveHttpClient
 
     async def aclose(self) -> None:
         """Close outbound HTTP clients (idempotent)."""
-        for client in (self.public_reports_http, self.apim_http):
+        for client in (self.archive_http, self.public_reports_http, self.apim_http):
             close = getattr(client, "aclose", None)
             if close is None:
                 continue
@@ -52,7 +61,9 @@ def build_container(settings: Settings) -> AppContainer:
     apim_http = AesoHttpClient(settings)
     provider = GridStatusProvider(settings, apim_http=apim_http)
     public_http = AesoPublicReportsHttpClient(settings)
+    archive_http = AesoArchiveHttpClient(settings)
     public_reports = AesoPublicReportsProvider(public_http)
+    historical_generation = HistoricalGenerationProvider(archive_http)
     market = MarketService(provider, settings, cache)
     grid = GridService(provider, settings, cache)
     assets = AssetsService(provider, settings, cache)
@@ -66,6 +77,9 @@ def build_container(settings: Settings) -> AppContainer:
     market_power = MarketPowerService(public_reports, settings, cache)
     operations_provider = AesoOperationsProvider(apim_http)
     operations = OperationsService(operations_provider, market, settings, cache)
+    history = HistoryService(historical_generation, public_reports, market, settings)
+    reserves = OperatingReserveService(public_reports, settings, cache)
+    research = ResearchService(market, history, operations, grid, reserves, settings)
     return AppContainer(
         settings=settings,
         cache=cache,
@@ -76,6 +90,10 @@ def build_container(settings: Settings) -> AppContainer:
         transmission=transmission,
         market_power=market_power,
         operations=operations,
+        history=history,
+        research=research,
+        reserves=reserves,
         apim_http=apim_http,
         public_reports_http=public_http,
+        archive_http=archive_http,
     )

@@ -58,6 +58,7 @@ class ProviderName(StrEnum):
     GRIDSTATUS = "gridstatus"
     AESO_APIM = "aeso_apim"
     AESO_PUBLIC_REPORT = "aeso_public_report"
+    AESO_CSD_ARCHIVE = "aeso_csd_archive"
     DERIVED = "derived"
 
 

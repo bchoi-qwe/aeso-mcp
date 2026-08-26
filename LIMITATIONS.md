@@ -15,20 +15,25 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 
 | Area | Reality |
 | --- | --- |
-| Historical generation | **Wind and solar only** (public AESO/GridStatus coverage). Current fuel mix is all fuels. |
+| Historical generation | `get_historical_generation` covers individual assets and all fuel labels published in AESO's hourly/five-minute CSD archive. This is operational average MW, not settlement-metered output. Legacy `get_generation` history remains wind/solar for compatibility. |
 | Direct APIM provider | Production operational-report tools use the authenticated client. Historical wind/solar and the core price/load adapters continue to prefer GridStatus where it already implements AESO. |
 | Outages | Generator outages are hourly aggregated capacity by fuel/technology. AIES capability, load-outage forecasts, and intertie capability outages are separate APIM tools. Approved and long-range transmission outages retain distinct `approved` / `tentative` status. |
 | Merit order / unit commitments / metered volumes | Implemented through authenticated APIM with source-specific publication limits, query bounds, and output pagination. |
 | Market-power public reports (MCSINR, secondary offer limit) | Implemented as current ETS CSV publications through an internal no-key upstream client. The complete server still always requires `AESO_API_KEY`; there is no public-reports-only mode. Historical windows are not yet supported. |
+| Historical store | Optional `aeso-mcp[analytics]` dependencies enable local DuckDB/Parquet persistence. Direct archive reads work without them. The store is single-process/local and is not a shared warehouse. |
+| Operating reserves | Public active/standby prices, seven-day volume forecasts, and standby activations are implemented. The offer-control APIM report remains a distinct delayed dataset. |
 | Settlement finality | Operational feeds may be preliminary; metadata does not claim final settlement. |
 
 ## Analytics
 
 - `explain_market_conditions` returns **associated changes**, not causal claims (warnings say so).
-- `compare_forecast_to_actual` covers Alberta Internal Load forecast vs actual only.
+- Forecast retrieval/error analytics currently cover Alberta Internal Load only; no wind, solar,
+  or price forecast series is advertised without an implemented official source.
 - `assess_supply_tightness` is transparent screening arithmetic, not an AESO declaration or a
   causal price model. Its `tight` / `watch` thresholds are documented in every response.
 - Analytics that cannot load price/load history fail or return partial stats rather than fabricating values.
+- Event, outage, and intertie analyses report descriptive associations or proxies, not causal
+  attribution or metered intertie utilization.
 
 ## Operations / CI
 

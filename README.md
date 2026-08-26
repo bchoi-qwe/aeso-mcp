@@ -15,10 +15,14 @@
 - Typed MCP tools with Pydantic inputs/outputs and structured results
 - Current market snapshot combining price, load, generation, interchange, and reserves
 - Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
+- Official individual-asset Historical CSD Generation Data at hourly and five-minute resolution
+- Optional incremental DuckDB index and partitioned Parquet snapshots for repeatable research
 - Authenticated APIM reports for merit order, commitments, capability/outages, interties,
   metered volumes, and operating-reserve offer control
 - Deterministic analytics: compact history summaries, period comparison, event detection,
-  condition evidence, forecast accuracy, and transparent supply-tightness indicators
+  condition evidence, price distributions, capture price, net load, supply stack, generation,
+  outage association, forecast accuracy, and transparent supply-tightness indicators
+- Public operating-reserve active/standby prices, seven-day forecasts, activations, and summaries
 - One complete server package and startup path: `AESO_API_KEY` is always required; there is no
   reduced credential-free server mode
 - Query bounds, cache provenance, completeness metadata, upstream `Retry-After` handling, and
@@ -52,11 +56,23 @@
 | MCSINR | `get_monthly_cumulative_net_revenue` | Cumulative net revenue vs offer-cap trigger |
 | Secondary offer limit | `get_secondary_offer_price_limit` | Whether secondary offer cap is in effect |
 | Assets | `get_assets` | Registry with filters |
+| Historical CSD generation | `get_historical_generation` | Individual assets; hourly / five-minute operational MW |
+| Actual / forecast series | `get_forecast` | Paired AIL actual and forecast values |
+| UC settlement summary | `get_uc_settlement_summary` | Hourly CAD amount and charged MW |
+| OR prices | `get_operating_reserve_prices` | Active and standby price components and volumes |
+| OR forecast | `get_operating_reserve_forecast` | Current seven-day hourly MW forecast |
+| OR activations | `get_operating_reserve_activations` | Hourly standby volume and activation price |
 
 Analytics: `summarize_market_history`, `assess_supply_tightness`, `compare_market_periods`,
-`find_price_events`, `explain_market_conditions`, and `compare_forecast_to_actual`.
+`find_price_events`, `explain_market_conditions`, `compare_forecast_to_actual`,
+`get_price_statistics`, `get_price_duration_curve`, `analyze_market_event`,
+`calculate_capture_prices`, `analyze_net_load`, `analyze_supply_stack`,
+`analyze_intertie_utilization`, `analyze_generation_mix`, `analyze_asset_dispatch`,
+`analyze_outage_impact`, `analyze_forecast_error`, and `summarize_operating_reserve_market`.
 
 ## Architecture
+
+The documentation site includes a full [architecture and MCP Inspector walkthrough](docs/architecture.md).
 
 ```text
 MCP clients
@@ -65,22 +81,22 @@ MCP clients
 FastMCP adapter (aeso_mcp/mcp)
     |
     v
-Domain services (market, grid, assets, operations, analytics, transmission, market power)
+Domain services (market, grid, history, research, reserves, operations, transmission)
     |
-    +---------------------+------------------------+
-    |                     |                        |
-    v                     v                        v
-GridStatus provider    Direct AESO APIM    Public-reports client
-    |                     |                        |
-    +----------+----------+                        |
-               |                                   |
-               v                                   v
-       AESO APIM gateway                       ets.aeso.ca
+    +---------------+----------------+----------------+----------------+
+    |               |                |                |
+    v               v                v                v
+GridStatus     Direct APIM     Public reports    CSD archive
+    |               |           (ets.aeso.ca)      (Box)
+    +-------+-------+
+            |
+            v
+      AESO APIM gateway
 ```
 
 Domain code does not depend on FastMCP. Framework changes should stay in `aeso_mcp/mcp/`.
-Both upstream clients are implementation details of this single server: the APIM key is sent only
-to `apimgw.aeso.ca` and is never sent to the allow-listed `ets.aeso.ca` report host.
+All upstream clients are implementation details of this single server: the APIM key is sent only
+to `apimgw.aeso.ca` and is never sent to the allow-listed ETS or Box hosts.
 
 ## Requirements
 
@@ -97,6 +113,12 @@ See [LIMITATIONS.md](LIMITATIONS.md) for an honest gap inventory.
 ```bash
 export AESO_API_KEY=your-key
 uvx aeso-mcp
+```
+
+For incremental DuckDB/Parquet historical storage:
+
+```bash
+uvx --from 'aeso-mcp[analytics]' aeso-mcp
 ```
 
 ### From GitHub
@@ -135,6 +157,9 @@ docker run --rm -e AESO_API_KEY=your-key -p 8000:8000 aeso-mcp
 Missing credentials produce an actionable startup error. The key is never returned through MCP tools or logged.
 
 ## Example MCP client configuration
+
+See the documentation site's [MCP client configurations](docs/client-configs.md) for maintained
+Codex, ChatGPT desktop app, Claude Desktop, Claude Code, and Cursor setup instructions.
 
 ### Cursor / Claude Desktop style (stdio)
 
@@ -205,8 +230,29 @@ market data or secrets. See [.env.example](.env.example) for all bounded runtime
 | `compare_forecast_to_actual` | AIL forecast vs actual accuracy |
 | `summarize_market_history` | Compact hourly/daily/weekly/monthly price and load summaries |
 | `assess_supply_tightness` | Transparent reserve-adjusted supply-margin screening |
+| `get_historical_generation` | Official individual-asset CSD archive history |
+| `sync_historical_store` | Incremental local DuckDB/Parquet ingestion |
+| `get_historical_store_status` | Local coverage, manifests, and partition status |
+| `get_forecast` | General actual/forecast contract (`ail` supported) |
+| `get_uc_settlement_summary` | Public hourly UC amount and charged volume |
+| `get_price_statistics` | Price distribution and volatility statistics |
+| `get_price_duration_curve` | Pool Price exceedance curve |
+| `analyze_market_event` | Focus versus baseline multi-series associations |
+| `calculate_capture_prices` | Generation-weighted price and capture rate |
+| `analyze_net_load` | AIL minus selected renewable generation |
+| `analyze_supply_stack` | Historical offer-stack analysis |
+| `analyze_intertie_utilization` | Gross-offer to capability proxy |
+| `analyze_generation_mix` | CSD energy and share by fuel |
+| `analyze_asset_dispatch` | Asset output, capacity factor, and ramps |
+| `analyze_outage_impact` | Hourly outage-price association |
+| `analyze_forecast_error` | AIL error statistics and hourly profile |
+| `get_operating_reserve_prices` | Active/standby price components and volumes |
+| `get_operating_reserve_forecast` | Seven-day reserve-volume forecast |
+| `get_operating_reserve_activations` | Hourly standby activations |
+| `summarize_operating_reserve_market` | Product price/volume/activation summary |
 
-All tools are read-only, non-destructive, and network-dependent.
+Market and research tools are read-only. `sync_historical_store` writes only to the configured
+local historical-store root; it does not mutate AESO or another external system.
 
 ## Resources
 
@@ -240,9 +286,11 @@ Prompts: `daily_market_brief`, `investigate_price_event`, and `compare_market_da
 
 ```bash
 uv sync --group dev
-uv run ruff check src tests
+uv run ruff check src tests scripts
 uv run pyright src
-uv run pytest tests/unit tests/contract tests/mcp --cov=aeso_mcp
+uv run pytest tests/unit tests/contract tests/mcp tests/evals --cov=aeso_mcp
+uv run python scripts/generate_catalog.py --check
+uv run mkdocs build --strict
 uv build
 ```
 
@@ -271,10 +319,13 @@ npx @modelcontextprotocol/inspector uv run aeso-mcp
 
 See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, host allow-list, secret hygiene, bounded queries, stderr logging for stdio.
 
-## Roadmap
+## Development status
 
-- Optional DuckDB/Parquet historical analytics store
-- Broader forecast vs actual tools
+The historical store, full CSD generation adapter, research analytics, operating-reserve market
+surface, eval suite, and documentation site are implemented under `Unreleased`. The stable public
+package remains `0.2.0` until this work passes release review and is intentionally versioned and
+published. Forecast retrieval/error analysis currently supports the official AIL actual/forecast
+series; additional forecast series require a verified official source and schema.
 
 ## Contributing
 

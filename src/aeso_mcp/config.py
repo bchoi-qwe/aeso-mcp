@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, Field, SecretStr, ValidationError, field_validator
@@ -132,6 +133,11 @@ class Settings(BaseSettings):
     max_load_days: int = Field(default=90, ge=1, le=366)
     max_smp_observations: int = Field(default=20_000, ge=1, le=100_000)
     max_price_observations: int = Field(default=10_000, ge=1, le=100_000)
+    history_store_path: Path = Field(
+        default=Path("~/.cache/aeso-mcp/history"),
+        validation_alias="AESO_MCP_HISTORY_STORE_PATH",
+        description="Local DuckDB/Parquet root used by optional historical research tools.",
+    )
     # Cache TTLs (seconds)
     cache_ttl_snapshot_s: float = Field(default=30.0, ge=0.0)
     cache_ttl_historical_s: float = Field(default=86_400.0, ge=0.0)
@@ -212,6 +218,11 @@ class Settings(BaseSettings):
         if normalized not in allowed:
             raise ValueError(f"AESO_MCP_LOG_LEVEL must be one of {sorted(allowed)}")
         return normalized
+
+    @field_validator("history_store_path")
+    @classmethod
+    def _expand_history_store_path(cls, value: Path) -> Path:
+        return value.expanduser()
 
     @field_validator("http_allowed_origins", "http_allowed_hosts", mode="before")
     @classmethod

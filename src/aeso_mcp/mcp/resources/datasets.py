@@ -34,6 +34,12 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Intertie Outages | `get_intertie_outages` | interval event | — | preliminary | Authenticated Intertie Outages |
 | Metered Volumes | `get_metered_volumes` | hourly by asset | MWh | actual | Authenticated Metered Volumes |
 | Operating Reserve Offer Control | `get_operating_reserve_offer_control` | historical hourly report | CAD/MWh, MW | final | Authenticated Operating Reserve Offer Control |
+| Historical CSD Generation | `get_historical_generation` | hourly / five-minute by asset | MW | operational actual | Official AESO CSD Box archive |
+| Actual / Forecast Series | `get_forecast` | hourly | MW | actual / forecast | Actual Forecast API (`ail`) |
+| UC Settlement Summary | `get_uc_settlement_summary` | hourly | CAD, MW | public report | ETS UC Summary CSV |
+| Operating Reserve Prices | `get_operating_reserve_prices` | daily product/time-block | CAD/MW, CAD/MWh, MW | public report | ETS active + standby price CSVs |
+| Operating Reserve Forecast | `get_operating_reserve_forecast` | hourly, seven-day | MW | forecast | ETS OR forecast CSV |
+| Operating Reserve Activations | `get_operating_reserve_activations` | hourly activation event | MW, CAD/MWh | actual | ETS standby activation CSV |
 
 ## Analytics (derived)
 
@@ -45,6 +51,16 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Forecast accuracy | `compare_forecast_to_actual` | AIL forecast vs actual error metrics |
 | Market history summary | `summarize_market_history` | Compact price/load buckets for long windows |
 | Supply tightness | `assess_supply_tightness` | Supply-margin arithmetic and screening signal |
+| Price statistics / duration | `get_price_statistics`, `get_price_duration_curve` | Complete hourly Pool Price series |
+| Market event | `analyze_market_event` | Multi-series focus/baseline associations |
+| Capture price | `calculate_capture_prices` | Hourly generation-weighted Pool Price |
+| Net load | `analyze_net_load` | AIL minus selected renewable CSD generation |
+| Supply stack | `analyze_supply_stack` | One-hour Energy Merit Order structure |
+| Intertie proxy | `analyze_intertie_utilization` | Gross offers relative to available capability |
+| Generation research | `analyze_generation_mix`, `analyze_asset_dispatch` | Fuel and individual-asset CSD analytics |
+| Outage association | `analyze_outage_impact` | Hourly outage-price comparison and correlation |
+| Forecast error | `analyze_forecast_error` | AIL errors overall and by market hour |
+| Reserve summary | `summarize_operating_reserve_market` | Product price/volume/activation summary |
 
 ## Timezone
 All market timestamps are normalized to **America/Edmonton**. DST spring-forward days have

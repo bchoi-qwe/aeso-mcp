@@ -7,7 +7,7 @@ Thanks for contributing to `aeso-mcp`.
 ```bash
 git clone https://github.com/bchoi-qwe/aeso-mcp.git
 cd aeso-mcp
-uv sync --group dev
+uv sync --group dev --extra analytics --extra docs
 cp .env.example .env   # add AESO_API_KEY for live checks
 ```
 
@@ -16,10 +16,12 @@ Obtain an API key from the [AESO developer portal](https://developer-apim.aeso.c
 ## Checks
 
 ```bash
-uv run ruff check src tests
-uv run ruff format --check src tests
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
 uv run pyright src
-uv run pytest tests/unit tests/contract tests/mcp --cov=aeso_mcp
+uv run pytest tests/unit tests/contract tests/mcp tests/evals --cov=aeso_mcp
+uv run python scripts/generate_catalog.py --check
+uv run mkdocs build --strict
 uv run python tests/packaging/check_release_metadata.py
 uv build
 ```
@@ -37,12 +39,36 @@ The scheduled live canary uses the protected `aeso-live` GitHub environment and 
 
 - Keep FastMCP code inside `aeso_mcp/mcp/`
 - Keep AESO HTTP/GridStatus details inside `aeso_mcp/providers/`
+- Keep DuckDB/Parquet implementation details inside `aeso_mcp/storage/`; expose typed operations,
+  never arbitrary SQL
 - Prefer typed Pydantic models for tool I/O
 - Prefer GridStatus when it already covers a dataset
 - Document timezone, units, and forecast vs actual semantics
 - Add contract fixtures for new upstream payloads
+- Add or update canonical cases in `tests/evals/cases.json` for new agent-facing capabilities
 - Keep the server a single API-key-required package; source-specific upstream clients are internal
   implementation details, not alternate server modes
+
+## Adding an AESO dataset
+
+1. Add the proposed product to `docs/data-sources.md`. Confirm whether AESO APIM, an existing
+   GridStatus adapter, a named ETS machine-readable report, or another official fixed source owns
+   the data. Do not add an ETS scraper for an APIM product.
+2. Model the source-specific request and response semantics: timezone, interval boundaries, units,
+   observation type, finality, completeness, publication delay, and bounded date range.
+3. Implement source parsing in `providers/`. APIM uses the authenticated client; ETS and archives
+   use their separate credential-free allow-listed clients. Never accept an arbitrary URL or send
+   `AESO_API_KEY` outside the APIM host.
+4. Put reusable joins and calculations in `services/`, with Pydantic contracts in `models/`.
+   FastMCP registration belongs only in `mcp/`. Keep arbitrary SQL and provider payloads out of the
+   public tool surface.
+5. Add source-shape contract fixtures, boundary/unit tests, MCP discovery coverage, and at least one
+   canonical `tests/evals/cases.json` scenario covering routing, arguments, source selection,
+   caveats, prohibited interpretations, and numerical relationships.
+6. Add a narrow opt-in integration canary when a public or protected live call can detect schema
+   drift without excessive upstream traffic.
+7. Update methodology/capability resources, limitations, the Unreleased changelog, and regenerate
+   `docs/generated/mcp-catalog.md`. Run every check above after the final edit.
 
 ## Pull requests
 

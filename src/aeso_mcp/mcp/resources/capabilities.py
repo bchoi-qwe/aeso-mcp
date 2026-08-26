@@ -33,6 +33,14 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `get_assets` — bounded asset registry queries.
 - `get_monthly_cumulative_net_revenue` — current MCSINR publication.
 - `get_secondary_offer_price_limit` — current secondary offer-cap status.
+- `get_historical_generation` — official individual-asset CSD history at hourly or five-minute resolution.
+- `sync_historical_store` — incremental DuckDB index and partitioned Parquet snapshots.
+- `get_historical_store_status` — local coverage, manifests, partitions, and schema status.
+- `get_forecast` — paired typed actual/forecast observations (`ail` currently supported).
+- `get_uc_settlement_summary` — hourly public UC amount and charged volume.
+- `get_operating_reserve_prices` — active/standby reserve price components and volumes.
+- `get_operating_reserve_forecast` — current seven-day reserve-volume forecast.
+- `get_operating_reserve_activations` — hourly standby reserve activations.
 
 ### Authenticated operational reports
 
@@ -53,6 +61,16 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `find_price_events` — sustained high-price event detection.
 - `explain_market_conditions` — structured evidence against a baseline, without causal claims.
 - `compare_forecast_to_actual` — AIL forecast error metrics.
+- `get_price_statistics` and `get_price_duration_curve` — Pool Price distributions.
+- `analyze_market_event` — focus/baseline price, demand, supply, offer, intertie, commitment, and reserve evidence.
+- `calculate_capture_prices` — generation-weighted price by asset or fuel.
+- `analyze_net_load` — AIL less selected renewable generation.
+- `analyze_supply_stack` — historical offer-stack structure.
+- `analyze_intertie_utilization` — gross-offer to capability proxy.
+- `analyze_generation_mix` and `analyze_asset_dispatch` — CSD generation research.
+- `analyze_outage_impact` — hourly outage-price association.
+- `analyze_forecast_error` — AIL error statistics and hourly profile.
+- `summarize_operating_reserve_market` — reserve prices, volumes, and activations by product.
 
 ## Prompts
 
@@ -73,7 +91,8 @@ Methodology resources include `load`, `generation`, `generator-outages`,
 `transmission-outages`, `market-power-mitigation`, `energy-merit-order`,
 `unit-commitments`, `generation-capacity`, `load-outage-forecast`, `intertie-capability`,
 `intertie-outages`, `metered-volume`, `operating-reserve-offer-control`, `market-history`, and
-`supply-tightness`.
+`supply-tightness`, `historical-generation`, `research-analytics`, `operating-reserve-market`,
+and `uc-settlement`.
 
 Data can be operational, preliminary, forecast, tentative, or revised. Always inspect response
 metadata and warnings before treating a value as final or inferring a cause.

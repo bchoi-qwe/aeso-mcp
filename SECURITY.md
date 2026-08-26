@@ -6,7 +6,8 @@ Security fixes are applied to the latest published release on the `main` branch.
 
 ## Threat model (summary)
 
-`aeso-mcp` is a **read-only** MCP server for public Alberta electricity-market data.
+`aeso-mcp` is externally read-only: it never mutates AESO or another upstream system. The optional
+`sync_historical_store` operation writes derived/indexed data only under its configured local root.
 
 In scope:
 
@@ -25,10 +26,12 @@ Out of scope / residual risk:
 
 - Secrets only via environment / `.env` (never committed)
 - API keys are `SecretStr` and must not appear in logs or client error messages
-- No generic URL-fetch, shell, filesystem, SQL, or code-execution tools
+- No generic URL-fetch, shell, filesystem, SQL, or code-execution tools; the one local storage
+  operation has a fixed typed dataset contract and configured root
 - HTTPS-only authenticated APIM access (`apimgw.aeso.ca`) and an isolated, unauthenticated
-  upstream client for public reports (`ets.aeso.ca`); the server still requires `AESO_API_KEY`
-  at startup, and redirects are re-validated against the corresponding host allow-list
+  upstream client for public reports (`ets.aeso.ca`) plus a separate fixed-share client for the
+  official AESO CSD Box archive; the server still requires `AESO_API_KEY` at startup, and
+  redirects are re-validated against the corresponding host allow-list
 - Bounded date ranges, observation caps, HTTP timeouts, and selective retries
 - Raw-series pagination plus compact server-side aggregation for long historical requests
 - HTTP Host/Origin validation, optional bearer authentication, per-client rate limits, global

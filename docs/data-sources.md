@@ -2,6 +2,10 @@
 
 Canonical coverage matrix for AESO datasets used by `aeso-mcp`.
 
+The [generated dataset and retrieval coverage](generated/mcp-catalog.md#dataset-and-retrieval-coverage)
+is rebuilt from the live MCP registration surface in CI. The source matrix below adds the
+human-reviewed provider priority and authentication boundary.
+
 ## Resolution order
 
 1. Official AESO APIM (authenticated)
@@ -33,10 +37,15 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | Energy Merit Order | `get_energy_merit_order` | APIM | key | No | Do not scrape | implemented |
 | Metered volumes | `get_metered_volumes` | APIM | key | No | Do not scrape | implemented |
 | Unit commitment directives | `get_unit_commitments` | APIM | key | No | Do not scrape | implemented |
-| UC Summary settlement | — | ETS public | none | No | direct | backlog |
+| UC Summary settlement | `get_uc_settlement_summary` | ETS public CSV | none | No | direct | implemented |
 | Intertie ATC / TTC | `get_intertie_capability` | APIM Intertie API | key | No | None | implemented |
 | Intertie capability outages | `get_intertie_outages` | APIM Intertie API | key | No | None | implemented |
 | Operating Reserve Offer Control | `get_operating_reserve_offer_control` | APIM | key | No | Do not scrape | implemented |
+| Historical individual-asset CSD generation | `get_historical_generation` | Official AESO Box archive | none | No | fixed shared-folder adapter | implemented |
+| Actual / forecast series (AIL) | `get_forecast` | APIM Actual Forecast API | key | load merge | None | implemented |
+| Operating Reserve active/standby prices | `get_operating_reserve_prices` | ETS public CSV | none | No | direct | implemented |
+| Operating Reserve volume forecast | `get_operating_reserve_forecast` | ETS public CSV | none | No | direct | implemented |
+| Operating Reserve activations | `get_operating_reserve_activations` | ETS public CSV | none | No | direct | implemented |
 
 \*Public-report tools contact `ets.aeso.ca` without sending the APIM key. This is an internal
 source-specific client, not a separate runtime mode: the complete MCP server always requires
@@ -47,3 +56,6 @@ source-specific client, not a separate runtime mode: the complete MCP server alw
 - **Approved transmission outages** are AESO-approved planned outages (`approval_status=approved`).
 - **Long Range Significant Transmission Outages** are forward-looking and may be tentative (`approval_status=tentative`). Do not merge them silently with approved outages.
 - Generator outages (`get_outages`) are a different concept from transmission outages.
+- Historical CSD generation is operational average MW, not settlement-metered generation.
+- Active reserve price, standby premium, activation strike, and clearing blended price are
+  separate economic fields and must not be collapsed into one generic reserve price.

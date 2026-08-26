@@ -191,6 +191,53 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
 - **Caveat**: Missing inputs produce an `unknown` signal where required. The result describes
   supply conditions and does not establish why a price moved.
 """,
+    "historical-generation": """# Methodology: Historical CSD Generation
+
+- **Definition**: Individual-asset operational generation, capability, fuel, and geography fields
+  from AESO's Historical Current Supply Demand archive.
+- **Resolution**: Hourly or five-minute average MW with explicit local and UTC interval bounds.
+- **Timestamp semantics**: The published fixed `Date (MST)` value is converted to UTC and then to
+  `America/Edmonton`, preserving repeated fall-back instants.
+- **Storage**: The optional analytics extra enables an internal DuckDB index and partitioned
+  Parquet snapshots. No arbitrary SQL tool is exposed.
+- **Caveat**: AESO identifies CSD history as operational data. It is not settlement-metered
+  generation and should not be described as final settlement output.
+""",
+    "research-analytics": """# Methodology: Research Analytics
+
+- **Inputs**: Calculations consume complete internal price, load, CSD generation, outage,
+  capability, forecast, or offer series rather than a user-visible page.
+- **Capture price**: Generation-weighted hourly Pool Price; capture rate divides by arithmetic
+  mean Pool Price over the requested window.
+- **Forecast error**: Error is forecast minus actual; MAPE excludes zero actual observations.
+- **Intertie metric**: Gross offer divided by available transfer capability is a utilization
+  proxy, not metered interchange flow.
+- **Caveat**: Window changes, high-outage differences, and correlation are descriptive
+  associations. They do not establish causation.
+""",
+    "operating-reserve-market": """# Methodology: Operating Reserve Market
+
+- **Products**: Regulating, spinning, and supplemental reserves are published for active and
+  standby procurement.
+- **Price semantics**: Active price, standby premium, standby activation strike, and standby
+  clearing blended price remain separate. The summary uses active price for active products and
+  clearing blended price for standby products.
+- **Forecast**: The seven-day volume report is forecast/preliminary, not realized procurement.
+- **Activations**: Standby activations report volume and weighted-average activation price; summary
+  activation prices are volume-weighted.
+- **Caveat**: Offer-control blocks, procurement prices, forecast volumes, and activations are
+  different report concepts and are not silently merged.
+""",
+    "uc-settlement": """# Methodology: Unit Commitment Settlement Summary
+
+- **Definition**: Hourly public Unit Commitment settlement amount and total charged volume.
+- **Units**: Total UC amount is CAD; total charged volume is MW as labeled by the source report.
+- **Source**: AESO ETS public Unit Commitment Settlement Summary, read without an APIM key.
+- **Date semantics**: Requests use inclusive market report dates; returned rows have explicit
+  `America/Edmonton` hourly intervals.
+- **Distinction**: This settlement summary is separate from the authenticated Unit Commitment
+  directive report and from actual unit generation.
+""",
 }
 
 

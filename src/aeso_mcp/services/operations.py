@@ -79,7 +79,9 @@ class OperationsService:
         self._settings = settings
         self._cache = cache
 
-    async def get_energy_merit_order(self, request: DailyPageRequest) -> EnergyMeritOrderResponse:
+    async def get_energy_merit_order(
+        self, request: DailyPageRequest, *, paginate: bool = True
+    ) -> EnergyMeritOrderResponse:
         cutoff = market_now().date() - timedelta(days=60)
         _validate_report_date(
             request.report_date,
@@ -102,7 +104,7 @@ class OperationsService:
                 row.block_number or 0,
             ),
         )
-        page, info = _page(records, request.offset, request.limit)
+        page, info = _page_or_all(records, request.offset, request.limit, paginate)
         return EnergyMeritOrderResponse(
             blocks=page,
             page=info,
@@ -128,7 +130,9 @@ class OperationsService:
             ),
         )
 
-    async def get_unit_commitments(self, request: DateRangePageRequest) -> UnitCommitmentResponse:
+    async def get_unit_commitments(
+        self, request: DateRangePageRequest, *, paginate: bool = True
+    ) -> UnitCommitmentResponse:
         _validate_date_range(
             request.start_date,
             request.end_date,
@@ -146,7 +150,7 @@ class OperationsService:
             records,
             key=lambda row: _directive_sort_key(row, request.start_date),
         )
-        page, info = _page(records, request.offset, request.limit)
+        page, info = _page_or_all(records, request.offset, request.limit, paginate)
         return UnitCommitmentResponse(
             directives=page,
             page=info,
@@ -166,7 +170,7 @@ class OperationsService:
         )
 
     async def get_generation_capacity(
-        self, request: DateRangePageRequest
+        self, request: DateRangePageRequest, *, paginate: bool = True
     ) -> GenerationCapacityResponse:
         _validate_date_range(
             request.start_date,
@@ -190,7 +194,7 @@ class OperationsService:
                 row.sub_fuel_type or "",
             ),
         )
-        page, info = _page(records, request.offset, request.limit)
+        page, info = _page_or_all(records, request.offset, request.limit, paginate)
         contains_future = request.end_date >= market_now().date()
         return GenerationCapacityResponse(
             intervals=page,
@@ -257,7 +261,7 @@ class OperationsService:
         )
 
     async def get_intertie_capability(
-        self, request: IntertieCapabilityRequest
+        self, request: IntertieCapabilityRequest, *, paginate: bool = True
     ) -> IntertieCapabilityResponse:
         _validate_date_range(
             request.start_date,
@@ -292,7 +296,7 @@ class OperationsService:
                 row.direction,
             ),
         )
-        page, info = _page(records, request.offset, request.limit)
+        page, info = _page_or_all(records, request.offset, request.limit, paginate)
         return IntertieCapabilityResponse(
             intervals=page,
             page=info,
@@ -318,7 +322,9 @@ class OperationsService:
             ),
         )
 
-    async def get_intertie_outages(self, request: DateRangePageRequest) -> IntertieOutagesResponse:
+    async def get_intertie_outages(
+        self, request: DateRangePageRequest, *, paginate: bool = True
+    ) -> IntertieOutagesResponse:
         _validate_date_range(
             request.start_date,
             request.end_date,
@@ -333,7 +339,7 @@ class OperationsService:
         )
         records, prov = cached.value
         records = sorted(records, key=lambda row: chronological_instant(row.interval_start))
-        page, info = _page(records, request.offset, request.limit)
+        page, info = _page_or_all(records, request.offset, request.limit, paginate)
         return IntertieOutagesResponse(
             outages=page,
             page=info,
@@ -427,7 +433,7 @@ class OperationsService:
         )
 
     async def get_operating_reserve_offer_control(
-        self, request: DailyPageRequest
+        self, request: DailyPageRequest, *, paginate: bool = True
     ) -> OperatingReserveOfferControlResponse:
         cutoff = market_now().date() - timedelta(days=60)
         _validate_report_date(
@@ -451,7 +457,7 @@ class OperationsService:
                 row.asset_id or "",
             ),
         )
-        page, info = _page(records, request.offset, request.limit)
+        page, info = _page_or_all(records, request.offset, request.limit, paginate)
         return OperatingReserveOfferControlResponse(
             blocks=page,
             page=info,
@@ -704,6 +710,21 @@ def _page[T](records: Sequence[T], offset: int, limit: int) -> tuple[list[T], Pa
         returned=len(values),
         total=total,
         next_offset=next_offset,
+    )
+
+
+def _page_or_all[T](
+    records: Sequence[T], offset: int, limit: int, paginate: bool
+) -> tuple[list[T], PageInfo]:
+    if paginate:
+        return _page(records, offset, limit)
+    total = len(records)
+    return list(records), PageInfo(
+        offset=0,
+        limit=max(total, 1),
+        returned=total,
+        total=total,
+        next_offset=None,
     )
 
 

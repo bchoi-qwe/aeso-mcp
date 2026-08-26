@@ -17,6 +17,7 @@ from aeso_mcp.config import Settings, clear_settings_cache
 from aeso_mcp.models.assets import AssetsRequest
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.grid import OutagesRequest
+from aeso_mcp.models.history import UnitCommitmentSettlementRequest
 from aeso_mcp.models.operations import (
     DailyPageRequest,
     DateRangePageRequest,
@@ -24,8 +25,14 @@ from aeso_mcp.models.operations import (
     MeteredVolumeRequest,
 )
 from aeso_mcp.models.prices import SystemMarginalPriceRequest
+from aeso_mcp.models.reserves import (
+    OperatingReserveDateRangeRequest,
+    OperatingReserveForecastRequest,
+    OperatingReserveSummaryRequest,
+)
 from aeso_mcp.providers.gridstatus import GridStatusProvider
-from aeso_mcp.timeutil import market_now
+from aeso_mcp.providers.historical_generation import HistoricalGenerationProvider
+from aeso_mcp.timeutil import market_now, start_of_market_day
 
 pytestmark = pytest.mark.integration
 
@@ -208,5 +215,77 @@ async def test_live_authenticated_operational_reports(live_settings: Settings) -
         )
         assert metered.metadata.provider.value == "aeso_apim"
         assert metered.page.total >= len(metered.intervals)
+    finally:
+        await container.aclose()
+
+
+@pytest.mark.asyncio
+async def test_live_historical_csd_archive(live_settings: Settings) -> None:
+    """Smoke the official archive catalog, download route, ZIP schema, and timestamp parse."""
+    container = build_container(live_settings)
+    try:
+        provider = HistoricalGenerationProvider(container.archive_http)
+        sources = await provider.list_source_files("hourly")
+        assert sources
+        source = max(sources, key=lambda item: item.coverage_end)
+        start = start_of_market_day(source.coverage_start)
+        records, digest = await provider.fetch_source_file(
+            source,
+            interval="hourly",
+            start=start,
+            end=start + timedelta(hours=1),
+        )
+        assert records
+        assert len(digest) == 64
+        assert all(item.interval_start_utc.tzinfo is not None for item in records)
+        assert all(item.source_file_id == source.file_id for item in records)
+    finally:
+        await container.aclose()
+
+
+@pytest.mark.asyncio
+async def test_live_operating_reserve_and_uc_public_reports(
+    live_settings: Settings,
+) -> None:
+    """Smoke active/standby economics, forecast, activations, summary, and UC settlement."""
+    container = build_container(live_settings)
+    try:
+        end_date = market_now().date() - timedelta(days=2)
+        start_date = end_date - timedelta(days=6)
+        date_range = OperatingReserveDateRangeRequest(
+            start_date=start_date,
+            end_date=end_date,
+            limit=25,
+        )
+        prices = await container.reserves.get_prices(date_range)
+        assert prices.metadata.observation_count is not None
+        assert prices.metadata.observation_count >= len(prices.intervals)
+        assert {item.procurement for item in prices.intervals} <= {"active", "standby"}
+
+        forecast = await container.reserves.get_forecast(OperatingReserveForecastRequest(limit=25))
+        assert forecast.intervals
+
+        activations = await container.reserves.get_activations(date_range)
+        assert activations.metadata.observation_count is not None
+        assert activations.metadata.observation_count >= len(activations.intervals)
+
+        summary = await container.reserves.summarize(
+            OperatingReserveSummaryRequest(
+                start_date=start_date,
+                end_date=end_date,
+                include_activations=True,
+            )
+        )
+        assert summary.results
+
+        settlement = await container.history.get_uc_settlement_summary(
+            UnitCommitmentSettlementRequest(
+                start_date=start_date,
+                end_date=end_date,
+                limit=25,
+            )
+        )
+        assert settlement.metadata.observation_count is not None
+        assert settlement.metadata.observation_count >= len(settlement.intervals)
     finally:
         await container.aclose()
