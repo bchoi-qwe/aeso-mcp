@@ -13,6 +13,7 @@ from pydantic import SecretStr
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import AuthenticationError, InvalidDateRangeError
+from aeso_mcp.models.forecasts import OfficialForecastRequest
 from aeso_mcp.models.research import MarketEventRequest
 from aeso_mcp.services.grid import GridService
 from aeso_mcp.services.history import HistoryService
@@ -51,6 +52,8 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
         ),
     )
     history = SimpleNamespace(
+        get_historical_pool_prices=market.get_pool_prices,
+        get_historical_load=market.get_load,
         get_historical_generation=AsyncMock(
             return_value=SimpleNamespace(
                 intervals=[
@@ -77,7 +80,7 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
                 ],
                 warnings=[],
             )
-        )
+        ),
     )
     grid = SimpleNamespace(
         get_outages=AsyncMock(
@@ -197,6 +200,8 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
     assert response.evidence.reserves.offer_control_block_count == 1
     assert response.evidence.commitment_count == 1
     assert "do not establish" in response.methodology
+    assert history.get_historical_pool_prices.await_count == 2
+    assert history.get_historical_load.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -221,3 +226,104 @@ async def test_optional_event_source_warns_but_authentication_fails_closed() -> 
     assert warnings == ["merit order unavailable: not published for this date"]
     with pytest.raises(AuthenticationError, match="credentials rejected"):
         await service._optional_event_source("capacity", unauthenticated(), warnings)
+
+
+@pytest.mark.asyncio
+async def test_official_event_evidence_combines_forecasts_and_named_reports() -> None:
+    start = datetime(2026, 8, 1, tzinfo=UTC)
+    end = start + timedelta(hours=2)
+
+    def forecast_response(request: OfficialForecastRequest, *, paginate: bool) -> SimpleNamespace:
+        assert paginate is False
+        series = request.series
+        unit = "CAD/MWh" if series == "pool_price" else "MW"
+        return SimpleNamespace(
+            intervals=[
+                SimpleNamespace(
+                    forecast_value=12.0,
+                    actual_value=10.0,
+                    unit=unit,
+                ),
+                SimpleNamespace(
+                    forecast_value=15.0,
+                    actual_value=14.0,
+                    unit=unit,
+                ),
+            ],
+            warnings=[],
+        )
+
+    forecasts = SimpleNamespace(get_forecast=AsyncMock(side_effect=forecast_response))
+    reports = SimpleNamespace(
+        get_supply_adequacy=AsyncMock(
+            return_value=SimpleNamespace(
+                intervals=[
+                    SimpleNamespace(
+                        adequacy_status="adequate",
+                        supply_cushion_status="above_600_mw",
+                    )
+                ],
+                warnings=[],
+            )
+        ),
+        get_supply_surplus=AsyncMock(
+            return_value=SimpleNamespace(
+                intervals=[SimpleNamespace(status="all_zero_forecast_prices")],
+                warnings=[],
+            )
+        ),
+        get_ffr_net_schedule=AsyncMock(
+            return_value=SimpleNamespace(
+                intervals=[
+                    SimpleNamespace(net_schedule_mw=-100.0),
+                    SimpleNamespace(net_schedule_mw=-50.0),
+                ],
+                warnings=[],
+            )
+        ),
+        get_dds_market_report=AsyncMock(
+            return_value=SimpleNamespace(
+                records=[SimpleNamespace(available_dds_mw=25.0)], warnings=[]
+            )
+        ),
+        get_tmr_reference_price=AsyncMock(
+            return_value=SimpleNamespace(
+                records=[SimpleNamespace(reference_price_cad_per_mwh=42.0)],
+                warnings=[],
+            )
+        ),
+        get_system_events=AsyncMock(
+            return_value=SimpleNamespace(
+                records=[SimpleNamespace(comments="Supply surplus entered")],
+                warnings=[],
+            )
+        ),
+    )
+    service = ResearchService(
+        cast(MarketService, SimpleNamespace()),
+        cast(HistoryService, SimpleNamespace()),
+        cast(OperationsService, SimpleNamespace()),
+        cast(GridService, SimpleNamespace()),
+        cast(OperatingReserveService, SimpleNamespace()),
+        Settings(aeso_api_key=SecretStr("research-test-key")),
+        forecasts=forecasts,
+        reports=reports,
+    )
+    warnings: list[str] = []
+
+    evidence = await service._official_event_evidence(start, end, warnings)
+
+    assert evidence.forecast_mae_by_series == {
+        "pool_price": 1.5,
+        "solar": 1.5,
+        "wind": 1.5,
+    }
+    assert evidence.supply_adequacy_statuses == ["adequate"]
+    assert evidence.supply_cushion_statuses == ["above_600_mw"]
+    assert evidence.supply_surplus_statuses == ["all_zero_forecast_prices"]
+    assert evidence.average_ffr_net_schedule_mw == -75.0
+    assert evidence.average_dds_available_mw == 25.0
+    assert evidence.tmr_reference_price_cad_per_mwh == 42.0
+    assert evidence.system_event_comments == ["Supply surplus entered"]
+    assert warnings == []
+    assert forecasts.get_forecast.await_count == 3

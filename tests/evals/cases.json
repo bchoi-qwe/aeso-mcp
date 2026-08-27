@@ -1673,5 +1673,200 @@
       "Do not interpret the result as final settlement."
     ],
     "expected_numerical_relationships": []
+  },
+  {
+    "id": "forecast-003",
+    "question": "What was the official seven-day wind forecast versus actual generation for this interval?",
+    "expected_tools": ["get_forecast"],
+    "required_concepts": ["wind", "current_7_day", "forecast versus actual"],
+    "forbidden_claims": ["forecast equals actual"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "series", "horizon"],
+      "constraints": ["series is wind and horizon matches the official seven-day publication"]
+    },
+    "expected_datasets": ["AESO Wind Seven-day Forecast"],
+    "prohibited_interpretations": ["forecast equals actual"],
+    "required_caveats": ["Current forecasts are revisable and rows without actuals remain unpaired."],
+    "expected_numerical_relationships": ["forecast error is forecast_value minus actual_value for paired rows"]
+  },
+  {
+    "id": "forecast-004",
+    "question": "How inaccurate was the official solar forecast during this high-price period?",
+    "expected_tools": ["analyze_forecast_error"],
+    "required_concepts": ["solar", "MAE", "paired observations"],
+    "forbidden_claims": ["missing actual is zero"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "series"],
+      "constraints": ["use series solar and the explicit event interval"]
+    },
+    "expected_datasets": ["AESO Solar Historical Actual-versus-Forecast"],
+    "prohibited_interpretations": ["missing actual is zero"],
+    "required_caveats": ["Exclude and count unpaired forecast or actual observations."],
+    "expected_numerical_relationships": ["RMSE is at least MAE for the same finite paired sample"]
+  },
+  {
+    "id": "forecast-005",
+    "question": "Compare official forecast Pool Price with actual posted Pool Price over this week.",
+    "expected_tools": ["get_forecast"],
+    "required_concepts": ["CAD/MWh", "Pool Price", "paired values"],
+    "forbidden_claims": ["forecast is settlement actual"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "series"],
+      "constraints": ["series is pool_price and range is at most 31 days"]
+    },
+    "expected_datasets": ["Forecast and Actual Pool Price"],
+    "prohibited_interpretations": ["forecast is settlement actual"],
+    "required_caveats": ["Forecast and posted actual are distinct CAD/MWh fields."],
+    "expected_numerical_relationships": ["signed error equals forecast Pool Price minus actual posted Pool Price"]
+  },
+  {
+    "id": "adequacy-001",
+    "question": "What official supply-adequacy and supply-cushion status did AESO publish during this price spike?",
+    "expected_tools": ["get_supply_adequacy"],
+    "required_concepts": ["official status bands", "supply cushion"],
+    "forbidden_claims": ["derived tightness label is AESO declaration"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded interval within the current report horizon"]
+    },
+    "expected_datasets": ["Supply Adequacy and Market Supply Cushion"],
+    "prohibited_interpretations": ["derived tightness label is AESO declaration"],
+    "required_caveats": ["Do not invent a numeric MW midpoint from a published categorical band."],
+    "expected_numerical_relationships": []
+  },
+  {
+    "id": "surplus-001",
+    "question": "Was Alberta in supply surplus during this zero-price event and what market values were observed?",
+    "expected_tools": ["analyze_supply_surplus_events"],
+    "required_concepts": ["explicit event boundary", "observed association"],
+    "forbidden_claims": ["renewables caused supply surplus"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use the explicit bounded event window"]
+    },
+    "expected_datasets": ["Supply Surplus", "Pool Price", "Alberta Internal Load", "Wind and Solar Generation"],
+    "prohibited_interpretations": ["renewables caused supply surplus"],
+    "required_caveats": ["Open events have no duration until a later published status supplies an end."],
+    "expected_numerical_relationships": ["total explicit duration sums only events with published end boundaries"]
+  },
+  {
+    "id": "ffr-001",
+    "question": "What did the FFR Net Schedule show during this event?",
+    "expected_tools": ["get_ffr_net_schedule"],
+    "required_concepts": ["scheduled transfer", "signed MW"],
+    "forbidden_claims": ["FFR scheduled equals FFR dispatched"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded historical interval"]
+    },
+    "expected_datasets": ["FFR Net Schedule"],
+    "prohibited_interpretations": ["FFR scheduled equals FFR dispatched"],
+    "required_caveats": ["Imports are negative and exports positive under AESO's report convention."],
+    "expected_numerical_relationships": ["net schedule preserves the published sign and is not replaced by component magnitude"]
+  },
+  {
+    "id": "dds-001",
+    "question": "Was Dispatch Down Service availability published during this interval?",
+    "expected_tools": ["get_dispatch_down_service"],
+    "required_concepts": ["DDS availability", "MW"],
+    "forbidden_claims": ["availability equals dispatch"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded range of at most 31 days"]
+    },
+    "expected_datasets": ["Dispatch Down Service Market Report"],
+    "prohibited_interpretations": ["availability equals dispatch"],
+    "required_caveats": ["DDS is distinct from energy-market dispatch and metered generation."],
+    "expected_numerical_relationships": []
+  },
+  {
+    "id": "tmr-001",
+    "question": "What official TMR reference price applied during this event?",
+    "expected_tools": ["get_tmr_reference_price"],
+    "required_concepts": ["published reference price", "effective date"],
+    "forbidden_claims": ["independently recomputed price"],
+    "expected_arguments": {
+      "required_fields": ["start_date", "end_date"],
+      "constraints": ["use inclusive effective-date bounds"]
+    },
+    "expected_datasets": ["TMR Reference Price"],
+    "prohibited_interpretations": ["independently recomputed price"],
+    "required_caveats": ["Return the AESO-published CAD/MWh value without recomputation."],
+    "expected_numerical_relationships": []
+  },
+  {
+    "id": "events-001",
+    "question": "Which AIES system events were published around this Energy Emergency Alert?",
+    "expected_tools": ["get_system_events"],
+    "required_concepts": ["raw comments", "descriptive classification"],
+    "forbidden_claims": ["inferred event end"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded range of at most 31 days"]
+    },
+    "expected_datasets": ["AIES Event Log"],
+    "prohibited_interpretations": ["inferred event end"],
+    "required_caveats": ["The raw AESO comment is authoritative; classification is descriptive."],
+    "expected_numerical_relationships": []
+  },
+  {
+    "id": "revenue-001",
+    "question": "How much gross energy revenue did asset X earn from hourly metered energy times Pool Price?",
+    "expected_tools": ["calculate_asset_energy_revenue"],
+    "required_concepts": ["metered MWh", "gross Pool Price energy revenue"],
+    "forbidden_claims": ["gross Pool Price revenue equals total settlement revenue"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "asset_ids"],
+      "constraints": ["use explicit asset IDs and a bounded interval"]
+    },
+    "expected_datasets": ["Metered Volumes", "Pool Price"],
+    "prohibited_interpretations": ["gross Pool Price revenue equals total settlement revenue"],
+    "required_caveats": ["Exclude OR, uplift, UC, transmission, and other settlement components."],
+    "expected_numerical_relationships": ["gross energy revenue equals the sum of matched metered MWh times hourly Pool Price"]
+  },
+  {
+    "id": "csd-metered-001",
+    "question": "How different was operational CSD generation from metered output for these assets?",
+    "expected_tools": ["compare_csd_to_metered"],
+    "required_concepts": ["operational average MW", "metered MWh"],
+    "forbidden_claims": ["CSD average MW equals settlement-metered MWh"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "asset_ids"],
+      "constraints": ["use explicit assets and matched hourly intervals"]
+    },
+    "expected_datasets": ["Historical CSD Generation Data", "Metered Volumes"],
+    "prohibited_interpretations": ["CSD average MW equals settlement-metered MWh"],
+    "required_caveats": ["CSD operational output and settlement-metered energy are distinct source concepts."],
+    "expected_numerical_relationships": ["hourly CSD energy estimate equals average MW times one hour before comparison with MWh"]
+  },
+  {
+    "id": "ramp-001",
+    "question": "What were the largest wind ramps in this month?",
+    "expected_tools": ["analyze_ramps"],
+    "required_concepts": ["cadence", "consecutive observations"],
+    "forbidden_claims": ["bridge missing intervals"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "series", "cadence"],
+      "constraints": ["series is wind and cadence matches the selected source"]
+    },
+    "expected_datasets": ["Historical CSD Generation Data"],
+    "prohibited_interpretations": ["bridge missing intervals"],
+    "required_caveats": ["Do not calculate a ramp across a cadence gap."],
+    "expected_numerical_relationships": ["ramp rate equals value change divided by elapsed hours for consecutive observations"]
+  },
+  {
+    "id": "event-004",
+    "question": "Which observed market variables moved most during this price event, including forecast and public-report context?",
+    "expected_tools": ["analyze_market_event"],
+    "required_concepts": ["focus versus baseline", "optional official evidence"],
+    "forbidden_claims": ["correlation equals causation"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use distinct bounded focus and baseline windows"]
+    },
+    "expected_datasets": ["Pool Price", "AIL", "Forecasts", "Supply Adequacy", "Supply Surplus", "FFR", "DDS", "TMR", "System Events"],
+    "prohibited_interpretations": ["correlation equals causation"],
+    "required_caveats": ["Optional source failures remain warnings and missing evidence, never fabricated zeroes."],
+    "expected_numerical_relationships": ["absolute change equals focus value minus baseline value for each comparable metric"]
   }
 ]

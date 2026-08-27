@@ -23,9 +23,9 @@ def _cases() -> list[dict[str, object]]:
     return data
 
 
-def test_eval_catalog_has_fifty_well_formed_cases() -> None:
+def test_eval_catalog_has_sixty_three_well_formed_cases() -> None:
     cases = _cases()
-    assert len(cases) == 50
+    assert len(cases) == 63
     identifiers = [case["id"] for case in cases]
     assert len(identifiers) == len(set(identifiers))
     for case in cases:
@@ -97,5 +97,11 @@ async def test_eval_tool_routes_exist_on_registered_surface() -> None:
         "analyze_market_event",
         "get_operating_reserve_prices",
         "summarize_operating_reserve_market",
+        "get_forecast",
+        "get_supply_adequacy",
+        "analyze_supply_surplus_events",
+        "calculate_asset_energy_revenue",
+        "compare_csd_to_metered",
+        "analyze_ramps",
     }
     assert roadmap <= expected

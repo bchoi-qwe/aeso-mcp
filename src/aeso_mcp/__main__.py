@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> None:
     else:
         from aeso_mcp.http_runtime import build_http_runtime
 
-        runtime = build_http_runtime(mcp, settings)
+        runtime = build_http_runtime(mcp, settings, host=args.host)
         mcp.run(
             transport="http",
             host=args.host,

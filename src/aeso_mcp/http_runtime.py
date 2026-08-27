@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import ipaddress
 import logging
 import math
 import re
@@ -28,6 +29,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from aeso_mcp.config import Settings
+from aeso_mcp.errors import ConfigurationError
 
 _PROBE_PATHS = frozenset({"/healthz", "/readyz"})
 _NO_STORE_HEADERS = {"Cache-Control": "no-store"}
@@ -326,8 +328,49 @@ class HttpRuntime:
     host_origin_protection: bool = True
 
 
-def build_http_runtime(mcp: FastMCP, settings: Settings) -> HttpRuntime:
+def is_loopback_bind(host: str) -> bool:
+    """Return whether an HTTP bind target is local-only.
+
+    Hostnames that cannot be resolved safely at startup are treated as remote.
+    This keeps an unusual hostname from accidentally bypassing the remote
+    authentication policy; DNS resolution is intentionally not performed here.
+    """
+    candidate = host.strip().lower().rstrip(".")
+    if candidate == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(candidate).is_loopback
+    except ValueError:
+        return False
+
+
+def validate_http_bind(settings: Settings, host: str) -> None:
+    """Reject an unauthenticated non-loopback HTTP bind by default.
+
+    Stdio is unaffected because it never calls this HTTP-only boundary.
+    ``http_allow_insecure_remote`` is intentionally explicit and defaults to
+    false so a deployment cannot become publicly reachable by accident.
+    """
+    if is_loopback_bind(host):
+        return
+    if settings.http_bearer_token is not None:
+        return
+    if settings.http_allow_insecure_remote:
+        return
+    raise ConfigurationError(
+        "Non-loopback HTTP binding requires AESO_MCP_HTTP_BEARER_TOKEN. "
+        "Set a bearer token or explicitly set AESO_MCP_HTTP_ALLOW_INSECURE_REMOTE=true."
+    )
+
+
+def build_http_runtime(
+    mcp: FastMCP,
+    settings: Settings,
+    *,
+    host: str = "127.0.0.1",
+) -> HttpRuntime:
     """Register probes and return strict, bounded HTTP transport options."""
+    validate_http_bind(settings, host)
     register_probe_routes(mcp)
     # Admission controls run before authentication so unauthenticated clients
     # cannot bypass the request and concurrency bounds while probing tokens.
@@ -371,5 +414,7 @@ __all__ = [
     "RequestConcurrencyMiddleware",
     "RequestObservabilityMiddleware",
     "build_http_runtime",
+    "is_loopback_bind",
     "register_probe_routes",
+    "validate_http_bind",
 ]

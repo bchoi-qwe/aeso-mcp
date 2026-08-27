@@ -41,6 +41,17 @@ remains refreshable; once the same key is replaced by final data it is no longer
 backfill target. CSD source objects are replaced atomically when their upstream identity changes,
 and affected partitions are rebuilt from the DuckDB index.
 
+Existing `get_pool_prices`, `get_load`, and analytics calls prefer local rows only when the
+complete requested UTC cadence is present and every required observation is non-preliminary.
+Incomplete, partial, preliminary, current, or future coverage falls back to the live provider and
+is never silently declared authoritative. The live provider remains the source used by sync, so
+an explicit refresh cannot read its own stale local output.
+
+DuckDB, PyArrow, archive parsing/hashing, and Parquet partition writes run outside the async event
+loop. Partition replacement uses a same-directory temporary file and atomic rename. Sync windows
+are split internally to the upstream Pool Price, AIL, and CSD request limits and emit MCP progress
+without coupling the domain service to FastMCP.
+
 `get_historical_store_status` reports observation coverage, source-file counts, Parquet
 partitions, schema version, configured path, detected cadence gaps, and dependency availability.
 The source manifest retains object identity/hash, update and retrieval times, row count, coverage,
@@ -48,7 +59,8 @@ observation semantics, and schema version for upstream lineage.
 
 ## Additional historical reports
 
-- `get_forecast` provides a generalized forecast contract; `series="ail"` is the currently
-  supported official series.
+- `get_forecast` provides a generalized forecast contract for AIL, Pool Price, wind, solar, and
+  current combined wind/solar. Each source keeps its own cadence, horizon, issue/target timestamps,
+  units, finality, and missing-actual semantics.
 - `get_uc_settlement_summary` returns hourly public UC settlement amount in CAD and charged
   volume in MW for inclusive report dates.

@@ -15,6 +15,7 @@ import pytest
 from aeso_mcp.app import build_container
 from aeso_mcp.config import Settings, clear_settings_cache
 from aeso_mcp.models.assets import AssetsRequest
+from aeso_mcp.models.forecasts import OfficialForecastRequest
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.grid import OutagesRequest
 from aeso_mcp.models.history import UnitCommitmentSettlementRequest
@@ -25,6 +26,14 @@ from aeso_mcp.models.operations import (
     MeteredVolumeRequest,
 )
 from aeso_mcp.models.prices import SystemMarginalPriceRequest
+from aeso_mcp.models.reports import (
+    DdsMarketReportRequest,
+    FfrNetScheduleRequest,
+    SupplyAdequacyRequest,
+    SupplySurplusRequest,
+    SystemEventsRequest,
+    TmrReferencePriceRequest,
+)
 from aeso_mcp.models.reserves import (
     OperatingReserveDateRangeRequest,
     OperatingReserveForecastRequest,
@@ -287,5 +296,69 @@ async def test_live_operating_reserve_and_uc_public_reports(
         )
         assert settlement.metadata.observation_count is not None
         assert settlement.metadata.observation_count >= len(settlement.intervals)
+    finally:
+        await container.aclose()
+
+
+@pytest.mark.asyncio
+async def test_live_official_forecasts_and_named_operational_reports(
+    live_settings: Settings,
+) -> None:
+    """Detect schema or endpoint drift across the new credential-free public products."""
+    container = build_container(live_settings)
+    try:
+        now = market_now()
+        for series in ("wind", "solar", "wind_solar"):
+            forecast = await container.forecasts.get_forecast(
+                OfficialForecastRequest(
+                    start=now,
+                    end=now + timedelta(hours=12),
+                    series=series,
+                    horizon="current_12_hour",
+                ),
+                paginate=False,
+            )
+            assert forecast.intervals
+            assert forecast.metadata.provider.value == "aeso_public_report"
+
+        market_day = start_of_market_day(now) - timedelta(days=1)
+        pool_forecast = await container.forecasts.get_forecast(
+            OfficialForecastRequest(
+                start=market_day,
+                end=market_day + timedelta(days=1),
+                series="pool_price",
+            ),
+            paginate=False,
+        )
+        assert pool_forecast.intervals
+
+        adequacy = await container.reports.get_supply_adequacy(
+            SupplyAdequacyRequest(), paginate=False
+        )
+        surplus = await container.reports.get_supply_surplus(SupplySurplusRequest(), paginate=False)
+        assert adequacy.intervals
+        assert surplus.intervals
+
+        report_start = now - timedelta(days=7)
+        ffr = await container.reports.get_ffr_net_schedule(
+            FfrNetScheduleRequest(start=report_start, end=now), paginate=False
+        )
+        dds = await container.reports.get_dds_market_report(
+            DdsMarketReportRequest(start=report_start, end=now), paginate=False
+        )
+        tmr = await container.reports.get_tmr_reference_price(
+            TmrReferencePriceRequest(), paginate=False
+        )
+        events = await container.reports.get_system_events(
+            SystemEventsRequest(start=report_start, end=now), paginate=False
+        )
+        assert ffr.intervals
+        assert dds.records
+        assert tmr.records
+        assert events.records
+        assert all(
+            response.metadata.provider.value == "aeso_public_report"
+            for response in (adequacy, surplus, ffr, dds, tmr, events)
+        )
     finally:
         await container.aclose()

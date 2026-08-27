@@ -136,6 +136,21 @@ class MarketEventReserveEvidence(BaseModel):
     offer_control_block_count: int = 0
 
 
+class MarketEventOfficialEvidence(BaseModel):
+    """Optional official-report context aligned to a market-event window."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    forecast_mae_by_series: dict[str, float] = Field(default_factory=dict)
+    supply_adequacy_statuses: list[str] = Field(default_factory=list)
+    supply_cushion_statuses: list[str] = Field(default_factory=list)
+    supply_surplus_statuses: list[str] = Field(default_factory=list)
+    average_ffr_net_schedule_mw: float | None = None
+    average_dds_available_mw: float | None = None
+    tmr_reference_price_cad_per_mwh: float | None = None
+    system_event_comments: list[str] = Field(default_factory=list)
+
+
 class MarketEventEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
     price: MarketEventPriceEvidence
@@ -144,6 +159,9 @@ class MarketEventEvidence(BaseModel):
     merit_order: MarketEventMeritOrderEvidence
     interties: MarketEventIntertieEvidence
     reserves: MarketEventReserveEvidence
+    official_reports: MarketEventOfficialEvidence = Field(
+        default_factory=MarketEventOfficialEvidence
+    )
     commitment_count: int | None = None
 
 

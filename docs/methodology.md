@@ -38,8 +38,10 @@ Zero or negative generation does not create a negative weighting denominator.
 
 ## Forecast error
 
-Error is `forecast - actual`. The service reports mean error, MAE, RMSE, MAPE (excluding zero
-actuals), and the same core errors by local market hour.
+Error is `forecast - actual`. The generalized service reports mean error, MAE, RMSE,
+denominator-aware MAPE (excluding zero actuals), requested absolute-error percentiles, paired and
+missing observation counts, and the same core errors by local market hour and forecast lead time
+when issue timestamps are available. AIL and renewable values are MW; Pool Price is CAD/MWh.
 
 ## Market-event evidence
 
@@ -49,6 +51,12 @@ reported energy blocks by asset before summing squared volume shares. Intertie u
 gross offer divided by positive available transfer capability, separated by import/export
 direction where available. Reserve procurement price, cleared volume, activation volume, and
 offer-control block counts remain separate concepts.
+
+Official adequacy/cushion bands are preserved as published categories rather than converted to
+invented MW midpoints. The derived supply-tightness label remains a separate transparent screening
+calculation. Supply-surplus event endings and durations exist only when a later published status
+provides an explicit boundary. FFR Net Schedule values are scheduled transfer (imports negative,
+exports positive), not FFR dispatch or activation.
 
 ## Association, not causation
 

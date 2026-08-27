@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import io
@@ -131,26 +132,21 @@ class HistoricalGenerationProvider:
     ) -> tuple[list[HistoricalGenerationInterval], str]:
         url = _DOWNLOAD_URL.format(shared=_SHARED_NAME, file_id=source.file_id)
         archive = await self._http.get_bytes(url)
-        digest = hashlib.sha256(archive).hexdigest()
-        rows = _read_single_csv(archive)
-        result: list[HistoricalGenerationInterval] = []
+        digest, rows = await asyncio.to_thread(_digest_and_read_archive, archive)
         retrieved_at = utc_now()
         duration = timedelta(hours=1) if interval == "hourly" else timedelta(minutes=5)
-        for row in rows:
-            parsed = _parse_generation_row(
-                row,
-                source=source,
-                interval=interval,
-                duration=duration,
-                retrieved_at=retrieved_at,
-            )
-            if not (to_utc(start) <= parsed.interval_start_utc < to_utc(end)):
-                continue
-            if asset_ids and parsed.asset_id.upper() not in asset_ids:
-                continue
-            if fuel_types and parsed.fuel_type.upper() not in fuel_types:
-                continue
-            result.append(parsed)
+        result = await asyncio.to_thread(
+            _parse_generation_rows,
+            rows,
+            source=source,
+            interval=interval,
+            duration=duration,
+            retrieved_at=retrieved_at,
+            start_utc=to_utc(start),
+            end_utc=to_utc(end),
+            asset_ids=asset_ids,
+            fuel_types=fuel_types,
+        )
         result.sort(key=lambda item: (item.interval_start_utc, item.asset_id))
         return result, digest
 
@@ -205,6 +201,43 @@ def _read_single_csv(archive: bytes) -> list[dict[str, str]]:
                 return [dict(row) for row in reader]
     except zipfile.BadZipFile as exc:
         raise DataValidationError("AESO CSD download was not a valid ZIP archive.") from exc
+
+
+def _digest_and_read_archive(archive: bytes) -> tuple[str, list[dict[str, str]]]:
+    """Hash and decompress a potentially large archive off the event loop."""
+
+    return hashlib.sha256(archive).hexdigest(), _read_single_csv(archive)
+
+
+def _parse_generation_rows(
+    rows: list[dict[str, str]],
+    *,
+    source: HistoricalGenerationSourceFile,
+    interval: Literal["hourly", "5-minute"],
+    duration: timedelta,
+    retrieved_at: datetime,
+    start_utc: datetime,
+    end_utc: datetime,
+    asset_ids: set[str] | None,
+    fuel_types: set[str] | None,
+) -> list[HistoricalGenerationInterval]:
+    result: list[HistoricalGenerationInterval] = []
+    for row in rows:
+        parsed = _parse_generation_row(
+            row,
+            source=source,
+            interval=interval,
+            duration=duration,
+            retrieved_at=retrieved_at,
+        )
+        if not (start_utc <= parsed.interval_start_utc < end_utc):
+            continue
+        if asset_ids and parsed.asset_id.upper() not in asset_ids:
+            continue
+        if fuel_types and parsed.fuel_type.upper() not in fuel_types:
+            continue
+        result.append(parsed)
+    return result
 
 
 def _parse_generation_row(

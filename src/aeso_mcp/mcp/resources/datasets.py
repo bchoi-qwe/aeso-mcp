@@ -35,7 +35,13 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Metered Volumes | `get_metered_volumes` | hourly by asset | MWh | actual | Authenticated Metered Volumes |
 | Operating Reserve Offer Control | `get_operating_reserve_offer_control` | historical hourly report | CAD/MWh, MW | final | Authenticated Operating Reserve Offer Control |
 | Historical CSD Generation | `get_historical_generation` | hourly / five-minute by asset | MW | operational actual | Official AESO CSD Box archive |
-| Actual / Forecast Series | `get_forecast` | hourly | MW | actual / forecast | Actual Forecast API (`ail`) |
+| Official Forecast Series | `get_forecast` | 10-minute / hourly | MW, CAD/MWh | forecast + optional actual | AIL API; ETS Pool Price and wind/solar publications |
+| Supply Adequacy / Cushion | `get_supply_adequacy` | hourly, current seven-day publication | status codes | forecast / preliminary | ETS named report |
+| Supply Surplus | `get_supply_surplus` | hourly status | status codes | forecast / preliminary | ETS named report |
+| FFR Net Schedule | `get_ffr_net_schedule` | hourly | MW | final historical schedule | ETS historical CSV |
+| Dispatch Down Service | `get_dispatch_down_service` | publication timestamp | MW | preliminary actual | ETS DDS report |
+| TMR Reference Price | `get_tmr_reference_price` | monthly effective date | CAD/MWh | final publication | ETS TMR report |
+| AIES System Events | `get_system_events` | event | — | published event log | ETS AIES Event Log |
 | UC Settlement Summary | `get_uc_settlement_summary` | hourly | CAD, MW | public report | ETS UC Summary CSV |
 | Operating Reserve Prices | `get_operating_reserve_prices` | daily product/time-block | CAD/MW, CAD/MWh, MW | public report | ETS active + standby price CSVs |
 | Operating Reserve Forecast | `get_operating_reserve_forecast` | hourly, seven-day | MW | forecast | ETS OR forecast CSV |
@@ -48,9 +54,13 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Period comparison | `compare_market_periods` | Pool price + load aggregates and deltas |
 | Price event detection | `find_price_events` | Threshold/percentile high-price events |
 | Condition evidence | `explain_market_conditions` | Structured associated changes (not causes) |
-| Forecast accuracy | `compare_forecast_to_actual` | AIL forecast vs actual error metrics |
+| Forecast accuracy | `compare_forecast_to_actual`, `analyze_forecast_error` | AIL plus official Pool Price / wind / solar paired errors |
 | Market history summary | `summarize_market_history` | Compact price/load buckets for long windows |
 | Supply tightness | `assess_supply_tightness` | Supply-margin arithmetic and screening signal |
+| Supply-surplus associations | `analyze_supply_surplus_events` | Explicit event bounds aligned to observed price, load, and renewables |
+| Asset energy revenue | `calculate_asset_energy_revenue` | Metered MWh times hourly Pool Price; gross energy revenue only |
+| CSD versus metered | `compare_csd_to_metered` | Operational CSD MW converted by cadence versus metered MWh |
+| Ramp analysis | `analyze_ramps` | Cadence-aware AIL, net-load, wind, solar, or asset ramps |
 | Price statistics / duration | `get_price_statistics`, `get_price_duration_curve` | Complete hourly Pool Price series |
 | Market event | `analyze_market_event` | Multi-series focus/baseline associations |
 | Capture price | `calculate_capture_prices` | Hourly generation-weighted Pool Price |
@@ -59,7 +69,7 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Intertie proxy | `analyze_intertie_utilization` | Gross offers relative to available capability |
 | Generation research | `analyze_generation_mix`, `analyze_asset_dispatch` | Fuel and individual-asset CSD analytics |
 | Outage association | `analyze_outage_impact` | Hourly outage-price comparison and correlation |
-| Forecast error | `analyze_forecast_error` | AIL errors overall and by market hour |
+| Forecast error | `analyze_forecast_error` | Bias, MAE, RMSE, denominator-aware MAPE, percentiles, hour, and lead time |
 | Reserve summary | `summarize_operating_reserve_market` | Product price/volume/activation summary |
 
 ## Timezone

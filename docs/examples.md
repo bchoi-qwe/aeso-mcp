@@ -173,6 +173,50 @@ buckets, without returning every hourly observation.”
 **Check:** Aggregates must use the complete internally retrieved series rather than one public
 pagination page. Preserve observation counts and incomplete-source warnings.
 
+## 16. Compare an official renewable forecast with actual generation
+
+**Question:** “For the published seven-day wind forecast, show the forecast band, actual output,
+and forecast-error distribution by market hour and lead time.”
+
+**Route:** Use `get_forecast` with `series="wind"` and the matching official horizon for raw rows;
+use `analyze_forecast_error` for the complete paired summary.
+
+**Check:** Keep forecast, actual, minimum, maximum, and capacity separate. Error is forecast minus
+actual. Current rows without actuals are excluded and counted, not treated as zero.
+
+## 17. Separate official adequacy from the derived screening signal
+
+**Question:** “What supply-adequacy and supply-cushion bands did AESO publish, and what does the
+server's transparent tightness calculation show?”
+
+**Route:** Use `get_supply_adequacy` and `assess_supply_tightness`.
+
+**Check:** The official categorical status is not the derived `tight`, `watch`, or `comfortable`
+label. Do not invent a numeric cushion from a status band.
+
+## 18. Describe a supply-surplus event
+
+**Question:** “Was Alberta in supply surplus during this zero-price window, and what price, load,
+and renewable values were observed?”
+
+**Route:** Use `get_supply_surplus` for source statuses and
+`analyze_supply_surplus_events` for aligned observations. Use `get_system_events` for published
+comments when the historical event log covers the date.
+
+**Check:** Report duration only when a later status supplies an explicit end. Observed variables
+are associations and do not establish what caused the surplus.
+
+## 19. Calculate gross asset energy revenue
+
+**Question:** “What gross energy revenue did asset X earn from hourly metered energy and Pool
+Price over this range?”
+
+**Route:** Use `calculate_asset_energy_revenue` with explicit asset IDs and a bounded interval.
+
+**Check:** Gross revenue is the sum of matched `metered MWh × Pool Price`. Unmatched hours remain
+missing. The result is not total settlement revenue and excludes OR, uplift, UC, transmission, and
+other settlement components.
+
 ## Investigation discipline
 
 Begin with the narrowest summary tool that answers the question, then retrieve raw rows only for

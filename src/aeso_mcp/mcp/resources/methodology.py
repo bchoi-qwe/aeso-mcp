@@ -238,6 +238,59 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
 - **Distinction**: This settlement summary is separate from the authenticated Unit Commitment
   directive report and from actual unit generation.
 """,
+    "official-forecasts": """# Methodology: Official Forecasts
+
+- **Series**: `get_forecast` uses one typed contract for AIL, Pool Price, wind, solar, and the
+  current combined wind/solar publication. Historical renewable files are separate by fuel.
+- **Cadence**: Current 12-hour renewable forecasts are ten-minute; current seven-day and
+  historical actual-versus-forecast files are hourly. Pool Price and AIL are hourly.
+- **Units**: Renewable and AIL values are MW; Pool Price is CAD/MWh.
+- **Semantics**: Forecast, actual, minimum, maximum, capacity, issue time, and target time remain
+  distinct. Missing actuals are not replaced with forecasts or zero.
+- **Finality**: Current forecasts and recently posted actuals are preliminary/revisable. Yearly
+  historical renewable files are marked final only according to their source publication.
+""",
+    "supply-adequacy": """# Methodology: Supply Adequacy and Supply Cushion
+
+- **Source**: Named AESO Supply Adequacy and Market Supply Cushion status report.
+- **Cadence**: Hourly status bands in the current seven-day publication, in
+  `America/Edmonton`.
+- **Fields**: Official adequacy and cushion codes/text are retained. Numeric MW values remain
+  null when the publication exposes only a band; the service does not invent a band midpoint.
+- **Distinction**: These AESO-published statuses are not the derived `tight`, `watch`, or
+  `comfortable` screening label returned by `assess_supply_tightness`.
+""",
+    "supply-surplus": """# Methodology: Supply Surplus
+
+- **Source**: Named AESO Supply Surplus status report and, for separate historical context,
+  bounded AIES Event Log messages.
+- **Semantics**: Status codes describe whether forecast prices include zero-price hours. They
+  are forecasts/statuses, not a value inferred from observed Pool Price.
+- **Event bounds**: A contiguous run gets an end only when a later published interval provides
+  that boundary. Open runs keep `end=null`; no duration is manufactured.
+- **Analytics**: Price, load, and renewable observations during an event are descriptive
+  associations and do not establish why the surplus occurred.
+""",
+    "ffr-net-schedule": """# Methodology: FFR Net Schedule
+
+- **Source**: Official AESO historical intertie-capability CSV used by the FFR Net Schedule
+  publication.
+- **Units and sign**: MW; AESO defines imports as negative and exports as positive.
+- **Components**: BC and Montana schedules remain separate from the net value. This dataset is
+  scheduled transfer, not FFR offered, dispatched, activated, or an operating-reserve product.
+- **Cadence/finality**: Hourly historical observations, published daily for the prior day.
+""",
+    "dds-tmr-system-events": """# Methodology: DDS, TMR, and System Events
+
+- **DDS**: `get_dispatch_down_service` returns published Dispatch Down Service availability in
+  MW. DDS is distinct from energy dispatch, generation, and metered output.
+- **TMR**: `get_tmr_reference_price` returns AESO's published CAD/MWh value by effective date;
+  it is not independently recomputed.
+- **System events**: `get_system_events` returns raw AIES Event Log comments plus a deterministic
+  descriptive label. The raw comment remains authoritative and no event end is inferred.
+- **Finality**: DDS can be preliminary; TMR publications are treated as final for their effective
+  dates; event-log finality remains unknown unless AESO states otherwise.
+""",
 }
 
 

@@ -24,9 +24,12 @@ from aeso_mcp.errors import DataValidationError, RateLimitError, UpstreamUnavail
 
 logger = logging.getLogger(__name__)
 
-# Only hosts we actually call today. Do not add speculative hosts.
-ALLOWED_PUBLIC_REPORT_HOSTS = frozenset({"ets.aeso.ca"})
+# Only official hosts used by the named report providers. Do not add a generic
+# or user-controlled host surface; the aeso.ca host is needed only to resolve
+# the AESO-linked yearly wind/solar actual-vs-forecast files.
+ALLOWED_PUBLIC_REPORT_HOSTS = frozenset({"ets.aeso.ca", "aeso.ca", "www.aeso.ca"})
 _MAX_REDIRECTS = 5
+_MAX_PUBLIC_REPORT_BYTES = 25 * 1024 * 1024
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -72,12 +75,14 @@ class AesoPublicReportsHttpClient:
         """GET an allow-listed absolute URL and return response text."""
         self._assert_allowed_url(url)
         response = await self._get(url)
+        _validate_report_body(response.content)
         return response.text
 
     async def get_bytes(self, url: str) -> bytes:
         """GET an allow-listed absolute URL and return raw bytes."""
         self._assert_allowed_url(url)
         response = await self._get(url)
+        _validate_report_body(response.content)
         return response.content
 
     def resolve_outage_report_url(self, href: str, *, base: str) -> str:
@@ -166,3 +171,10 @@ class AesoPublicReportsHttpClient:
         query = (parsed.query or "").lower()
         if "api-key" in query or "subscription-key" in query or "aeso_api_key" in query:
             raise DataValidationError("Credentials must not appear in public report URLs.")
+
+
+def _validate_report_body(content: bytes) -> None:
+    if len(content) > _MAX_PUBLIC_REPORT_BYTES:
+        raise DataValidationError("AESO public report exceeded the 25 MiB safety limit.")
+    if b"\x00" in content[:4096]:
+        raise DataValidationError("AESO public report returned unexpected binary content.")

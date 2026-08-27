@@ -9,8 +9,9 @@ uvx --from 'aeso-mcp[analytics]' aeso-mcp
 ```
 
 Do not commit a real subscription key. After configuring a client, ask it to list MCP tools and
-confirm that `get_market_snapshot`, `get_historical_generation`, and
-`summarize_operating_reserve_market` are present before starting an investigation.
+confirm that `get_market_snapshot`, `get_historical_generation`, `get_forecast`,
+`get_supply_adequacy`, and `summarize_operating_reserve_market` are present before starting an
+investigation.
 
 ## Codex and the ChatGPT desktop app
 

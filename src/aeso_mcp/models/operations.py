@@ -320,6 +320,11 @@ class SupplyTightnessResponse(WarningMixin):
     gross_supply_margin_mw: float | None = None
     reserve_adjusted_margin_mw: float | None = None
     reserve_adjusted_margin_pct_of_load: float | None = None
+    aeso_supply_adequacy_status_code: int | None = None
+    aeso_supply_adequacy_status: str | None = None
+    aeso_supply_cushion_code: int | None = None
+    aeso_supply_cushion_status: str | None = None
+    aeso_supply_cushion_mw: float | None = None
     tightness_signal: Literal["tight", "watch", "comfortable", "unknown"]
     methodology: str
     metadata: DatasetMetadata

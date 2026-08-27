@@ -64,7 +64,7 @@ def register_market_tools(mcp: FastMCP, container: AppContainer) -> None:
     )
     @map_errors
     async def get_pool_prices(request: PoolPriceRequest) -> PoolPriceResponse:
-        return await container.market.get_pool_prices(request)
+        return await container.history.get_historical_pool_prices(request)
 
     @mcp.tool(
         name="get_system_marginal_prices",
@@ -102,7 +102,7 @@ def register_market_tools(mcp: FastMCP, container: AppContainer) -> None:
     )
     @map_errors
     async def get_load(request: LoadRequest) -> LoadResponse:
-        return await container.market.get_load(request)
+        return await container.history.get_historical_load(request)
 
     @mcp.tool(
         name="get_generation",

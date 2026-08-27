@@ -2,28 +2,34 @@
 
 This file is generated from the registered FastMCP surface. Do not edit it by hand.
 
-## Tools (47)
+## Tools (57)
 
 | Tool | Inputs | Description |
 | --- | --- | --- |
 | `analyze_asset_dispatch` | `request` | Summarizes official hourly CSD dispatch for selected assets: energy, average/peak generation, available capacity factor, and hourly ramp extremes. |
-| `analyze_forecast_error` | `request` | Calculates AIL forecast-minus-actual bias, MAE, RMSE, MAPE, and error by market hour from paired AESO Actual Forecast Report observations. |
+| `analyze_forecast_error` | `request` | Calculates forecast-minus-actual bias, MAE, RMSE, denominator-aware MAPE, error percentiles, and breakdowns by market hour and lead time for AIL, Pool Price, wind, solar, or combined wind/solar when the official source provides paired values. |
 | `analyze_generation_mix` | `request` | Aggregates official hourly individual-asset CSD generation into energy, share, average MW, and peak MW by fuel type. |
 | `analyze_intertie_utilization` | `request` | Summarizes gross offers relative to available intertie transfer capability by path and direction. This is an offer-to-capability proxy, not metered flow. |
 | `analyze_market_event` | `request` | Compares structured price, demand/forecast, supply, merit-order, intertie, commitment, and operating-reserve evidence in a focus window against a supplied or immediately preceding baseline. Returns descriptive associations, not causal claims. |
 | `analyze_net_load` | `request` | Calculates hourly Alberta Internal Load minus selected CSD renewable generation (wind and solar by default), including average, peak, and minimum net load. |
 | `analyze_outage_impact` | `request` | Joins hourly generator outage capacity to Pool Price and reports high-outage versus other-hour price differences plus Pearson correlation as non-causal associations. |
+| `analyze_ramps` | `request` | Calculates cadence-aware up/down ramps for AIL, net load, wind, solar, or selected asset CSD generation. Supports hourly and five-minute cadence where the source supports it, skips non-consecutive observations, reports MW per interval and MW/hour, and never fills missing values. |
 | `analyze_supply_stack` | `request` | Analyzes one historical Energy Merit Order hour: price-sorted offer blocks, offered and dispatched MW, and the highest dispatched offer price. |
+| `analyze_supply_surplus_events` | `request` | Aligns official AESO supply-surplus status runs with observed Pool Price, AIL, and wind/solar generation. Durations are reported only when the official sequence provides an explicit end boundary. Results are descriptive associations, not causation. |
 | `assess_supply_tightness` | — | Combines the current market snapshot with hourly available generation capability and outages. Returns transparent supply-margin arithmetic plus a deterministic tight/watch/comfortable screening signal; it is not an AESO declaration or a causal price explanation. |
+| `calculate_asset_energy_revenue` | `request` | Joins hourly metered energy (MWh) by selected asset to hourly AESO Pool Price (CAD/MWh) over [start, end). Returns gross Pool Price energy revenue, realized capture price, arithmetic average matched market price, capture rate, matched hours, and explicit missing intervals. This is not total settlement revenue. |
 | `calculate_capture_prices` | `request` | Joins hourly Pool Price to official CSD generation and calculates generation-weighted capture price and capture rate by requested asset and/or fuel group. |
+| `compare_csd_to_metered` | `request` | Compares hourly operational Historical CSD generation (MW converted to interval MWh) against hourly settlement-metered energy (MWh) by asset. Returns matched-hour differences, percentage errors, and missing-source counts. CSD operational output and metered settlement energy are distinct source concepts. |
 | `compare_forecast_to_actual` | `request` | Compares Alberta Internal Load forecast versus actual over [start, end) in MW. Returns mean error, MAE, RMSE, MAPE, and paired intervals. Timestamps are America/Edmonton. |
 | `compare_market_periods` | `request` | Compares aggregate pool-price and load statistics between two America/Edmonton market periods. Returns averages, min/max/median prices, load stats, and deltas. Does not assert causation. |
 | `explain_market_conditions` | `request` | Returns structured evidence for market conditions in a focus window versus a baseline window (default: immediately preceding equal-length window). Includes observed metrics and associated_changes. Does not claim causation; the calling model should produce any natural-language explanation. |
 | `find_price_events` | `request` | Detects sustained high Pool Price events in CAD/MWh over [start, end). Threshold may be an absolute CAD/MWh value or a percentile (default 90th). Returns event boundaries, duration, peak/average price, and load context when available. |
 | `get_approved_transmission_outages` | `request` | Returns AESO-approved planned transmission outages (approval_status=approved). Omit start/end for the current public publication. Historical start/end select publication windows and are tightly bounded. Distinct from generator outages and from long-range tentative outages. |
 | `get_assets` | `request` | Returns AESO market asset registry records with optional filters for asset ID, pool participant, operating status, and asset type. Results may be truncated by the limit parameter. |
+| `get_dispatch_down_service` | `request` | Returns bounded official AESO Dispatch Down Service availability publications. DDS is distinct from energy-market dispatch and metered generation. |
 | `get_energy_merit_order` | `request` | Returns one historical AESO Energy Merit Order report date as paginated offer blocks. Reports are released with a 60-day delay. Prices are CAD/MWh and volumes are MW; timestamps use America/Edmonton. |
-| `get_forecast` | `request` | Returns paired AESO actual and forecast observations for a typed series over [start, end). Alberta Internal Load (series='ail') is currently supported. |
+| `get_ffr_net_schedule` | `request` | Returns the bounded official FFR Net Schedule archive. AESO defines scheduled imports as negative and exports as positive; this is not FFR offered or dispatched. |
+| `get_forecast` | `request` | Returns typed official AESO actual and forecast observations over [start, end) for AIL, Pool Price, wind, solar, or combined wind/solar where the requested source horizon exists. |
 | `get_generation` | `request` | Returns Alberta generation data. Omit start/end for the current fuel-mix snapshot (all fuels, MW). Provide start and end for historical wind and solar hourly generation. Renewable share uses wind + solar + hydro over total generation. |
 | `get_generation_capacity` | `request` | Returns hourly AIES maximum and available generation capability plus operating and mothball outages by fuel class. The inclusive date range is bounded to 31 days; values are MW and output is paginated. |
 | `get_historical_generation` | `request` | Returns official AESO CSD individual-asset generation over [start, end), at hourly or five-minute resolution. Supports bounded asset/fuel filters and pagination. This operational CSD archive is not settlement-metered data. |
@@ -47,7 +53,11 @@ This file is generated from the registered FastMCP surface. Do not edit it by ha
 | `get_price_statistics` | `request` | Calculates count, mean, median, range, population standard deviation, negative/high price hours, and requested percentiles from complete hourly Pool Price observations. |
 | `get_reserves` | — | Returns current AESO operating reserve indicators in MW, including contingency reserve required/dispatched and fast frequency response volumes when published. |
 | `get_secondary_offer_price_limit` | `request` | Returns the current AESO Secondary Offer Price Limit public report: whether the secondary offer cap is in effect and the CAD/MWh limit when posted. A null limit means the cap is not in effect. |
+| `get_supply_adequacy` | `request` | Returns the official AESO hourly Supply Adequacy and Market Supply Cushion status bands. These published categorical metrics are distinct from the derived assess_supply_tightness screening label. |
+| `get_supply_surplus` | `request` | Returns official AESO hourly Supply Surplus status observations. Zero-price states are forecasts/statuses; they are not inferred from observed Pool Price. |
+| `get_system_events` | `request` | Returns bounded official AIES Event Log messages with a deterministic descriptive classification. Raw published comments remain authoritative and no event end is inferred. |
 | `get_system_marginal_prices` | `request` | Returns AESO System Marginal Price (SMP) observations in CAD/MWh with minute-level interval boundaries for [start, end). Prefer get_pool_prices for hourly settlement prices. Timestamps are America/Edmonton. Maximum range: 7 days. |
+| `get_tmr_reference_price` | `request` | Returns the official AESO Transmission Must-Run reference price by effective date; the published value is returned without independent recomputation. |
 | `get_uc_settlement_summary` | `request` | Returns the public AESO hourly Unit Commitment settlement amount in CAD and charged volume in MW for an inclusive market-date range. |
 | `get_unit_commitments` | `request` | Returns AESO generating-unit commitment directives for an inclusive date range, paginated and bounded to 31 days. Includes issue, begin, operation-start, and operation-end timestamps in America/Edmonton. |
 | `summarize_market_history` | `request` | Returns compact hourly, daily, weekly, or monthly Pool Price statistics and optional Alberta Internal Load statistics for [start, end). Use this before requesting raw series for long periods; summaries are capped at 400 buckets. |
@@ -56,14 +66,16 @@ This file is generated from the registered FastMCP surface. Do not edit it by ha
 
 ## Dataset and retrieval coverage
 
-This table is generated from 30 registered retrieval tools and their live descriptions.
+This table is generated from 36 registered retrieval tools and their live descriptions.
 
 | Tool | Registered data contract |
 | --- | --- |
 | `get_approved_transmission_outages` | Returns AESO-approved planned transmission outages (approval_status=approved). Omit start/end for the current public publication. Historical start/end select publication windows and are tightly bounded. Distinct from generator outages and from long-range tentative outages. |
 | `get_assets` | Returns AESO market asset registry records with optional filters for asset ID, pool participant, operating status, and asset type. Results may be truncated by the limit parameter. |
+| `get_dispatch_down_service` | Returns bounded official AESO Dispatch Down Service availability publications. DDS is distinct from energy-market dispatch and metered generation. |
 | `get_energy_merit_order` | Returns one historical AESO Energy Merit Order report date as paginated offer blocks. Reports are released with a 60-day delay. Prices are CAD/MWh and volumes are MW; timestamps use America/Edmonton. |
-| `get_forecast` | Returns paired AESO actual and forecast observations for a typed series over [start, end). Alberta Internal Load (series='ail') is currently supported. |
+| `get_ffr_net_schedule` | Returns the bounded official FFR Net Schedule archive. AESO defines scheduled imports as negative and exports as positive; this is not FFR offered or dispatched. |
+| `get_forecast` | Returns typed official AESO actual and forecast observations over [start, end) for AIL, Pool Price, wind, solar, or combined wind/solar where the requested source horizon exists. |
 | `get_generation` | Returns Alberta generation data. Omit start/end for the current fuel-mix snapshot (all fuels, MW). Provide start and end for historical wind and solar hourly generation. Renewable share uses wind + solar + hydro over total generation. |
 | `get_generation_capacity` | Returns hourly AIES maximum and available generation capability plus operating and mothball outages by fuel class. The inclusive date range is bounded to 31 days; values are MW and output is paginated. |
 | `get_historical_generation` | Returns official AESO CSD individual-asset generation over [start, end), at hourly or five-minute resolution. Supports bounded asset/fuel filters and pagination. This operational CSD archive is not settlement-metered data. |
@@ -87,7 +99,11 @@ This table is generated from 30 registered retrieval tools and their live descri
 | `get_price_statistics` | Calculates count, mean, median, range, population standard deviation, negative/high price hours, and requested percentiles from complete hourly Pool Price observations. |
 | `get_reserves` | Returns current AESO operating reserve indicators in MW, including contingency reserve required/dispatched and fast frequency response volumes when published. |
 | `get_secondary_offer_price_limit` | Returns the current AESO Secondary Offer Price Limit public report: whether the secondary offer cap is in effect and the CAD/MWh limit when posted. A null limit means the cap is not in effect. |
+| `get_supply_adequacy` | Returns the official AESO hourly Supply Adequacy and Market Supply Cushion status bands. These published categorical metrics are distinct from the derived assess_supply_tightness screening label. |
+| `get_supply_surplus` | Returns official AESO hourly Supply Surplus status observations. Zero-price states are forecasts/statuses; they are not inferred from observed Pool Price. |
+| `get_system_events` | Returns bounded official AIES Event Log messages with a deterministic descriptive classification. Raw published comments remain authoritative and no event end is inferred. |
 | `get_system_marginal_prices` | Returns AESO System Marginal Price (SMP) observations in CAD/MWh with minute-level interval boundaries for [start, end). Prefer get_pool_prices for hourly settlement prices. Timestamps are America/Edmonton. Maximum range: 7 days. |
+| `get_tmr_reference_price` | Returns the official AESO Transmission Must-Run reference price by effective date; the published value is returned without independent recomputation. |
 | `get_uc_settlement_summary` | Returns the public AESO hourly Unit Commitment settlement amount in CAD and charged volume in MW for an inclusive market-date range. |
 | `get_unit_commitments` | Returns AESO generating-unit commitment directives for an inclusive date range, paginated and bounded to 31 days. Includes issue, begin, operation-start, and operation-end timestamps in America/Edmonton. |
 
@@ -97,12 +113,14 @@ This table is generated from 30 registered retrieval tools and their live descri
 - `daily_market_brief`
 - `investigate_price_event`
 
-## Resources (24)
+## Resources (29)
 
 - `aeso://capabilities`
 - `aeso://datasets`
 - `aeso://glossary`
+- `aeso://methodology/dds-tmr-system-events`
 - `aeso://methodology/energy-merit-order`
+- `aeso://methodology/ffr-net-schedule`
 - `aeso://methodology/generation`
 - `aeso://methodology/generation-capacity`
 - `aeso://methodology/generator-outages`
@@ -114,10 +132,13 @@ This table is generated from 30 registered retrieval tools and their live descri
 - `aeso://methodology/market-history`
 - `aeso://methodology/market-power-mitigation`
 - `aeso://methodology/metered-volume`
+- `aeso://methodology/official-forecasts`
 - `aeso://methodology/operating-reserve-market`
 - `aeso://methodology/operating-reserve-offer-control`
 - `aeso://methodology/pool-price`
 - `aeso://methodology/research-analytics`
+- `aeso://methodology/supply-adequacy`
+- `aeso://methodology/supply-surplus`
 - `aeso://methodology/supply-tightness`
 - `aeso://methodology/system-marginal-price`
 - `aeso://methodology/transmission-outages`

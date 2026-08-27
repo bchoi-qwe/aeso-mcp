@@ -6,13 +6,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from aeso_mcp.mcp.errors import map_errors
+from aeso_mcp.models.analytics import (
+    ForecastErrorAnalyticsRequest,
+    ForecastErrorAnalyticsResponse,
+)
 from aeso_mcp.models.research import (
     AssetDispatchRequest,
     AssetDispatchResponse,
     CapturePriceRequest,
     CapturePriceResponse,
-    ForecastErrorRequest,
-    ForecastErrorResponse,
     GenerationAnalysisRequest,
     GenerationMixResponse,
     IntertieUtilizationRequest,
@@ -179,11 +181,14 @@ def register_research_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="analyze_forecast_error",
         description=(
-            "Calculates AIL forecast-minus-actual bias, MAE, RMSE, MAPE, and error by market hour "
-            "from paired AESO Actual Forecast Report observations."
+            "Calculates forecast-minus-actual bias, MAE, RMSE, denominator-aware MAPE, error "
+            "percentiles, and breakdowns by market hour and lead time for AIL, Pool Price, "
+            "wind, solar, or combined wind/solar when the official source provides paired values."
         ),
         annotations=_READ_ONLY,
     )
     @map_errors
-    async def analyze_forecast_error(request: ForecastErrorRequest) -> ForecastErrorResponse:
-        return await container.research.analyze_forecast_error(request)
+    async def analyze_forecast_error(
+        request: ForecastErrorAnalyticsRequest,
+    ) -> ForecastErrorAnalyticsResponse:
+        return await container.analytics.analyze_forecast_error(request)

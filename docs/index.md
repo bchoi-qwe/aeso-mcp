@@ -17,6 +17,9 @@ Alberta Electric System Operator (AESO).
 - How did net load, generator outages, supply-stack offers, or intertie capability change?
 - What did AESO publish for operating-reserve prices, volume forecasts, and activations?
 - What individual-asset CSD generation did AESO publish at hourly or five-minute resolution?
+- How did the official wind, solar, AIL, or Pool Price forecast compare with paired actuals?
+- What official supply-adequacy, supply-surplus, FFR, DDS, TMR, or system-event evidence covers an event?
+- What gross hourly Pool Price energy revenue follows from an asset's metered MWh?
 
 ## Design commitments
 

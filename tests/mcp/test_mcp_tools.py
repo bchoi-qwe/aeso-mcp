@@ -48,6 +48,10 @@ EXPECTED_TOOLS = {
     "find_price_events",
     "explain_market_conditions",
     "compare_forecast_to_actual",
+    "calculate_asset_energy_revenue",
+    "compare_csd_to_metered",
+    "analyze_ramps",
+    "analyze_supply_surplus_events",
     "get_energy_merit_order",
     "get_unit_commitments",
     "get_generation_capacity",
@@ -63,6 +67,12 @@ EXPECTED_TOOLS = {
     "get_historical_store_status",
     "get_forecast",
     "get_uc_settlement_summary",
+    "get_supply_adequacy",
+    "get_supply_surplus",
+    "get_ffr_net_schedule",
+    "get_dispatch_down_service",
+    "get_tmr_reference_price",
+    "get_system_events",
     "get_price_statistics",
     "get_price_duration_curve",
     "analyze_market_event",
@@ -104,6 +114,11 @@ EXPECTED_RESOURCES = {
     "aeso://methodology/research-analytics",
     "aeso://methodology/operating-reserve-market",
     "aeso://methodology/uc-settlement",
+    "aeso://methodology/official-forecasts",
+    "aeso://methodology/supply-adequacy",
+    "aeso://methodology/supply-surplus",
+    "aeso://methodology/ffr-net-schedule",
+    "aeso://methodology/dds-tmr-system-events",
     "aeso://capabilities",
 }
 
@@ -251,6 +266,10 @@ def container(settings: Settings) -> AppContainer:
 
     market_power = MarketPowerService(public_reports, settings, cache)
 
+    history = AsyncMock()
+    history.get_historical_pool_prices.side_effect = market.get_pool_prices
+    history.get_historical_load.side_effect = market.get_load
+
     return AppContainer(
         settings=settings,
         cache=cache,
@@ -261,12 +280,15 @@ def container(settings: Settings) -> AppContainer:
         transmission=transmission,
         market_power=market_power,
         operations=operations,
-        history=AsyncMock(),
+        history=history,
+        forecasts=AsyncMock(),
+        reports=AsyncMock(),
         research=AsyncMock(),
         reserves=AsyncMock(),
         apim_http=AsyncMock(),
         public_reports_http=AsyncMock(),
         archive_http=AsyncMock(),
+        historical_store=AsyncMock(),
     )
 
 

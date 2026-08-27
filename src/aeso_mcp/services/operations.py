@@ -10,7 +10,7 @@ from statistics import mean, median
 from typing import Any
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import InvalidDateRangeError, QueryTooLargeError
+from aeso_mcp.errors import AesoMcpError, InvalidDateRangeError, QueryTooLargeError
 from aeso_mcp.models.common import (
     DataCompleteness,
     DatasetMetadata,
@@ -41,6 +41,7 @@ from aeso_mcp.models.operations import (
     UnitCommitmentResponse,
 )
 from aeso_mcp.models.prices import PoolPriceRequest
+from aeso_mcp.models.reports import SupplyAdequacyRequest
 from aeso_mcp.providers.capabilities import OperationalReportsProvider
 from aeso_mcp.services.cache import AsyncTTLCache, CacheInfo
 from aeso_mcp.services.market import MarketService
@@ -73,11 +74,13 @@ class OperationsService:
         market: MarketService,
         settings: Settings,
         cache: AsyncTTLCache,
+        reports: Any | None = None,
     ) -> None:
         self._provider = provider
         self._market = market
         self._settings = settings
         self._cache = cache
+        self._reports = reports
 
     async def get_energy_merit_order(
         self, request: DailyPageRequest, *, paginate: bool = True
@@ -625,6 +628,40 @@ class OperationsService:
         warnings = list(snapshot.warnings)
         if not same_hour:
             warnings.append("No generation-capacity interval was available near the snapshot time.")
+        official_adequacy = None
+        adequacy_failed = False
+        if self._reports is not None:
+            try:
+                adequacy = await self._reports.get_supply_adequacy(
+                    SupplyAdequacyRequest(
+                        start=snapshot.observed_at - timedelta(hours=1),
+                        end=snapshot.observed_at + timedelta(hours=2),
+                        limit=10,
+                    ),
+                    paginate=False,
+                )
+                official_adequacy = min(
+                    adequacy.intervals,
+                    key=lambda item: abs(
+                        (
+                            chronological_instant(item.interval_start)
+                            - chronological_instant(snapshot.observed_at)
+                        ).total_seconds()
+                    ),
+                    default=None,
+                )
+                warnings.extend(adequacy.warnings)
+                if official_adequacy is None:
+                    warnings.append(
+                        "The official AESO supply-adequacy report had no interval near the "
+                        "derived tightness snapshot."
+                    )
+            except AesoMcpError as exc:
+                adequacy_failed = True
+                warnings.append(
+                    "Official AESO supply-adequacy context was unavailable; the independent "
+                    f"derived tightness calculation remains valid ({exc.code})."
+                )
         return SupplyTightnessResponse(
             observed_at=snapshot.observed_at,
             alberta_internal_load_mw=load,
@@ -637,6 +674,21 @@ class OperationsService:
             gross_supply_margin_mw=gross_margin,
             reserve_adjusted_margin_mw=adjusted_margin,
             reserve_adjusted_margin_pct_of_load=adjusted_pct,
+            aeso_supply_adequacy_status_code=(
+                official_adequacy.adequacy_status_code if official_adequacy is not None else None
+            ),
+            aeso_supply_adequacy_status=(
+                official_adequacy.adequacy_status if official_adequacy is not None else None
+            ),
+            aeso_supply_cushion_code=(
+                official_adequacy.supply_cushion_code if official_adequacy is not None else None
+            ),
+            aeso_supply_cushion_status=(
+                official_adequacy.supply_cushion_status if official_adequacy is not None else None
+            ),
+            aeso_supply_cushion_mw=(
+                official_adequacy.supply_cushion_mw if official_adequacy is not None else None
+            ),
             tightness_signal=signal,  # type: ignore[arg-type]
             methodology=(
                 "gross margin = available generation capability + net imports - Alberta "
@@ -664,6 +716,9 @@ class OperationsService:
                     "gross_supply_margin_mw": "MW",
                     "reserve_adjusted_margin_mw": "MW",
                     "reserve_adjusted_margin_pct_of_load": "ratio",
+                    "aeso_supply_adequacy_status_code": "code",
+                    "aeso_supply_cushion_code": "code",
+                    "aeso_supply_cushion_mw": "MW",
                 },
                 granularity="current hourly screening indicator",
                 report_start=report_date,
@@ -671,6 +726,7 @@ class OperationsService:
                 completeness=(
                     DataCompleteness.DEGRADED
                     if not same_hour
+                    or adequacy_failed
                     or snapshot.metadata.completeness
                     in {DataCompleteness.PARTIAL, DataCompleteness.DEGRADED}
                     else DataCompleteness.COMPLETE
@@ -682,6 +738,7 @@ class OperationsService:
                         ("generation_capacity", available),
                         ("net_interchange", interchange),
                         ("contingency_reserve_requirement", reserve),
+                        ("aeso_supply_adequacy", official_adequacy),
                     )
                     if value is not None
                 ],
@@ -692,6 +749,7 @@ class OperationsService:
                         ("generation_capacity", available),
                         ("net_interchange", interchange),
                         ("contingency_reserve_requirement", reserve),
+                        ("aeso_supply_adequacy", official_adequacy),
                     )
                     if value is None
                 ],

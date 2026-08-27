@@ -5,10 +5,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from fastmcp import Context
+
 from aeso_mcp.mcp.errors import map_errors
+from aeso_mcp.models.forecasts import ForecastResponse, OfficialForecastRequest
 from aeso_mcp.models.history import (
-    ForecastRequest,
-    ForecastResponse,
     HistoricalGenerationRequest,
     HistoricalGenerationResponse,
     HistoricalStoreStatusResponse,
@@ -65,8 +66,12 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
     @map_errors
     async def sync_historical_store(
         request: HistoricalStoreSyncRequest,
+        ctx: Context,
     ) -> HistoricalStoreSyncResponse:
-        return await container.history.sync_historical_store(request)
+        await ctx.report_progress(0, 1, "Starting bounded historical-store synchronization")
+        response = await container.history.sync_historical_store(request)
+        await ctx.report_progress(1, 1, "Historical-store synchronization complete")
+        return response
 
     @mcp.tool(
         name="get_historical_store_status",
@@ -89,8 +94,9 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="get_forecast",
         description=(
-            "Returns paired AESO actual and forecast observations for a typed series over "
-            "[start, end). Alberta Internal Load (series='ail') is currently supported."
+            "Returns typed official AESO actual and forecast observations over [start, end) "
+            "for AIL, Pool Price, wind, solar, or combined wind/solar where the requested "
+            "source horizon exists."
         ),
         annotations={
             "readOnlyHint": True,
@@ -100,8 +106,8 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
         },
     )
     @map_errors
-    async def get_forecast(request: ForecastRequest) -> ForecastResponse:
-        return await container.history.get_forecast(request)
+    async def get_forecast(request: OfficialForecastRequest) -> ForecastResponse:
+        return await container.forecasts.get_forecast(request)
 
     @mcp.tool(
         name="get_uc_settlement_summary",

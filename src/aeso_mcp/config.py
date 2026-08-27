@@ -66,6 +66,17 @@ class Settings(BaseSettings):
         ),
         description="Optional bearer token required by the remote HTTP transport.",
     )
+    http_allow_insecure_remote: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AESO_MCP_HTTP_ALLOW_INSECURE_REMOTE",
+            "http_allow_insecure_remote",
+        ),
+        description=(
+            "Explicitly allow a non-loopback HTTP bind without bearer authentication. "
+            "Use only for a deliberately isolated deployment."
+        ),
+    )
     http_allowed_origins: HttpStringList = Field(
         default=None,
         validation_alias=AliasChoices(

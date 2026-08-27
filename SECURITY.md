@@ -34,7 +34,8 @@ Out of scope / residual risk:
   redirects are re-validated against the corresponding host allow-list
 - Bounded date ranges, observation caps, HTTP timeouts, and selective retries
 - Raw-series pagination plus compact server-side aggregation for long historical requests
-- HTTP Host/Origin validation, optional bearer authentication, per-client rate limits, global
+- HTTP Host/Origin validation, bearer authentication required for non-loopback binds by default,
+  an explicit insecure-remote override, per-client rate limits, global
   concurrency admission, request-body limits, and secret-free health/readiness probes
 - Correlation IDs and request timing logs that omit authorization headers, bodies, and query data
 - Stdio logging goes to **stderr** only

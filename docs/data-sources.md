@@ -42,7 +42,15 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | Intertie capability outages | `get_intertie_outages` | APIM Intertie API | key | No | None | implemented |
 | Operating Reserve Offer Control | `get_operating_reserve_offer_control` | APIM | key | No | Do not scrape | implemented |
 | Historical individual-asset CSD generation | `get_historical_generation` | Official AESO Box archive | none | No | fixed shared-folder adapter | implemented |
-| Actual / forecast series (AIL) | `get_forecast` | APIM Actual Forecast API | key | load merge | None | implemented |
+| AIL actual / forecast | `get_forecast(series="ail")` | APIM Actual Forecast API | key | load merge | None | implemented |
+| Pool Price forecast / actual | `get_forecast(series="pool_price")` | ETS Forecast and Actual Pool Price CSV | none | No | named public report | implemented |
+| Wind / solar forecast | `get_forecast(series="wind"|"solar"|"wind_solar")` | [AESO wind and solar forecasting](https://www.aeso.ca/grid/grid-planning/forecasting/wind-and-solar-power-forecasting/) | none | No | fixed current CSVs; yearly aeso.ca links | implemented |
+| Supply adequacy / market supply cushion | `get_supply_adequacy` | ETS Supply Adequacy named report | none | No | narrow HTML status-grid parser | implemented |
+| Supply surplus | `get_supply_surplus` | ETS Supply Surplus named report | none | No | narrow HTML status parser | implemented |
+| FFR Net Schedule | `get_ffr_net_schedule` | ETS historical intertie-capability CSV | none | No | fixed public CSV | implemented |
+| Dispatch Down Service | `get_dispatch_down_service` | ETS DDS Market Report CSV | none | No | named date-bounded report | implemented |
+| TMR reference price | `get_tmr_reference_price` | ETS TMR Reference Price CSV | none | No | fixed named report | implemented |
+| AIES system events | `get_system_events` | ETS AIES Event Log CSV | none | No | named date-bounded report | implemented |
 | Operating Reserve active/standby prices | `get_operating_reserve_prices` | ETS public CSV | none | No | direct | implemented |
 | Operating Reserve volume forecast | `get_operating_reserve_forecast` | ETS public CSV | none | No | direct | implemented |
 | Operating Reserve activations | `get_operating_reserve_activations` | ETS public CSV | none | No | direct | implemented |
@@ -57,5 +65,17 @@ source-specific client, not a separate runtime mode: the complete MCP server alw
 - **Long Range Significant Transmission Outages** are forward-looking and may be tentative (`approval_status=tentative`). Do not merge them silently with approved outages.
 - Generator outages (`get_outages`) are a different concept from transmission outages.
 - Historical CSD generation is operational average MW, not settlement-metered generation.
+- Current wind/solar 12-hour forecasts have ten-minute cadence; seven-day and historical
+  actual-versus-forecast files are hourly. Historical wind and solar are separate files, so the
+  combined series has no historical mode.
+- Supply-adequacy and supply-cushion publications expose official categorical bands. Null numeric
+  MW fields mean the source did not publish a numeric value; the service never substitutes a band
+  midpoint.
+- FFR Net Schedule imports are negative and exports positive. It is scheduled intertie transfer,
+  not FFR offered, dispatched, or activated.
+- DDS availability, energy dispatch, and metered generation are different concepts. The current
+  DDS contract exposes only fields verified in the named report.
+- System-event labels are deterministic classifications of raw comments; comments remain
+  authoritative and the service does not infer an end timestamp.
 - Active reserve price, standby premium, activation strike, and clearing blended price are
   separate economic fields and must not be collapsed into one generic reserve price.

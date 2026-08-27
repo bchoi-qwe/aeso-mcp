@@ -7,14 +7,22 @@ from typing import TYPE_CHECKING
 
 from aeso_mcp.mcp.errors import map_errors
 from aeso_mcp.models.analytics import (
+    AssetEnergyRevenueRequest,
+    AssetEnergyRevenueResponse,
     CompareForecastToActualRequest,
     CompareForecastToActualResponse,
     CompareMarketPeriodsRequest,
     CompareMarketPeriodsResponse,
+    CsdMeteredComparisonRequest,
+    CsdMeteredComparisonResponse,
     ExplainMarketConditionsRequest,
     ExplainMarketConditionsResponse,
     FindPriceEventsRequest,
     FindPriceEventsResponse,
+    RampAnalysisRequest,
+    RampAnalysisResponse,
+    SupplySurplusAnalysisRequest,
+    SupplySurplusAnalysisResponse,
 )
 
 if TYPE_CHECKING:
@@ -104,3 +112,84 @@ def register_analytics_tools(mcp: FastMCP, container: AppContainer) -> None:
         request: CompareForecastToActualRequest,
     ) -> CompareForecastToActualResponse:
         return await container.analytics.compare_forecast_to_actual(request)
+
+    @mcp.tool(
+        name="calculate_asset_energy_revenue",
+        description=(
+            "Joins hourly metered energy (MWh) by selected asset to hourly AESO Pool Price "
+            "(CAD/MWh) over [start, end). Returns gross Pool Price energy revenue, realized "
+            "capture price, arithmetic average matched market price, capture rate, matched "
+            "hours, and explicit missing intervals. This is not total settlement revenue."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    @map_errors
+    async def calculate_asset_energy_revenue(
+        request: AssetEnergyRevenueRequest,
+    ) -> AssetEnergyRevenueResponse:
+        return await container.analytics.calculate_asset_energy_revenue(request)
+
+    @mcp.tool(
+        name="compare_csd_to_metered",
+        description=(
+            "Compares hourly operational Historical CSD generation (MW converted to interval "
+            "MWh) against hourly settlement-metered energy (MWh) by asset. Returns matched-hour "
+            "differences, percentage errors, and missing-source counts. CSD operational output "
+            "and metered settlement energy are distinct source concepts."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    @map_errors
+    async def compare_csd_to_metered(
+        request: CsdMeteredComparisonRequest,
+    ) -> CsdMeteredComparisonResponse:
+        return await container.analytics.compare_csd_to_metered(request)
+
+    @mcp.tool(
+        name="analyze_ramps",
+        description=(
+            "Calculates cadence-aware up/down ramps for AIL, net load, wind, solar, or selected "
+            "asset CSD generation. Supports hourly and five-minute cadence where the source "
+            "supports it, skips non-consecutive observations, reports MW per interval and MW/hour, "
+            "and never fills missing values."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    @map_errors
+    async def analyze_ramps(request: RampAnalysisRequest) -> RampAnalysisResponse:
+        return await container.analytics.analyze_ramps(request)
+
+    @mcp.tool(
+        name="analyze_supply_surplus_events",
+        description=(
+            "Aligns official AESO supply-surplus status runs with observed Pool Price, AIL, "
+            "and wind/solar generation. Durations are reported only when the official sequence "
+            "provides an explicit end boundary. Results are descriptive associations, not causation."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    @map_errors
+    async def analyze_supply_surplus_events(
+        request: SupplySurplusAnalysisRequest,
+    ) -> SupplySurplusAnalysisResponse:
+        return await container.analytics.analyze_supply_surplus_events(request)

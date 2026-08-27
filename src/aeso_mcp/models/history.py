@@ -26,6 +26,20 @@ class HistoricalDataset(StrEnum):
     HISTORICAL_GENERATION = "historical_generation"
     POOL_PRICE = "pool_price"
     LOAD = "load"
+    # ``AIL`` is a domain-facing alias.  Persisted dataset names remain
+    # ``load`` for compatibility with the original store layout.
+    AIL = "load"
+
+
+class HistoricalMarketSeries(StrEnum):
+    """Market series persisted by :class:`~aeso_mcp.storage.HistoricalStore`."""
+
+    POOL_PRICE = "pool_price"
+    AIL = "ail"
+
+
+MarketSeriesSelection = Literal["pool_price", "pool_price_forecast", "ail", "ail_forecast"]
+MarketSeriesValue = MarketSeriesSelection
 
 
 class HistoricalGenerationRequest(DateRangeRequest):
@@ -133,6 +147,59 @@ class HistoricalStoreSyncResponse(WarningMixin):
     metadata: DatasetMetadata
 
 
+class HistoricalMarketSeriesInterval(BaseModel):
+    """One typed historical Pool Price or Alberta Internal Load observation.
+
+    A row may contain both an actual and a forecast value.  The storage query
+    can select either value kind without exposing SQL or a generic column
+    expression to callers.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    interval_start: datetime
+    interval_end: datetime
+    series: MarketSeriesValue
+    actual_value: float | None = None
+    forecast_value: float | None = None
+    unit: str
+    source_product: str
+    source_retrieved_at: datetime
+    source_updated_at: datetime | None = None
+    source_file_id: str | None = None
+    source_file_name: str | None = None
+    observation_type: ObservationType = ObservationType.ACTUAL
+    finality: FinalityStatus = FinalityStatus.UNKNOWN
+    completeness: DataCompleteness = DataCompleteness.COMPLETE
+    schema_version: int = 1
+
+    @model_validator(mode="after")
+    def _has_observation_value(self) -> HistoricalMarketSeriesInterval:
+        if self.actual_value is None and self.forecast_value is None:
+            raise ValueError("A market-series interval must contain an actual or forecast value.")
+        return self
+
+
+class HistoricalMarketSeriesCoverage(BaseModel):
+    """Coverage and source quality for a bounded stored market series."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    series: MarketSeriesSelection
+    start: datetime
+    end: datetime
+    cadence: str
+    expected_observations: int
+    observed_observations: int
+    missing_observations: int
+    complete: bool
+    finality: FinalityStatus
+    completeness: DataCompleteness
+    source_products: list[str] = Field(default_factory=list)
+    storage: Literal["duckdb"] = "duckdb"
+    schema_version: int = 1
+
+
 class HistoricalDatasetStatus(BaseModel):
     """Coverage status for one stored dataset."""
 
@@ -157,7 +224,7 @@ class HistoricalStoreStatusResponse(WarningMixin):
     metadata: DatasetMetadata
 
 
-ForecastSeries = Literal["ail"]
+ForecastSeries = Literal["ail", "pool_price"]
 
 
 class ForecastRequest(DateRangeRequest):
@@ -182,7 +249,7 @@ class ForecastInterval(BaseModel):
 
 
 class ForecastResponse(WarningMixin):
-    """General forecast observations; AIL is the current supported series."""
+    """General forecast observations for supported market series."""
 
     intervals: list[ForecastInterval]
     page: PageInfo

@@ -36,7 +36,12 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `get_historical_generation` — official individual-asset CSD history at hourly or five-minute resolution.
 - `sync_historical_store` — incremental DuckDB index and partitioned Parquet snapshots.
 - `get_historical_store_status` — local coverage, manifests, partitions, and schema status.
-- `get_forecast` — paired typed actual/forecast observations (`ail` currently supported).
+- `get_forecast` — paired typed AIL, Pool Price, wind, solar, or combined wind/solar forecasts where the selected official horizon exists.
+- `get_supply_adequacy` and `get_supply_surplus` — official hourly categorical status reports.
+- `get_ffr_net_schedule` — historical scheduled BC/MATL intertie transfer used for FFR reporting.
+- `get_dispatch_down_service` — DDS availability publications.
+- `get_tmr_reference_price` — published TMR reference price by effective date.
+- `get_system_events` — bounded AIES Event Log messages without inferred event endings.
 - `get_uc_settlement_summary` — hourly public UC amount and charged volume.
 - `get_operating_reserve_prices` — active/standby reserve price components and volumes.
 - `get_operating_reserve_forecast` — current seven-day reserve-volume forecast.
@@ -53,14 +58,18 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `get_metered_volumes` — hourly metered energy by asset, with optional participant filters.
 - `get_operating_reserve_offer_control` — delayed historical reserve offer-control blocks.
 - `summarize_market_history` — compact hourly, daily, weekly, or monthly price/load statistics.
-- `assess_supply_tightness` — transparent current supply-margin screening arithmetic.
+- `assess_supply_tightness` — transparent current supply-margin screening arithmetic enriched with distinct official adequacy/cushion evidence.
 
 ### Deterministic analytics
 
 - `compare_market_periods` — aggregate Pool Price and load comparison.
 - `find_price_events` — sustained high-price event detection.
 - `explain_market_conditions` — structured evidence against a baseline, without causal claims.
-- `compare_forecast_to_actual` — AIL forecast error metrics.
+- `compare_forecast_to_actual` — backward-compatible AIL forecast error metrics.
+- `calculate_asset_energy_revenue` — matched metered MWh times Pool Price gross energy revenue.
+- `compare_csd_to_metered` — operational CSD generation versus metered energy.
+- `analyze_ramps` — cadence-aware AIL, net-load, renewable, and asset ramps.
+- `analyze_supply_surplus_events` — descriptive market evidence during explicitly bounded surplus states.
 - `get_price_statistics` and `get_price_duration_curve` — Pool Price distributions.
 - `analyze_market_event` — focus/baseline price, demand, supply, offer, intertie, commitment, and reserve evidence.
 - `calculate_capture_prices` — generation-weighted price by asset or fuel.
@@ -69,7 +78,7 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `analyze_intertie_utilization` — gross-offer to capability proxy.
 - `analyze_generation_mix` and `analyze_asset_dispatch` — CSD generation research.
 - `analyze_outage_impact` — hourly outage-price association.
-- `analyze_forecast_error` — AIL error statistics and hourly profile.
+- `analyze_forecast_error` — generalized forecast errors for AIL, Pool Price, wind, and solar, including hour/lead-time profiles.
 - `summarize_operating_reserve_market` — reserve prices, volumes, and activations by product.
 
 ## Prompts
@@ -93,6 +102,8 @@ Methodology resources include `load`, `generation`, `generator-outages`,
 `intertie-outages`, `metered-volume`, `operating-reserve-offer-control`, `market-history`, and
 `supply-tightness`, `historical-generation`, `research-analytics`, `operating-reserve-market`,
 and `uc-settlement`.
+Additional methodology resources cover `official-forecasts`, `supply-adequacy`,
+`supply-surplus`, `ffr-net-schedule`, and `dds-tmr-system-events`.
 
 Data can be operational, preliminary, forecast, tentative, or revised. Always inspect response
 metadata and warnings before treating a value as final or inferring a cause.

@@ -17,18 +17,25 @@
 - Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
 - Official individual-asset Historical CSD Generation Data at hourly and five-minute resolution
 - Optional incremental DuckDB index and partitioned Parquet snapshots for repeatable research
+- Official AIL, Pool Price, wind, solar, and combined wind/solar forecast publications through
+  one typed `get_forecast` contract
+- Official supply-adequacy, supply-surplus, FFR Net Schedule, Dispatch Down Service, TMR
+  reference-price, and AIES system-event reports
 - Authenticated APIM reports for merit order, commitments, capability/outages, interties,
   metered volumes, and operating-reserve offer control
 - Deterministic analytics: compact history summaries, period comparison, event detection,
   condition evidence, price distributions, capture price, net load, supply stack, generation,
-  outage association, forecast accuracy, and transparent supply-tightness indicators
+  outage association, generalized forecast accuracy, asset gross energy revenue, CSD-versus-
+  metered comparisons, ramps, supply-surplus associations, and transparent supply-tightness
+  indicators
 - Public operating-reserve active/standby prices, seven-day forecasts, activations, and summaries
 - One complete server package and startup path: `AESO_API_KEY` is always required; there is no
   reduced credential-free server mode
 - Query bounds, cache provenance, completeness metadata, upstream `Retry-After` handling, and
   secret-safe machine-readable errors
-- Hardened HTTP transport with Host/Origin validation, optional bearer authentication, rate and
-  concurrency limits, request-size bounds, probes, and correlation IDs
+- Hardened HTTP transport with Host/Origin validation, bearer authentication required for
+  non-loopback binds by default, rate/concurrency limits, request-size bounds, probes, and
+  correlation IDs
 - Reusable MCP prompts plus glossary, capability, dataset, and methodology resources
 
 ## Implemented datasets
@@ -57,7 +64,13 @@
 | Secondary offer limit | `get_secondary_offer_price_limit` | Whether secondary offer cap is in effect |
 | Assets | `get_assets` | Registry with filters |
 | Historical CSD generation | `get_historical_generation` | Individual assets; hourly / five-minute operational MW |
-| Actual / forecast series | `get_forecast` | Paired AIL actual and forecast values |
+| Official forecasts | `get_forecast` | AIL / Pool Price / wind / solar; source-specific horizons and cadence |
+| Supply adequacy / cushion | `get_supply_adequacy` | Official hourly categorical status bands |
+| Supply surplus | `get_supply_surplus` | Official hourly zero-price forecast status |
+| FFR Net Schedule | `get_ffr_net_schedule` | Hourly scheduled imports (negative) / exports (positive) MW |
+| Dispatch Down Service | `get_dispatch_down_service` | Published DDS availability MW |
+| TMR reference price | `get_tmr_reference_price` | Published CAD/MWh value by effective date |
+| AIES system events | `get_system_events` | Bounded event-log comments; no inferred event end |
 | UC settlement summary | `get_uc_settlement_summary` | Hourly CAD amount and charged MW |
 | OR prices | `get_operating_reserve_prices` | Active and standby price components and volumes |
 | OR forecast | `get_operating_reserve_forecast` | Current seven-day hourly MW forecast |
@@ -68,7 +81,9 @@ Analytics: `summarize_market_history`, `assess_supply_tightness`, `compare_marke
 `get_price_statistics`, `get_price_duration_curve`, `analyze_market_event`,
 `calculate_capture_prices`, `analyze_net_load`, `analyze_supply_stack`,
 `analyze_intertie_utilization`, `analyze_generation_mix`, `analyze_asset_dispatch`,
-`analyze_outage_impact`, `analyze_forecast_error`, and `summarize_operating_reserve_market`.
+`analyze_outage_impact`, `analyze_forecast_error`, `calculate_asset_energy_revenue`,
+`compare_csd_to_metered`, `analyze_ramps`, `analyze_supply_surplus_events`, and
+`summarize_operating_reserve_market`.
 
 ## Architecture
 
@@ -81,7 +96,7 @@ MCP clients
 FastMCP adapter (aeso_mcp/mcp)
     |
     v
-Domain services (market, grid, history, research, reserves, operations, transmission)
+Domain services (market, grid, history, forecasts, reports, research, reserves, operations)
     |
     +---------------+----------------+----------------+----------------+
     |               |                |                |
@@ -144,8 +159,15 @@ uv run aeso-mcp
 
 ```bash
 docker build -t aeso-mcp .
-docker run --rm -e AESO_API_KEY=your-key -p 8000:8000 aeso-mcp
+docker run --rm \
+  -e AESO_API_KEY=your-key \
+  -e AESO_MCP_HTTP_BEARER_TOKEN=replace-with-a-long-random-token \
+  -p 8000:8000 \
+  aeso-mcp
 ```
+
+Send the same token in the MCP client's `Authorization: Bearer ...` header. The image binds to
+`0.0.0.0`, so it intentionally requires bearer authentication by default.
 
 ## Obtaining an AESO API key
 
@@ -183,10 +205,12 @@ Codex, ChatGPT desktop app, Claude Desktop, Claude Code, and Cursor setup instru
 uv run aeso-mcp --transport http --host 127.0.0.1 --port 8000
 ```
 
-HTTP always validates Host and Origin. For a remotely reachable deployment, explicitly set
-`AESO_MCP_HTTP_ALLOWED_HOSTS` and `AESO_MCP_HTTP_ALLOWED_ORIGINS`; set
-`AESO_MCP_HTTP_BEARER_TOKEN` to require bearer authentication. `/healthz` and `/readyz` contain no
-market data or secrets. See [.env.example](.env.example) for all bounded runtime settings.
+HTTP always validates Host and Origin. A non-loopback bind now refuses to start unless
+`AESO_MCP_HTTP_BEARER_TOKEN` is configured. An explicit
+`AESO_MCP_HTTP_ALLOW_INSECURE_REMOTE=true` override exists for isolated environments that accept
+the risk; it is never the default. Also set `AESO_MCP_HTTP_ALLOWED_HOSTS` and
+`AESO_MCP_HTTP_ALLOWED_ORIGINS` for the deployment. `/healthz` and `/readyz` contain no market data
+or secrets. See [.env.example](.env.example) for all bounded runtime settings.
 
 ## Example prompts
 
@@ -197,6 +221,9 @@ market data or secrets. See [.env.example](.env.example) for all bounded runtime
 - Which hours had the highest prices this week?
 - How much wind and solar are producing right now?
 - What happened during the largest price spike this week?
+- How inaccurate was the seven-day wind forecast during that event?
+- Was AESO publishing a supply-surplus or tight supply-cushion status at the time?
+- What gross Pool Price energy revenue did this asset's metered MWh earn?
 - Explain the evidence associated with today's price increase.
 
 ## Tools
@@ -233,7 +260,13 @@ market data or secrets. See [.env.example](.env.example) for all bounded runtime
 | `get_historical_generation` | Official individual-asset CSD archive history |
 | `sync_historical_store` | Incremental local DuckDB/Parquet ingestion |
 | `get_historical_store_status` | Local coverage, manifests, and partition status |
-| `get_forecast` | General actual/forecast contract (`ail` supported) |
+| `get_forecast` | Official AIL, Pool Price, wind, solar, and combined wind/solar forecasts |
+| `get_supply_adequacy` | Official supply-adequacy and market-supply-cushion status bands |
+| `get_supply_surplus` | Official hourly supply-surplus forecast status |
+| `get_ffr_net_schedule` | Historical scheduled FFR intertie transfer |
+| `get_dispatch_down_service` | Dispatch Down Service availability report |
+| `get_tmr_reference_price` | Published TMR reference price |
+| `get_system_events` | Bounded AIES Event Log messages |
 | `get_uc_settlement_summary` | Public hourly UC amount and charged volume |
 | `get_price_statistics` | Price distribution and volatility statistics |
 | `get_price_duration_curve` | Pool Price exceedance curve |
@@ -245,7 +278,11 @@ market data or secrets. See [.env.example](.env.example) for all bounded runtime
 | `analyze_generation_mix` | CSD energy and share by fuel |
 | `analyze_asset_dispatch` | Asset output, capacity factor, and ramps |
 | `analyze_outage_impact` | Hourly outage-price association |
-| `analyze_forecast_error` | AIL error statistics and hourly profile |
+| `analyze_forecast_error` | General forecast error, percentiles, market-hour and lead-time profiles |
+| `calculate_asset_energy_revenue` | Metered MWh × Pool Price gross energy revenue |
+| `compare_csd_to_metered` | Operational CSD output versus metered MWh |
+| `analyze_ramps` | Cadence-aware AIL, net-load, renewable, or asset ramps |
+| `analyze_supply_surplus_events` | Price/load/renewable associations during explicit surplus states |
 | `get_operating_reserve_prices` | Active/standby price components and volumes |
 | `get_operating_reserve_forecast` | Seven-day reserve-volume forecast |
 | `get_operating_reserve_activations` | Hourly standby activations |
@@ -321,11 +358,9 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 
 ## Development status
 
-The historical store, full CSD generation adapter, research analytics, operating-reserve market
-surface, eval suite, and documentation site are implemented under `Unreleased`. The stable public
-package remains `0.2.0` until this work passes release review and is intentionally versioned and
-published. Forecast retrieval/error analysis currently supports the official AIL actual/forecast
-series; additional forecast series require a verified official source and schema.
+Version 0.3.0 includes the historical store, full CSD generation adapter, official forecast/report
+providers, general research analytics, operating-reserve market surface, eval suite, and
+documentation site.
 
 ## Contributing
 

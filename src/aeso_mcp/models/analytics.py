@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from aeso_mcp.models.common import DatasetMetadata, DateRangeRequest, WarningMixin
 
@@ -169,4 +170,276 @@ class CompareForecastToActualResponse(WarningMixin):
         default_factory=list,
         description="Paired intervals (may be truncated for large ranges).",
     )
+    metadata: DatasetMetadata
+
+
+class AssetEnergyRevenueRequest(DateRangeRequest):
+    """Join hourly metered energy to hourly Pool Price for selected assets."""
+
+    asset_ids: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def _normalize_asset_ids(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip().upper() for value in values if value.strip()]
+        if not normalized:
+            raise ValueError("Provide at least one asset ID.")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("asset_ids must be unique.")
+        if any("," in value for value in normalized):
+            raise ValueError("asset_ids must contain individual asset IDs.")
+        return normalized
+
+
+class AssetEnergyRevenueResult(BaseModel):
+    """Gross energy-market revenue for one selected asset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str
+    matched_mwh: float
+    gross_energy_revenue_cad: float
+    realized_price_cad_per_mwh: float | None = None
+    average_market_price_cad_per_mwh: float | None = None
+    capture_rate: float | None = None
+    matched_observations: int
+    missing_intervals: int
+    missing_metered_intervals: int
+    missing_price_intervals: int
+
+
+class AssetEnergyRevenueResponse(WarningMixin):
+    """Deterministic gross Pool Price revenue from metered-energy joins."""
+
+    results: list[AssetEnergyRevenueResult]
+    metadata: DatasetMetadata
+
+
+class CsdMeteredComparisonRequest(DateRangeRequest):
+    """Compare hourly operational CSD generation with hourly metered energy."""
+
+    asset_ids: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def _normalize_csd_asset_ids(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip().upper() for value in values if value.strip()]
+        if not normalized:
+            raise ValueError("Provide at least one asset ID.")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("asset_ids must be unique.")
+        if any("," in value for value in normalized):
+            raise ValueError("asset_ids must contain individual asset IDs.")
+        return normalized
+
+
+class CsdMeteredComparisonResult(BaseModel):
+    """Hourly CSD-versus-metered comparison for one asset."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str
+    matched_hours: int
+    operational_generation_estimate_mwh: float
+    metered_energy_mwh: float
+    mean_signed_difference_mwh: float | None = None
+    mean_absolute_difference_mwh: float | None = None
+    maximum_absolute_difference_mwh: float | None = None
+    mean_absolute_percentage_difference: float | None = None
+    missing_csd_hours: int
+    missing_metered_hours: int
+
+
+class CsdMeteredComparisonResponse(WarningMixin):
+    """Operational CSD generation and settlement-metered energy are separate concepts."""
+
+    results: list[CsdMeteredComparisonResult]
+    metadata: DatasetMetadata
+
+
+# Acronym-style aliases are kept for callers that use the source's CSD spelling.
+CSDMeteredComparisonRequest = CsdMeteredComparisonRequest
+CSDMeteredComparisonResult = CsdMeteredComparisonResult
+CSDMeteredComparisonResponse = CsdMeteredComparisonResponse
+
+
+RampSeries = Literal["ail", "net_load", "wind", "solar", "asset"]
+RampCadence = Literal["hourly", "5-minute"]
+
+
+class RampAnalysisRequest(DateRangeRequest):
+    """Request cadence-aware ramp statistics for one supported market series."""
+
+    series: RampSeries = "ail"
+    cadence: RampCadence = "hourly"
+    asset_ids: list[str] = Field(default_factory=list, max_length=20)
+    percentiles: list[float] = Field(default_factory=lambda: [5, 25, 50, 75, 95], max_length=10)
+    largest_interval_count: int = Field(default=10, ge=1, le=50)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def _normalize_ramp_asset_ids(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip().upper() for value in values if value.strip()]
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("asset_ids must be unique.")
+        if any("," in value for value in normalized):
+            raise ValueError("asset_ids must contain individual asset IDs.")
+        return normalized
+
+    @field_validator("percentiles")
+    @classmethod
+    def _valid_ramp_percentiles(cls, values: list[float]) -> list[float]:
+        if any(value < 0 or value > 100 for value in values):
+            raise ValueError("percentiles must be between 0 and 100.")
+        if len(values) != len(set(values)):
+            raise ValueError("percentiles must be unique.")
+        return sorted(values)
+
+    @model_validator(mode="after")
+    def _asset_filter_is_explicit(self) -> RampAnalysisRequest:
+        if self.series == "asset" and not self.asset_ids:
+            raise ValueError("asset_ids are required when series='asset'.")
+        if self.series != "asset" and self.asset_ids:
+            raise ValueError("asset_ids are only valid when series='asset'.")
+        return self
+
+
+class RampInterval(BaseModel):
+    """One consecutive, cadence-validated ramp observation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    interval_start: datetime
+    interval_end: datetime
+    from_value: float
+    to_value: float
+    delta_mw: float
+    ramp_rate_mw_per_hour: float
+    direction: Literal["up", "down", "flat"]
+
+
+class RampAnalysisResponse(WarningMixin):
+    """Ramp statistics with explicit requested and observed cadence."""
+
+    series: RampSeries
+    cadence: RampCadence
+    cadence_minutes: int
+    observation_count: int
+    ramp_observation_count: int
+    maximum_up_ramp_mw: float | None = None
+    maximum_down_ramp_mw: float | None = None
+    maximum_up_ramp_mw_per_hour: float | None = None
+    maximum_down_ramp_mw_per_hour: float | None = None
+    ramp_percentiles_mw: dict[str, float] = Field(default_factory=dict)
+    largest_ramps: list[RampInterval] = Field(default_factory=list)
+    metadata: DatasetMetadata
+
+
+class SupplySurplusAnalysisRequest(DateRangeRequest):
+    """Bounded descriptive analysis of officially published surplus events."""
+
+
+class SupplySurplusEventMarketEvidence(BaseModel):
+    """Observed market values aligned to one published supply-surplus event."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: datetime
+    end: datetime | None = None
+    duration_hours: float | None = None
+    status: str
+    average_pool_price_cad_per_mwh: float | None = None
+    minimum_pool_price_cad_per_mwh: float | None = None
+    maximum_pool_price_cad_per_mwh: float | None = None
+    average_load_mw: float | None = None
+    average_renewable_generation_mw: float | None = None
+    price_observation_count: int = 0
+    load_observation_count: int = 0
+    renewable_observation_count: int = 0
+
+
+class SupplySurplusAnalysisResponse(WarningMixin):
+    """Descriptive associations around AESO-published supply-surplus states."""
+
+    event_count: int
+    explicitly_bounded_event_count: int
+    total_explicit_duration_hours: float
+    events: list[SupplySurplusEventMarketEvidence]
+    metadata: DatasetMetadata
+
+
+ForecastAnalyticsSeries = Literal["ail", "pool_price", "wind", "solar", "wind_solar"]
+
+
+class ForecastErrorAnalyticsRequest(DateRangeRequest):
+    """Generic forecast-error request for supported actual/forecast pairs."""
+
+    series: ForecastAnalyticsSeries = "ail"
+    percentiles: list[float] = Field(default_factory=lambda: [50, 90, 95], max_length=10)
+
+    @field_validator("percentiles")
+    @classmethod
+    def _valid_forecast_percentiles(cls, values: list[float]) -> list[float]:
+        if any(value < 0 or value > 100 for value in values):
+            raise ValueError("percentiles must be between 0 and 100.")
+        if len(values) != len(set(values)):
+            raise ValueError("percentiles must be unique.")
+        return sorted(values)
+
+
+class ForecastErrorAnalyticsInterval(BaseModel):
+    """One paired forecast and actual value with source-agnostic units."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    interval_start: datetime
+    interval_end: datetime | None = None
+    actual_value: float
+    forecast_value: float
+    error: float
+    absolute_error: float
+    absolute_percentage_error: float | None = None
+    unit: str
+    lead_time_hours: float | None = None
+
+
+class ForecastErrorAnalyticsByHour(BaseModel):
+    """Forecast-error summary grouped by local market hour."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    market_hour: int
+    observation_count: int
+    mean_error: float
+    mean_absolute_error: float
+    root_mean_squared_error: float
+
+
+class ForecastErrorAnalyticsByLeadTime(BaseModel):
+    """Forecast-error summary grouped by published lead time when available."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lead_time_hours: float
+    observation_count: int
+    mean_error: float
+    mean_absolute_error: float
+    root_mean_squared_error: float
+
+
+class ForecastErrorAnalyticsResponse(WarningMixin):
+    """Generalized forecast-error metrics with explicit missing-pair counts."""
+
+    series: ForecastAnalyticsSeries
+    observation_count: int
+    mean_error: float | None = None
+    mean_absolute_error: float | None = None
+    root_mean_squared_error: float | None = None
+    mean_absolute_percentage_error: float | None = None
+    error_percentiles: dict[str, float] = Field(default_factory=dict)
+    missing_forecast_count: int = 0
+    missing_actual_count: int = 0
+    by_market_hour: list[ForecastErrorAnalyticsByHour] = Field(default_factory=list)
+    by_lead_time: list[ForecastErrorAnalyticsByLeadTime] = Field(default_factory=list)
+    intervals: list[ForecastErrorAnalyticsInterval] = Field(default_factory=list)
     metadata: DatasetMetadata

@@ -10,7 +10,7 @@ import pytest
 import respx
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import DataValidationError
+from aeso_mcp.errors import DataValidationError, RateLimitError, UpstreamUnavailableError
 from aeso_mcp.providers.public_reports import (
     LONG_RANGE_LANDING_URL,
     AesoPublicReportsProvider,
@@ -20,8 +20,8 @@ from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _settings() -> Settings:
-    return Settings(aeso_api_key="test-key")  # type: ignore[arg-type]
+def _settings(**overrides: object) -> Settings:
+    return Settings.model_validate({"aeso_api_key": "test-key", **overrides})
 
 
 @pytest.fixture
@@ -149,3 +149,33 @@ async def test_mcsinr_schema_drift_fails_loudly(
     )
     with pytest.raises(DataValidationError, match="schema changed"):
         await public_provider.get_monthly_cumulative_net_revenue()
+
+
+@respx.mock
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("status", "error_type"),
+    [(404, DataValidationError), (429, RateLimitError), (503, UpstreamUnavailableError)],
+)
+async def test_public_client_maps_http_failures(status: int, error_type: type[Exception]) -> None:
+    respx.get("http://ets.aeso.ca/report.csv").mock(return_value=httpx.Response(status))
+    client = AesoPublicReportsHttpClient(_settings(http_max_retries=0))
+    try:
+        with pytest.raises(error_type):
+            await client.get_bytes("http://ets.aeso.ca/report.csv")
+    finally:
+        await client.aclose()
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_public_client_rejects_unexpected_binary_content() -> None:
+    respx.get("http://ets.aeso.ca/report.csv").mock(
+        return_value=httpx.Response(200, content=b"PK\x00binary")
+    )
+    client = AesoPublicReportsHttpClient(_settings())
+    try:
+        with pytest.raises(DataValidationError, match="binary content"):
+            await client.get_bytes("http://ets.aeso.ca/report.csv")
+    finally:
+        await client.aclose()

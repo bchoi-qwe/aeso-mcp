@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Sequence
 from datetime import date, datetime, timedelta
 from itertools import pairwise
 from statistics import mean, median, pstdev
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import AesoMcpError, AuthenticationError
@@ -21,6 +21,7 @@ from aeso_mcp.models.common import (
     ObservationType,
     ProviderName,
 )
+from aeso_mcp.models.forecasts import OfficialForecastRequest
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.grid import OutagesRequest
 from aeso_mcp.models.history import ForecastRequest, HistoricalGenerationRequest
@@ -30,6 +31,14 @@ from aeso_mcp.models.operations import (
     IntertieCapabilityRequest,
 )
 from aeso_mcp.models.prices import PoolPriceRequest
+from aeso_mcp.models.reports import (
+    DdsMarketReportRequest,
+    FfrNetScheduleRequest,
+    SupplyAdequacyRequest,
+    SupplySurplusRequest,
+    SystemEventsRequest,
+    TmrReferencePriceRequest,
+)
 from aeso_mcp.models.research import (
     AssetDispatchRequest,
     AssetDispatchResponse,
@@ -50,6 +59,7 @@ from aeso_mcp.models.research import (
     MarketEventEvidence,
     MarketEventIntertieEvidence,
     MarketEventMeritOrderEvidence,
+    MarketEventOfficialEvidence,
     MarketEventPriceEvidence,
     MarketEventRequest,
     MarketEventReserveEvidence,
@@ -92,6 +102,8 @@ class ResearchService:
         grid: GridService,
         reserves: OperatingReserveService,
         settings: Settings,
+        forecasts: Any | None = None,
+        reports: Any | None = None,
     ) -> None:
         self._market = market
         self._history = history
@@ -99,6 +111,8 @@ class ResearchService:
         self._grid = grid
         self._reserves = reserves
         self._settings = settings
+        self._forecasts = forecasts
+        self._reports = reports
 
     async def get_price_statistics(
         self, request: PriceStatisticsRequest
@@ -109,7 +123,7 @@ class ResearchService:
             max_days=self._settings.max_pool_price_days,
             label="price statistics range",
         )
-        response = await self._market.get_pool_prices(
+        response = await self._history.get_historical_pool_prices(
             PoolPriceRequest(start=start, end=end), paginate=False
         )
         values = [item.pool_price_cad_per_mwh for item in response.intervals]
@@ -130,7 +144,7 @@ class ResearchService:
             max_days=self._settings.max_pool_price_days,
             label="price duration curve range",
         )
-        response = await self._market.get_pool_prices(
+        response = await self._history.get_historical_pool_prices(
             PoolPriceRequest(start=start, end=end), paginate=False
         )
         values = sorted((item.pool_price_cad_per_mwh for item in response.intervals), reverse=True)
@@ -221,6 +235,12 @@ class ResearchService:
             "standby_reserve_volume": "MW",
             "standby_reserve_activated_volume": "MW",
             "reserve_offer_control_blocks": "blocks",
+            "pool_price_forecast_mae": "CAD/MWh",
+            "wind_forecast_mae": "MW",
+            "solar_forecast_mae": "MW",
+            "average_ffr_net_schedule": "MW",
+            "average_dds_available": "MW",
+            "tmr_reference_price": "CAD/MWh",
         }
         metrics = [
             _metric(name, focus_values.get(name), baseline_values.get(name), unit)
@@ -258,7 +278,11 @@ class ResearchService:
                 focus_end,
                 len(metrics),
                 units=units,
-                completeness=DataCompleteness.COMPLETE,
+                completeness=(
+                    DataCompleteness.DEGRADED
+                    if focus_warnings or baseline_warnings
+                    else DataCompleteness.COMPLETE
+                ),
                 extra={
                     "baseline_start": baseline_start.isoformat(),
                     "baseline_end": baseline_end.isoformat(),
@@ -270,10 +294,10 @@ class ResearchService:
     async def _event_values(
         self, start: datetime, end: datetime
     ) -> tuple[dict[str, float | None], MarketEventEvidence, list[str]]:
-        prices = await self._market.get_pool_prices(
+        prices = await self._history.get_historical_pool_prices(
             PoolPriceRequest(start=start, end=end), paginate=False
         )
-        loads = await self._market.get_load(
+        loads = await self._history.get_historical_load(
             LoadRequest(start=start, end=end, include_forecast=True), paginate=False
         )
         outages = await self._grid.get_outages(OutagesRequest(start=start, end=end))
@@ -555,6 +579,7 @@ class ResearchService:
             standby_activated_volume_mw=standby_activated_volume,
             offer_control_block_count=len(reserve_offer_blocks),
         )
+        official_evidence = await self._official_event_evidence(start, end, warnings)
         evidence = MarketEventEvidence(
             price=price_evidence,
             demand=demand_evidence,
@@ -562,6 +587,7 @@ class ResearchService:
             merit_order=merit_evidence,
             interties=intertie_evidence,
             reserves=reserve_evidence,
+            official_reports=official_evidence,
             commitment_count=(len(commitments.directives) if commitments is not None else None),
         )
         return (
@@ -608,9 +634,145 @@ class ResearchService:
                 "standby_reserve_volume": reserve_evidence.average_standby_volume_mw,
                 "standby_reserve_activated_volume": (reserve_evidence.standby_activated_volume_mw),
                 "reserve_offer_control_blocks": float(reserve_evidence.offer_control_block_count),
+                "pool_price_forecast_mae": official_evidence.forecast_mae_by_series.get(
+                    "pool_price"
+                ),
+                "wind_forecast_mae": official_evidence.forecast_mae_by_series.get("wind"),
+                "solar_forecast_mae": official_evidence.forecast_mae_by_series.get("solar"),
+                "average_ffr_net_schedule": official_evidence.average_ffr_net_schedule_mw,
+                "average_dds_available": official_evidence.average_dds_available_mw,
+                "tmr_reference_price": official_evidence.tmr_reference_price_cad_per_mwh,
             },
             evidence,
             list(dict.fromkeys(warnings)),
+        )
+
+    async def _official_event_evidence(
+        self,
+        start: datetime,
+        end: datetime,
+        warnings: list[str],
+    ) -> MarketEventOfficialEvidence:
+        forecast_mae: dict[str, float] = {}
+        if self._forecasts is not None:
+            for series in ("pool_price", "wind", "solar"):
+                response = await self._optional_event_source(
+                    f"{series} forecast error context",
+                    self._forecasts.get_forecast(
+                        OfficialForecastRequest(
+                            start=start,
+                            end=end,
+                            series=series,
+                            horizon="historical",
+                            include_actual=True,
+                            limit=2_000,
+                        ),
+                        paginate=False,
+                    ),
+                    warnings,
+                )
+                if response is None:
+                    continue
+                paired_errors = [
+                    abs(item.forecast_value - item.actual_value)
+                    for item in response.intervals
+                    if item.forecast_value is not None and item.actual_value is not None
+                ]
+                if paired_errors:
+                    forecast_mae[series] = mean(paired_errors)
+                warnings.extend(response.warnings)
+
+        if self._reports is None:
+            return MarketEventOfficialEvidence(forecast_mae_by_series=forecast_mae)
+
+        adequacy = await self._optional_event_source(
+            "supply adequacy context",
+            self._reports.get_supply_adequacy(
+                SupplyAdequacyRequest(start=start, end=end, limit=2_000),
+                paginate=False,
+            ),
+            warnings,
+        )
+        surplus = await self._optional_event_source(
+            "supply surplus context",
+            self._reports.get_supply_surplus(
+                SupplySurplusRequest(start=start, end=end, limit=2_000),
+                paginate=False,
+            ),
+            warnings,
+        )
+        ffr = await self._optional_event_source(
+            "FFR Net Schedule context",
+            self._reports.get_ffr_net_schedule(
+                FfrNetScheduleRequest(start=start, end=end, limit=2_000),
+                paginate=False,
+            ),
+            warnings,
+        )
+        dds = await self._optional_event_source(
+            "DDS context",
+            self._reports.get_dds_market_report(
+                DdsMarketReportRequest(start=start, end=end, limit=2_000),
+                paginate=False,
+            ),
+            warnings,
+        )
+        start_date, end_date = _inclusive_market_dates(start, end)
+        tmr = await self._optional_event_source(
+            "TMR reference-price context",
+            self._reports.get_tmr_reference_price(
+                TmrReferencePriceRequest(start_date=start_date, end_date=end_date),
+                paginate=False,
+            ),
+            warnings,
+        )
+        system_events = await self._optional_event_source(
+            "system-event context",
+            self._reports.get_system_events(
+                SystemEventsRequest(start=start, end=end, limit=2_000),
+                paginate=False,
+            ),
+            warnings,
+        )
+
+        for response in (adequacy, surplus, ffr, dds, tmr, system_events):
+            if response is not None:
+                warnings.extend(response.warnings)
+
+        tmr_prices = (
+            [item.reference_price_cad_per_mwh for item in tmr.records] if tmr is not None else []
+        )
+        return MarketEventOfficialEvidence(
+            forecast_mae_by_series=forecast_mae,
+            supply_adequacy_statuses=sorted(
+                {
+                    item.adequacy_status
+                    for item in (adequacy.intervals if adequacy is not None else [])
+                    if item.adequacy_status is not None
+                }
+            ),
+            supply_cushion_statuses=sorted(
+                {
+                    item.supply_cushion_status
+                    for item in (adequacy.intervals if adequacy is not None else [])
+                    if item.supply_cushion_status is not None
+                }
+            ),
+            supply_surplus_statuses=sorted(
+                {item.status for item in (surplus.intervals if surplus is not None else [])}
+            ),
+            average_ffr_net_schedule_mw=(
+                _mean([item.net_schedule_mw for item in ffr.intervals]) if ffr is not None else None
+            ),
+            average_dds_available_mw=(
+                _mean([item.available_dds_mw for item in dds.records]) if dds is not None else None
+            ),
+            tmr_reference_price_cad_per_mwh=(tmr_prices[-1] if tmr_prices else None),
+            system_event_comments=(
+                [item.comments for item in system_events.records[:25]]
+                if system_events is not None
+                else []
+            ),
         )
 
     async def _optional_event_source(
@@ -631,7 +793,7 @@ class ResearchService:
         start, end = validate_range(
             request.start, request.end, max_days=31, label="capture price range"
         )
-        prices = await self._market.get_pool_prices(
+        prices = await self._history.get_historical_pool_prices(
             PoolPriceRequest(start=start, end=end), paginate=False
         )
         generation = await self._history.get_historical_generation(
@@ -706,7 +868,9 @@ class ResearchService:
 
     async def analyze_net_load(self, request: NetLoadRequest) -> NetLoadResponse:
         start, end = validate_range(request.start, request.end, max_days=31, label="net load range")
-        loads = await self._market.get_load(LoadRequest(start=start, end=end), paginate=False)
+        loads = await self._history.get_historical_load(
+            LoadRequest(start=start, end=end), paginate=False
+        )
         generation = await self._history.get_historical_generation(
             HistoricalGenerationRequest(
                 start=start,
@@ -982,7 +1146,7 @@ class ResearchService:
             max_days=self._settings.max_load_days,
             label="outage impact range",
         )
-        prices = await self._market.get_pool_prices(
+        prices = await self._history.get_historical_pool_prices(
             PoolPriceRequest(start=start, end=end), paginate=False
         )
         outages = await self._grid.get_outages(OutagesRequest(start=start, end=end))

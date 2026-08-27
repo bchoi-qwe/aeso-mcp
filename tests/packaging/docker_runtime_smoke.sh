@@ -5,6 +5,7 @@ set -euo pipefail
 image_name=${1:?usage: docker_runtime_smoke.sh IMAGE}
 container_name="aeso-mcp-runtime-smoke-${RANDOM}-$$"
 port="${MCP_SMOKE_PORT:-18080}"
+bearer_token="container-smoke-bearer-token"
 response_file=$(mktemp)
 
 cleanup() {
@@ -16,6 +17,7 @@ trap cleanup EXIT
 docker run --detach \
   --name "$container_name" \
   --env AESO_API_KEY=container-smoke-key \
+  --env AESO_MCP_HTTP_BEARER_TOKEN="$bearer_token" \
   --publish "127.0.0.1:${port}:8000" \
   "$image_name" >/dev/null
 
@@ -32,7 +34,8 @@ curl --fail-with-body --silent --show-error \
   --request POST "http://127.0.0.1:${port}/mcp" \
   --header 'content-type: application/json' \
   --header 'accept: application/json, text/event-stream' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"docker-smoke","version":"0"}}}'
+  --header "authorization: Bearer ${bearer_token}" \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"docker-smoke","version":"0"}}}'
 
 grep --quiet '"serverInfo"' "$response_file"
 echo "Docker runtime MCP initialize smoke passed"
