@@ -31,6 +31,7 @@ from aeso_mcp.models.operations import (
     IntertieCapabilityRequest,
 )
 from aeso_mcp.models.prices import PoolPriceRequest
+from aeso_mcp.models.provenance import AnalysisSource, AnalysisSourceRole
 from aeso_mcp.models.reports import (
     DdsMarketReportRequest,
     FfrNetScheduleRequest,
@@ -85,6 +86,7 @@ from aeso_mcp.services.grid import GridService
 from aeso_mcp.services.history import HistoryService
 from aeso_mcp.services.market import MarketService
 from aeso_mcp.services.operations import OperationsService
+from aeso_mcp.services.provenance import analysis_source_from_response, build_analysis_manifest
 from aeso_mcp.services.reserves import OperatingReserveService
 from aeso_mcp.timeutil import chronological_instant, to_market, to_utc, utc_now, validate_range
 
@@ -200,11 +202,11 @@ class ResearchService:
             baseline_end = focus_start
             baseline_start = to_market(to_utc(focus_start) - duration)
 
-        focus_values, focus_evidence, focus_warnings = await self._event_values(
-            focus_start, focus_end
+        focus_values, focus_evidence, focus_warnings, focus_sources = await self._event_values(
+            focus_start, focus_end, role="focus"
         )
-        baseline_values, _, baseline_warnings = await self._event_values(
-            baseline_start, baseline_end
+        baseline_values, _, baseline_warnings, baseline_sources = await self._event_values(
+            baseline_start, baseline_end, role="baseline"
         )
         units = {
             "average_pool_price": "CAD/MWh",
@@ -259,6 +261,7 @@ class ResearchService:
             f"{item.name}: {(item.percent_change or 0.0) * 100:+.1f}% versus baseline"
             for item in ranked
         ]
+        warnings = list(dict.fromkeys(focus_warnings + baseline_warnings))
         return MarketEventResponse(
             focus_start=focus_start,
             focus_end=focus_end,
@@ -271,6 +274,18 @@ class ResearchService:
                 "Compares observed focus-window aggregates with a separate baseline window. "
                 "Ranked changes are descriptive associations; they do not establish that any "
                 "metric caused the observed price outcome."
+            ),
+            analysis_manifest=build_analysis_manifest(
+                methodology_version="market-event-v1",
+                sources=focus_sources + baseline_sources,
+                parameters={
+                    "focus_start": focus_start.isoformat(),
+                    "focus_end": focus_end.isoformat(),
+                    "baseline_start": baseline_start.isoformat(),
+                    "baseline_end": baseline_end.isoformat(),
+                    "high_price_threshold_cad_per_mwh": 100.0,
+                },
+                warnings=warnings,
             ),
             metadata=_derived_meta(
                 "Market Event Analysis",
@@ -288,12 +303,21 @@ class ResearchService:
                     "baseline_end": baseline_end.isoformat(),
                 },
             ),
-            warnings=list(dict.fromkeys(focus_warnings + baseline_warnings)),
+            warnings=warnings,
         )
 
     async def _event_values(
-        self, start: datetime, end: datetime
-    ) -> tuple[dict[str, float | None], MarketEventEvidence, list[str]]:
+        self,
+        start: datetime,
+        end: datetime,
+        *,
+        role: AnalysisSourceRole,
+    ) -> tuple[
+        dict[str, float | None],
+        MarketEventEvidence,
+        list[str],
+        list[AnalysisSource],
+    ]:
         prices = await self._history.get_historical_pool_prices(
             PoolPriceRequest(start=start, end=end), paginate=False
         )
@@ -309,6 +333,36 @@ class ResearchService:
             ),
             paginate=False,
         )
+        sources = [
+            analysis_source_from_response(
+                prices,
+                role=role,
+                dataset="Pool Price",
+                requested_start=start,
+                requested_end=end,
+            ),
+            analysis_source_from_response(
+                loads,
+                role=role,
+                dataset="Alberta Internal Load",
+                requested_start=start,
+                requested_end=end,
+            ),
+            analysis_source_from_response(
+                outages,
+                role=role,
+                dataset="Generator Outages",
+                requested_start=start,
+                requested_end=end,
+            ),
+            analysis_source_from_response(
+                generation,
+                role=role,
+                dataset="Historical CSD Generation",
+                requested_start=start,
+                requested_end=end,
+            ),
+        ]
         start_date, end_date = _inclusive_market_dates(start, end)
         warnings = prices.warnings + loads.warnings + outages.warnings + generation.warnings
         capacity = await self._optional_event_source(
@@ -358,6 +412,23 @@ class ResearchService:
             ),
             warnings,
         )
+        for response, dataset in (
+            (capacity, "Generation Capacity"),
+            (interties, "Intertie Capability"),
+            (intertie_outages, "Intertie Capability Outages"),
+            (commitments, "Unit Commitments"),
+            (reserve_summary, "Operating Reserve Summary"),
+        ):
+            if response is not None:
+                sources.append(
+                    analysis_source_from_response(
+                        response,
+                        role=role,
+                        dataset=dataset,
+                        requested_start=start,
+                        requested_end=end,
+                    )
+                )
         merit_blocks = []
         reserve_offer_blocks = []
         for report_date in _dates(start_date, end_date):
@@ -372,6 +443,15 @@ class ResearchService:
             if response is not None:
                 merit_blocks.extend(response.blocks)
                 warnings.extend(response.warnings)
+                sources.append(
+                    analysis_source_from_response(
+                        response,
+                        role=role,
+                        dataset="Energy Merit Order",
+                        requested_start=start,
+                        requested_end=end,
+                    )
+                )
             reserve_offers = await self._optional_event_source(
                 f"operating-reserve offer control for {report_date.isoformat()}",
                 self._operations.get_operating_reserve_offer_control(
@@ -383,6 +463,15 @@ class ResearchService:
             if reserve_offers is not None:
                 reserve_offer_blocks.extend(reserve_offers.blocks)
                 warnings.extend(reserve_offers.warnings)
+                sources.append(
+                    analysis_source_from_response(
+                        reserve_offers,
+                        role=role,
+                        dataset="Operating Reserve Offer Control",
+                        requested_start=start,
+                        requested_end=end,
+                    )
+                )
 
         price_values = [item.pool_price_cad_per_mwh for item in prices.intervals]
         load_values = [item.load_mw for item in loads.intervals]
@@ -579,7 +668,13 @@ class ResearchService:
             standby_activated_volume_mw=standby_activated_volume,
             offer_control_block_count=len(reserve_offer_blocks),
         )
-        official_evidence = await self._official_event_evidence(start, end, warnings)
+        official_evidence = await self._official_event_evidence(
+            start,
+            end,
+            warnings,
+            manifest_sources=sources,
+            role=role,
+        )
         evidence = MarketEventEvidence(
             price=price_evidence,
             demand=demand_evidence,
@@ -645,6 +740,7 @@ class ResearchService:
             },
             evidence,
             list(dict.fromkeys(warnings)),
+            sources,
         )
 
     async def _official_event_evidence(
@@ -652,6 +748,9 @@ class ResearchService:
         start: datetime,
         end: datetime,
         warnings: list[str],
+        *,
+        manifest_sources: list[AnalysisSource] | None = None,
+        role: AnalysisSourceRole = "context",
     ) -> MarketEventOfficialEvidence:
         forecast_mae: dict[str, float] = {}
         if self._forecasts is not None:
@@ -673,6 +772,16 @@ class ResearchService:
                 )
                 if response is None:
                     continue
+                if manifest_sources is not None:
+                    manifest_sources.append(
+                        analysis_source_from_response(
+                            response,
+                            role=role,
+                            dataset=f"{series} Forecast",
+                            requested_start=start,
+                            requested_end=end,
+                        )
+                    )
                 paired_errors = [
                     abs(item.forecast_value - item.actual_value)
                     for item in response.intervals
@@ -738,6 +847,25 @@ class ResearchService:
         for response in (adequacy, surplus, ffr, dds, tmr, system_events):
             if response is not None:
                 warnings.extend(response.warnings)
+        if manifest_sources is not None:
+            for response, dataset in (
+                (adequacy, "Supply Adequacy"),
+                (surplus, "Supply Surplus"),
+                (ffr, "FFR Net Schedule"),
+                (dds, "Dispatch Down Service"),
+                (tmr, "TMR Reference Price"),
+                (system_events, "AIES System Events"),
+            ):
+                if response is not None:
+                    manifest_sources.append(
+                        analysis_source_from_response(
+                            response,
+                            role=role,
+                            dataset=dataset,
+                            requested_start=start,
+                            requested_end=end,
+                        )
+                    )
 
         tmr_prices = (
             [item.reference_price_cad_per_mwh for item in tmr.records] if tmr is not None else []

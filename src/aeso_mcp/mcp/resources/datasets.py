@@ -36,6 +36,13 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Operating Reserve Offer Control | `get_operating_reserve_offer_control` | historical hourly report | CAD/MWh, MW | final | Authenticated Operating Reserve Offer Control |
 | Historical CSD Generation | `get_historical_generation` | hourly / five-minute by asset | MW | operational actual | Official AESO CSD Box archive |
 | Official Forecast Series | `get_forecast` | 10-minute / hourly | MW, CAD/MWh | forecast + optional actual | AIL API; ETS Pool Price and wind/solar publications |
+| Historical Adequacy / Cushion | `get_research_data` | hourly web code | categorical code | final historical forecast publication | Fixed AESO XLSX assets |
+| Historical Transmission Outages | `get_research_data` | outage interval | source text | historical publication | Fixed AESO XLSX asset |
+| Planning-area Load / Generation | `get_research_data` | hourly by area | MW | historical actual | Fixed yearly AESO ZIP/CSV assets |
+| Constrained Volume | `get_research_data` | constrained hour by area/fuel | MWh, minutes | historical actual | Fixed AESO CSV asset |
+| EEA Events / OR Directives | `get_research_data` | event / directive | level, MW, MWh, seconds | fixed historical publication | Fixed AESO XLSX assets |
+| Pool Participants | `get_research_data` | current registry | — | current | Authenticated Pool Participant API |
+| System Frequency | `analyze_system_frequency` | 10-second internal observations | Hz, flagged-interval seconds | historical actual | Fixed yearly AESO CSV/ZIP assets; compact output only |
 | Supply Adequacy / Cushion | `get_supply_adequacy` | hourly, current seven-day publication | status codes | forecast / preliminary | ETS named report |
 | Supply Surplus | `get_supply_surplus` | hourly status | status codes | forecast / preliminary | ETS named report |
 | FFR Net Schedule | `get_ffr_net_schedule` | hourly | MW | final historical schedule | ETS historical CSV |
@@ -71,6 +78,11 @@ DATASETS_MARKDOWN = """# AESO MCP Dataset Catalog
 | Outage association | `analyze_outage_impact` | Hourly outage-price comparison and correlation |
 | Forecast error | `analyze_forecast_error` | Bias, MAE, RMSE, denominator-aware MAPE, percentiles, hour, and lead time |
 | Reserve summary | `summarize_operating_reserve_market` | Product price/volume/activation summary |
+| Participant concentration | `analyze_participant_concentration` | Current-mapping offered-volume shares, HHI, and explicit unmapped blocks |
+| Regional load/generation | `analyze_regional_load_generation` | Observed planning-area/region averages and load energy |
+| Constrained-volume context | `analyze_constrained_volume` | Area/fuel constrained MWh/minutes and optional matched Pool Price |
+| Scarcity context | `analyze_scarcity` | Categorical adequacy/cushion and EEA counts with optional price context |
+| Frequency statistics | `analyze_system_frequency` | Compact six-hour statistics; threshold exposure is an upper-bound proxy |
 
 ## Timezone
 All market timestamps are normalized to **America/Edmonton**. DST spring-forward days have

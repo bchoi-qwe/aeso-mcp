@@ -8,6 +8,7 @@ from aeso_mcp.mcp.tools.market import register_market_tools
 from aeso_mcp.mcp.tools.market_power import register_market_power_tools
 from aeso_mcp.mcp.tools.reports import register_report_tools
 from aeso_mcp.mcp.tools.research import register_research_tools
+from aeso_mcp.mcp.tools.research_data import register_research_data_tools
 from aeso_mcp.mcp.tools.reserves import register_reserve_tools
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "register_market_power_tools",
     "register_market_tools",
     "register_report_tools",
+    "register_research_data_tools",
     "register_research_tools",
     "register_reserve_tools",
 ]

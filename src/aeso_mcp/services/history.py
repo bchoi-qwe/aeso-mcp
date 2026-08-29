@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, TypeVar
@@ -40,7 +42,14 @@ from aeso_mcp.providers.historical_generation import HistoricalGenerationProvide
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.services.market import MarketService
 from aeso_mcp.storage.history import HistoricalStore
-from aeso_mcp.timeutil import start_of_market_day, to_market, to_utc, utc_now, validate_range
+from aeso_mcp.timeutil import (
+    add_elapsed,
+    start_of_market_day,
+    to_market,
+    to_utc,
+    utc_now,
+    validate_range,
+)
 
 _StoreResult = TypeVar("_StoreResult")
 
@@ -77,7 +86,10 @@ class HistoryService:
         return await asyncio.to_thread(function, *args, **kwargs)
 
     async def _store_enabled(self) -> bool:
-        return await self._store_call(self._store.dependencies_available)
+        checker = getattr(self._store, "dependencies_available", None)
+        if checker is None:
+            return True
+        return await self._store_call(checker)
 
     async def _sources_current(self, sources: list[Any]) -> bool:
         def check() -> bool:
@@ -239,7 +251,12 @@ class HistoryService:
                 )
                 for range_start, range_end in bounded_ranges:
                     response = await self._market.get_pool_prices(
-                        PoolPriceRequest(start=range_start, end=range_end), paginate=False
+                        PoolPriceRequest(
+                            start=range_start,
+                            end=range_end,
+                            include_forecast=True,
+                        ),
+                        paginate=False,
                     )
                     rows = [
                         {
@@ -252,6 +269,10 @@ class HistoryService:
                             "source_product": response.metadata.source_product
                             or "Pool Price Report",
                             "source_retrieved_at": response.metadata.retrieved_at,
+                            "source_updated_at": getattr(
+                                response.metadata, "publication_time", None
+                            ),
+                            "source_hash": _metadata_extra_value(response.metadata, "source_hash"),
                             "observation_type": response.metadata.observation_type.value,
                             "finality": response.metadata.finality.value,
                             "completeness": response.metadata.completeness.value,
@@ -264,6 +285,11 @@ class HistoryService:
                     )
                     count, rebuilt = await self._store_call(
                         self._store.upsert_market_series, dataset, rows
+                    )
+                    await self._persist_forecast_vintages(
+                        response,
+                        rows,
+                        series="pool_price",
                     )
                     written += count
                     partitions += rebuilt
@@ -316,6 +342,10 @@ class HistoryService:
                             "source_product": response.metadata.source_product
                             or "Actual Forecast Report",
                             "source_retrieved_at": response.metadata.retrieved_at,
+                            "source_updated_at": getattr(
+                                response.metadata, "publication_time", None
+                            ),
+                            "source_hash": _metadata_extra_value(response.metadata, "source_hash"),
                             "observation_type": response.metadata.observation_type.value,
                             "finality": response.metadata.finality.value,
                             "completeness": response.metadata.completeness.value,
@@ -328,6 +358,11 @@ class HistoryService:
                     )
                     count, rebuilt = await self._store_call(
                         self._store.upsert_market_series, dataset, rows
+                    )
+                    await self._persist_forecast_vintages(
+                        response,
+                        rows,
+                        series="ail",
                     )
                     written += count
                     partitions += rebuilt
@@ -363,6 +398,59 @@ class HistoryService:
             ),
             warnings=list(dict.fromkeys(warnings)),
         )
+
+    async def _persist_forecast_vintages(
+        self,
+        response: object,
+        rows: list[dict[str, object]],
+        *,
+        series: str,
+    ) -> None:
+        """Persist forecast-bearing market rows without changing v2 reads."""
+
+        upsert = getattr(self._store, "upsert_forecast_vintages", None)
+        if upsert is None:
+            # Small injected test doubles and older integrations may expose
+            # only the v2 market-series methods.
+            return
+        metadata = getattr(response, "metadata", None)
+        extra = getattr(metadata, "extra", {}) if metadata is not None else {}
+        if not isinstance(extra, Mapping):
+            extra = {}
+        source_product = getattr(metadata, "source_product", None) or (
+            "Pool Price Report" if series == "pool_price" else "Actual Forecast Report"
+        )
+        source_version = getattr(metadata, "api_version", None) or extra.get("source_version")
+        source_hash = extra.get("source_hash") or extra.get("content_hash")
+        publication_time = getattr(metadata, "publication_time", None)
+        retrieved_at = getattr(metadata, "retrieved_at", None)
+        vintage_rows = [
+            {
+                "interval_start": row["interval_start"],
+                "interval_end": row["interval_end"],
+                "series": series,
+                "horizon": "historical",
+                "forecast_value": row.get("forecast_value"),
+                "actual_value": row.get("actual_value"),
+                "unit": row.get("unit") or ("CAD/MWh" if series == "pool_price" else "MW"),
+                "source_product": source_product,
+                "publication_time": publication_time,
+                "retrieved_at": retrieved_at,
+                "source_version": source_version,
+                # A range-level fallback hash would make the same target
+                # acquire a different identity when a sync window is split
+                # differently.  Hash each forecast payload independently when
+                # the provider did not expose a stable source-object hash.
+                "source_hash": source_hash or _market_forecast_hash([row]),
+                "observation_type": "forecast",
+                "finality": getattr(metadata, "finality", "unknown"),
+                "completeness": getattr(metadata, "completeness", "complete"),
+            }
+            for row in rows
+            if row.get("forecast_value") is not None
+        ]
+        if vintage_rows:
+            await self._store_call(upsert, vintage_rows)
 
     async def _sync_generation(
         self,
@@ -499,9 +587,13 @@ class HistoryService:
             series,
             start=start,
             end=end,
-            value_kind="either",
+            # The actual coverage check above guarantees one complete row per
+            # target.  Reading actual rows keeps forecast-only legacy rows
+            # from inflating totals or pagination while retaining their
+            # forecast column on the same row when present.
+            value_kind="actual",
         )
-        if total < coverage.expected_observations:
+        if total != coverage.expected_observations:
             return None
         return rows, total, coverage
 
@@ -638,7 +730,7 @@ class HistoryService:
                 interval_start=row.interval_start,
                 interval_end=row.interval_end,
                 load_mw=row.actual_value if row.actual_value is not None else 0.0,
-                load_forecast_mw=row.forecast_value,
+                load_forecast_mw=(row.forecast_value if request.include_forecast else None),
             )
             for row in rows
             if row.actual_value is not None
@@ -697,6 +789,99 @@ class HistoryService:
             ),
             label="forecast range",
         )
+        if request.as_of is not None:
+            as_of = to_utc(request.as_of)
+            query = getattr(self._store, "query_forecast", None)
+            enabled = await self._store_enabled()
+            if query is not None and enabled:
+                rows, total = await self._store_call(
+                    query,
+                    request.series,
+                    start=start,
+                    end=end,
+                    as_of=as_of,
+                    paginate=False,
+                )
+                eligible_rows = [row for row in rows if row.actual_value is not None]
+                intervals = [
+                    ForecastInterval(
+                        interval_start=row.interval_start,
+                        interval_end=row.interval_end,
+                        series=request.series,
+                        actual_value=row.actual_value,
+                        forecast_value=row.forecast_value,
+                        unit=row.unit,
+                        forecast_issue_time=row.forecast_issue_time,
+                        publication_time=row.publication_time,
+                        retrieved_at=row.retrieved_at,
+                        source_version=row.source_version,
+                        source_hash=row.source_hash,
+                        vintage_id=row.vintage_id,
+                    )
+                    for row in eligible_rows
+                ]
+                total = len(intervals)
+                return ForecastResponse(
+                    intervals=(
+                        intervals[request.offset : request.offset + request.limit]
+                        if paginate
+                        else intervals
+                    ),
+                    page=_page(
+                        total,
+                        request.offset if paginate else 0,
+                        request.limit if paginate else max(total, 1),
+                    ),
+                    metadata=_history_meta(
+                        "Actual and Forecast Series",
+                        start=start,
+                        end=end,
+                        count=total,
+                        granularity="1h",
+                        provider=ProviderName.DERIVED,
+                        observation_type=ObservationType.FORECAST,
+                        # A point-in-time store query is necessarily bounded
+                        # by what has been persisted.  Even a non-empty page
+                        # cannot establish that absent target intervals were
+                        # unavailable at the requested information time.
+                        completeness=DataCompleteness.UNKNOWN,
+                        extra={
+                            "storage": "duckdb",
+                            "as_of": as_of.isoformat(),
+                            "vintage_selection": "latest_eligible_per_target",
+                        },
+                    ),
+                    warnings=[
+                        (
+                            "Point-in-time results include only eligible vintages persisted in the "
+                            "local store; target intervals absent from the store are unobserved."
+                        )
+                        if total
+                        else (
+                            "No stored forecast vintage with a known publication or issue time "
+                            f"was available at as_of={as_of.isoformat()}."
+                        )
+                    ],
+                )
+            return ForecastResponse(
+                intervals=[],
+                page=_page(0, request.offset, request.limit),
+                metadata=_history_meta(
+                    "Actual and Forecast Series",
+                    start=start,
+                    end=end,
+                    count=0,
+                    granularity="1h",
+                    provider=ProviderName.DERIVED,
+                    observation_type=ObservationType.FORECAST,
+                    completeness=DataCompleteness.UNKNOWN,
+                    extra={"as_of": as_of.isoformat(), "storage": "unavailable"},
+                ),
+                warnings=[
+                    "Point-in-time forecast queries require the optional historical-store "
+                    "dependencies and previously persisted vintages."
+                ],
+            )
         if request.series == "pool_price":
             market_response = await self.get_historical_pool_prices(
                 PoolPriceRequest(
@@ -727,7 +912,8 @@ class HistoryService:
             all_intervals = [
                 ForecastInterval(
                     interval_start=item.interval_start,
-                    interval_end=item.interval_end or item.interval_start + timedelta(hours=1),
+                    interval_end=item.interval_end
+                    or add_elapsed(item.interval_start, timedelta(hours=1)),
                     series="ail",
                     actual_value=item.load_mw,
                     forecast_value=item.load_forecast_mw,
@@ -800,6 +986,39 @@ def _page(total: int, offset: int, limit: int) -> PageInfo:
 
 def _missing_count(ranges: list[tuple[datetime, datetime]]) -> int:
     return sum(int((to_utc(end) - to_utc(start)).total_seconds() / 3600) for start, end in ranges)
+
+
+def _metadata_extra_value(metadata: object, key: str) -> object | None:
+    """Read optional provenance from metadata-compatible test doubles."""
+
+    extra = getattr(metadata, "extra", {})
+    if not isinstance(extra, Mapping):
+        return None
+    return extra.get(key)
+
+
+def _market_forecast_hash(rows: list[dict[str, object]]) -> str:
+    """Identify a fetched forecast payload without using retrieval time."""
+
+    payload = [
+        {
+            "interval_start": (
+                to_utc(value).isoformat()
+                if isinstance(value := row.get("interval_start"), datetime)
+                else value
+            ),
+            "interval_end": (
+                to_utc(value).isoformat()
+                if isinstance(value := row.get("interval_end"), datetime)
+                else value
+            ),
+            "forecast_value": row.get("forecast_value"),
+        }
+        for row in rows
+        if row.get("forecast_value") is not None
+    ]
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
 
 
 def _chunk_ranges(

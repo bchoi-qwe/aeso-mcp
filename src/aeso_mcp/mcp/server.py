@@ -23,6 +23,7 @@ from aeso_mcp.mcp.tools import (
     register_market_power_tools,
     register_market_tools,
     register_report_tools,
+    register_research_data_tools,
     register_research_tools,
     register_reserve_tools,
 )
@@ -72,6 +73,7 @@ def create_mcp_server(
     register_operations_tools(mcp, container)
     register_history_tools(mcp, container)
     register_research_tools(mcp, container)
+    register_research_data_tools(mcp, container)
     register_report_tools(mcp, container)
     register_reserve_tools(mcp, container)
     register_prompts(mcp)

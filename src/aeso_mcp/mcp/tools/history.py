@@ -96,7 +96,8 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
         description=(
             "Returns typed official AESO actual and forecast observations over [start, end) "
             "for AIL, Pool Price, wind, solar, or combined wind/solar where the requested "
-            "source horizon exists."
+            "source horizon exists. An optional timezone-aware as_of selects the latest "
+            "vintage published or issued by that instant, avoiding look-ahead bias."
         ),
         annotations={
             "readOnlyHint": True,

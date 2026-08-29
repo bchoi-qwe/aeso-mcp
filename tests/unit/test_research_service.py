@@ -21,6 +21,7 @@ from aeso_mcp.services.market import MarketService
 from aeso_mcp.services.operations import OperationsService
 from aeso_mcp.services.research import ResearchService
 from aeso_mcp.services.reserves import OperatingReserveService
+from aeso_mcp.timeutil import MARKET_TZ
 
 
 @pytest.mark.asyncio
@@ -200,6 +201,16 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
     assert response.evidence.reserves.offer_control_block_count == 1
     assert response.evidence.commitment_count == 1
     assert "do not establish" in response.methodology
+    assert response.analysis_manifest.analysis_id.startswith("sha256:")
+    assert response.analysis_manifest.methodology_version == "market-event-v1"
+    assert {source.role for source in response.analysis_manifest.sources} == {
+        "focus",
+        "baseline",
+    }
+    assert (
+        response.analysis_manifest.parameters["focus_start"]
+        == start.astimezone(MARKET_TZ).isoformat()
+    )
     assert history.get_historical_pool_prices.await_count == 2
     assert history.get_historical_load.await_count == 2
 

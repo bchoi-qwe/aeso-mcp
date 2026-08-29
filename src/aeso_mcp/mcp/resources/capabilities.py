@@ -37,6 +37,7 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `sync_historical_store` — incremental DuckDB index and partitioned Parquet snapshots.
 - `get_historical_store_status` — local coverage, manifests, partitions, and schema status.
 - `get_forecast` — paired typed AIL, Pool Price, wind, solar, or combined wind/solar forecasts where the selected official horizon exists.
+- `get_research_data` — one typed, bounded archive read for verified historical adequacy/cushion, transmission, planning-area, constraint, EEA, OR-directive, or current participant records.
 - `get_supply_adequacy` and `get_supply_surplus` — official hourly categorical status reports.
 - `get_ffr_net_schedule` — historical scheduled BC/MATL intertie transfer used for FFR reporting.
 - `get_dispatch_down_service` — DDS availability publications.
@@ -80,6 +81,11 @@ are read through an internal source-specific client; the APIM key is never sent 
 - `analyze_outage_impact` — hourly outage-price association.
 - `analyze_forecast_error` — generalized forecast errors for AIL, Pool Price, wind, and solar, including hour/lead-time profiles.
 - `summarize_operating_reserve_market` — reserve prices, volumes, and activations by product.
+- `analyze_participant_concentration` — mapped merit-order offered-volume shares and HHI with explicit unmapped blocks; not historical ownership.
+- `analyze_regional_load_generation` — planning-area and regional observed load/generation aggregates.
+- `analyze_constrained_volume` — constrained MWh/minutes by area/fuel and optional exact-hour price association.
+- `analyze_scarcity` — categorical historical adequacy/cushion and EEA context.
+- `analyze_system_frequency` — compact statistics for at most six hours of 10-second frequency data; raw rows are not exposed.
 
 ## Prompts
 
@@ -103,7 +109,8 @@ Methodology resources include `load`, `generation`, `generator-outages`,
 `supply-tightness`, `historical-generation`, `research-analytics`, `operating-reserve-market`,
 and `uc-settlement`.
 Additional methodology resources cover `official-forecasts`, `supply-adequacy`,
-`supply-surplus`, `ffr-net-schedule`, and `dds-tmr-system-events`.
+`supply-surplus`, `ffr-net-schedule`, `dds-tmr-system-events`, and
+`official-research-data`.
 
 Data can be operational, preliminary, forecast, tentative, or revised. Always inspect response
 metadata and warnings before treating a value as final or inferring a cause.

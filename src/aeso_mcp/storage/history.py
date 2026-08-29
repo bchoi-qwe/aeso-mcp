@@ -9,14 +9,18 @@ explicit and keeps storage details out of the service and MCP layers.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import uuid
 from collections.abc import Iterable, Sequence
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
 from aeso_mcp.errors import ConfigurationError, DataValidationError
+from aeso_mcp.models.forecasts import ForecastInterval, ForecastVintage
 from aeso_mcp.models.history import (
     HistoricalDataset,
     HistoricalDatasetStatus,
@@ -26,9 +30,9 @@ from aeso_mcp.models.history import (
     HistoricalMarketSeriesInterval,
     MarketSeriesSelection,
 )
-from aeso_mcp.timeutil import MARKET_TZ, to_market
+from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _MARKET_SERIES_CADENCE = timedelta(hours=1)
 
 
@@ -140,12 +144,49 @@ class HistoricalStore:
                 )
                 connection.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS forecast_vintages (
+                        vintage_id VARCHAR PRIMARY KEY,
+                        series VARCHAR NOT NULL,
+                        interval_start TIMESTAMPTZ NOT NULL,
+                        interval_end TIMESTAMPTZ NOT NULL,
+                        interval_start_utc TIMESTAMPTZ NOT NULL,
+                        interval_end_utc TIMESTAMPTZ NOT NULL,
+                        horizon VARCHAR,
+                        forecast_issue_time TIMESTAMPTZ,
+                        publication_time TIMESTAMPTZ,
+                        retrieved_at TIMESTAMPTZ NOT NULL,
+                        source_version VARCHAR,
+                        source_hash VARCHAR,
+                        lead_time_minutes INTEGER,
+                        forecast_value DOUBLE,
+                        actual_value DOUBLE,
+                        minimum_value DOUBLE,
+                        maximum_value DOUBLE,
+                        capacity_mw DOUBLE,
+                        unit VARCHAR NOT NULL,
+                        source_product VARCHAR NOT NULL,
+                        source_file_id VARCHAR,
+                        source_file_name VARCHAR,
+                        observation_type VARCHAR NOT NULL,
+                        finality VARCHAR NOT NULL,
+                        completeness VARCHAR NOT NULL,
+                        schema_version INTEGER NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS store_metadata (
                         key VARCHAR PRIMARY KEY,
                         value VARCHAR NOT NULL
                     )
                     """
                 )
+                # Commit the DDL before migrations.  DuckDB may auto-commit
+                # ALTER TABLE statements; keeping them in the same explicit
+                # transaction as the initial CREATE statements causes a
+                # catalog conflict on older stores.
+                connection.commit()
                 self._migrate_schema(connection)
                 connection.execute(
                     "INSERT OR REPLACE INTO store_metadata (key, value) VALUES (?, ?)",
@@ -153,7 +194,8 @@ class HistoricalStore:
                 )
                 connection.commit()
             except Exception:
-                connection.rollback()
+                with suppress(Exception):
+                    connection.rollback()
                 raise
 
     def source_is_current(
@@ -296,6 +338,199 @@ class HistoricalStore:
             rebuilt = self._rebuild_market_partitions(connection, partitions)
         return len(normalized), rebuilt
 
+    def upsert_forecast_vintages(
+        self,
+        rows: Sequence[ForecastVintage | ForecastInterval | dict[str, Any]],
+    ) -> tuple[int, int]:
+        """Insert or replace immutable forecast publications.
+
+        The row identity is derived from the series, target interval,
+        issue/publication timestamps, horizon, source version, and canonical
+        forecast-only payload. Retrieval time, raw content hash, and later
+        actual/finality values are payload fields, so refreshing a publication
+        can enrich it without creating a second vintage.
+        """
+
+        self.initialize()
+        if not rows:
+            return 0, 0
+        by_id: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            normalized = self._normalize_forecast_row(row)
+            by_id[normalized["vintage_id"]] = normalized
+        normalized_rows = list(by_id.values())
+        partitions = sorted(
+            {
+                (
+                    row["interval_start_utc"].year,
+                    row["interval_start_utc"].month,
+                )
+                for row in normalized_rows
+            }
+        )
+        with self._connect() as connection:
+            connection.begin()
+            try:
+                self._insert_arrow_rows(
+                    connection,
+                    "incoming_forecast_vintages",
+                    normalized_rows,
+                    "forecast_vintages",
+                )
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+            rebuilt = self._rebuild_forecast_partitions(connection, partitions)
+        return len(normalized_rows), rebuilt
+
+    def query_forecast_vintages(
+        self,
+        series: str,
+        *,
+        start: datetime,
+        end: datetime,
+        as_of: datetime | None = None,
+        horizon: str | None = None,
+        offset: int = 0,
+        limit: int = 500,
+        paginate: bool = True,
+        latest_per_target: bool | None = None,
+        include_all_vintages: bool | None = None,
+    ) -> tuple[list[ForecastVintage], int]:
+        """Read forecast publications with deterministic point-in-time selection.
+
+        ``as_of`` is an information boundary, not a target-date filter: a row
+        is eligible only when every known issue/publication timestamp is at or
+        before that instant.  Rows without either timestamp are excluded from
+        an ``as_of`` query because their publication chronology is unknown and
+        returning them could introduce look-ahead bias.  An ``as_of`` query
+        defaults to one latest eligible vintage per target; an unrestricted
+        query defaults to every stored vintage.  Callers can override either
+        default with ``latest_per_target`` or ``include_all_vintages``.
+        """
+
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        if include_all_vintages is not None:
+            latest_per_target = not include_all_vintages
+        elif latest_per_target is None:
+            latest_per_target = as_of is not None
+        requested_series = str(getattr(series, "value", series)).strip().lower()
+        canonical = _canonical_forecast_series(requested_series)
+        forecast_only = requested_series in {
+            "ail_forecast",
+            "load_forecast",
+            "pool_price_forecast",
+        }
+        self.initialize()
+        predicates = [
+            "interval_start_utc >= ?",
+            "interval_start_utc < ?",
+            "series = ?",
+        ]
+        params: list[Any] = [_as_utc(start), _as_utc(end), canonical]
+        if forecast_only:
+            predicates.append("forecast_value IS NOT NULL")
+        if horizon is not None:
+            predicates.append("horizon = ?")
+            params.append(horizon)
+        if as_of is not None:
+            as_of_utc = _as_of_utc(as_of)
+            predicates.extend(
+                [
+                    "(publication_time IS NOT NULL OR forecast_issue_time IS NOT NULL)",
+                    "(publication_time IS NULL OR publication_time <= ?)",
+                    "(forecast_issue_time IS NULL OR forecast_issue_time <= ?)",
+                ]
+            )
+            params.extend([as_of_utc, as_of_utc])
+        where = " AND ".join(predicates)
+        ranked = f"""
+            WITH eligible AS (
+                SELECT *,
+                       CASE
+                           WHEN publication_time IS NOT NULL
+                                AND forecast_issue_time IS NOT NULL
+                               THEN greatest(publication_time, forecast_issue_time)
+                           WHEN publication_time IS NOT NULL THEN publication_time
+                           WHEN forecast_issue_time IS NOT NULL THEN forecast_issue_time
+                           ELSE NULL
+                       END AS information_time
+                FROM forecast_vintages
+                WHERE {where}
+            ), ranked AS (
+                SELECT eligible.*,
+                       row_number() OVER (
+                           PARTITION BY series, interval_start_utc
+                           ORDER BY information_time DESC NULLS LAST,
+                                    publication_time DESC NULLS LAST,
+                                    forecast_issue_time DESC NULLS LAST,
+                                    retrieved_at DESC NULLS LAST,
+                                    source_version DESC NULLS LAST,
+                                    source_hash DESC NULLS LAST,
+                                    vintage_id DESC
+                       ) AS vintage_rank
+                FROM eligible
+            )
+        """  # noqa: S608
+        selected_predicate = " WHERE vintage_rank = 1" if latest_per_target else ""
+        with self._connect() as connection:
+            total = int(
+                _required_row(
+                    connection.execute(
+                        f"{ranked} SELECT count(*) FROM ranked{selected_predicate}",  # noqa: S608
+                        params,
+                    ).fetchone()
+                )[0]
+            )
+            query = (
+                f"{ranked} SELECT vintage_id, series, interval_start, interval_end, "  # noqa: S608
+                "interval_start_utc, interval_end_utc, horizon, forecast_issue_time, "
+                "publication_time, retrieved_at, source_version, source_hash, "
+                "lead_time_minutes, forecast_value, actual_value, minimum_value, "
+                "maximum_value, capacity_mw, unit, source_product, source_file_id, "
+                "source_file_name, observation_type, finality, completeness, schema_version "
+                f"FROM ranked{selected_predicate} "
+                "ORDER BY interval_start_utc, information_time DESC NULLS LAST, "
+                "publication_time DESC NULLS LAST, forecast_issue_time DESC NULLS LAST, "
+                "source_version DESC NULLS LAST, source_hash DESC NULLS LAST, vintage_id DESC"
+            )
+            query_params = list(params)
+            if paginate:
+                query += " LIMIT ? OFFSET ?"
+                query_params.extend([limit, offset])
+            rows_out = connection.execute(query, query_params).fetchall()
+        return [_forecast_row_to_model(row) for row in rows_out], total
+
+    def query_forecast(
+        self,
+        series: str,
+        *,
+        start: datetime,
+        end: datetime,
+        as_of: datetime | None = None,
+        horizon: str | None = None,
+        offset: int = 0,
+        limit: int = 500,
+        paginate: bool = True,
+    ) -> tuple[list[ForecastVintage], int]:
+        """Read one deterministic latest vintage per target interval."""
+
+        return self.query_forecast_vintages(
+            series,
+            start=start,
+            end=end,
+            as_of=as_of,
+            horizon=horizon,
+            offset=offset,
+            limit=limit,
+            paginate=paginate,
+            latest_per_target=True,
+        )
+
     def missing_market_ranges(
         self,
         series: str | HistoricalMarketSeries,
@@ -352,7 +587,6 @@ class HistoricalStore:
             raise ValueError("offset must be non-negative")
         if limit < 1:
             raise ValueError("limit must be positive")
-        requested_series = str(getattr(series, "value", series)).strip().lower()
         canonical, forecast_only = _canonical_series(series)
         self.initialize()
         series_values = [canonical, "load"] if canonical == "ail" else [canonical]
@@ -369,29 +603,49 @@ class HistoricalStore:
         if forecast_only:
             predicates.append("forecast_value IS NOT NULL")
         where = " AND ".join(predicates)
+        # A v2 store may contain the historical ``load`` spelling while v3
+        # writes use the canonical ``ail`` spelling.  Treat those rows as
+        # one logical series for reads; otherwise a migration followed by a
+        # refresh would return duplicate target intervals and distort pages.
+        ranked = f"""
+            WITH candidates AS (
+                SELECT *,
+                       row_number() OVER (
+                           PARTITION BY COALESCE(interval_start_utc, interval_start)
+                           ORDER BY CASE WHEN series = ? THEN 0 ELSE 1 END,
+                                    source_updated_at DESC NULLS LAST,
+                                    source_retrieved_at DESC NULLS LAST,
+                                    source_file_id DESC NULLS LAST,
+                                    source_file_name DESC NULLS LAST
+                       ) AS series_rank
+                FROM market_series
+                WHERE {where}
+            )
+        """  # noqa: S608
+        ranked_params: list[Any] = [canonical, *params]
         with self._connect() as connection:
             total = int(
                 _required_row(
                     connection.execute(
-                        f"SELECT count(*) FROM market_series WHERE {where}",  # noqa: S608
-                        params,
+                        f"{ranked} SELECT count(*) FROM candidates WHERE series_rank = 1",  # noqa: S608
+                        ranked_params,
                     ).fetchone()
                 )[0]
             )
             query = (
-                "SELECT interval_start, interval_end, series, actual_value, forecast_value, unit, "  # noqa: S608
-                "source_product, source_retrieved_at, source_updated_at, source_file_id, "
-                "source_file_name, observation_type, finality, completeness, schema_version "
-                f"FROM market_series WHERE {where} "
+                f"{ranked} SELECT interval_start, interval_end, series, actual_value, "  # noqa: S608
+                "forecast_value, unit, source_product, source_retrieved_at, source_updated_at, "
+                "source_file_id, source_file_name, observation_type, finality, completeness, "
+                "schema_version FROM candidates WHERE series_rank = 1 "
                 "ORDER BY COALESCE(interval_start_utc, interval_start), series"
             )
-            query_params = list(params)
+            query_params = list(ranked_params)
             if paginate:
                 query += " LIMIT ? OFFSET ?"
                 query_params.extend([limit, offset])
             cursor = connection.execute(query, query_params)
             rows = cursor.fetchall()
-        output_series = requested_series if forecast_only else canonical
+        output_series = f"{canonical}_forecast" if forecast_only else canonical
         return [_market_row_to_model(row, output_series) for row in rows], total
 
     def query_market_series_complete(
@@ -577,10 +831,7 @@ class HistoricalStore:
                 [*params, limit, offset],
             )
             columns = [item[0] for item in cursor.description]
-            records = [
-                HistoricalGenerationInterval.model_validate(dict(zip(columns, row, strict=True)))
-                for row in cursor.fetchall()
-            ]
+            records = [_generation_row_to_model(columns, row) for row in cursor.fetchall()]
         return records, total
 
     def statuses(self) -> list[HistoricalDatasetStatus]:
@@ -599,8 +850,8 @@ class HistoricalStore:
                 HistoricalDatasetStatus(
                     dataset=HistoricalDataset.HISTORICAL_GENERATION,
                     observation_count=int(generation[0]),
-                    earliest_interval=generation[1],
-                    latest_interval=generation[2],
+                    earliest_interval=_market_datetime(generation[1]),
+                    latest_interval=_market_datetime(generation[2]),
                     source_file_count=int(generation[3]),
                     parquet_partition_count=self._partition_count("historical_generation"),
                     detected_gap_count=self._generation_gap_count(connection),
@@ -616,7 +867,7 @@ class HistoricalStore:
                 row = _required_row(
                     connection.execute(
                         f"""
-                        SELECT count(*),
+                        SELECT count(DISTINCT COALESCE(interval_start_utc, interval_start)),
                                min(COALESCE(interval_start_utc, interval_start)),
                                max(COALESCE(interval_start_utc, interval_start)),
                                count(DISTINCT source_file_id)
@@ -629,8 +880,8 @@ class HistoricalStore:
                     HistoricalDatasetStatus(
                         dataset=dataset,
                         observation_count=int(row[0]),
-                        earliest_interval=row[1],
-                        latest_interval=row[2],
+                        earliest_interval=_market_datetime(row[1]),
+                        latest_interval=_market_datetime(row[2]),
                         source_file_count=int(row[3]),
                         parquet_partition_count=self._partition_count(dataset.value),
                         detected_gap_count=self._market_gap_count(
@@ -718,6 +969,28 @@ class HistoricalStore:
                 "completeness": "VARCHAR DEFAULT 'complete'",
                 "schema_version": "INTEGER DEFAULT 1",
             },
+            "forecast_vintages": {
+                "interval_start_utc": "TIMESTAMPTZ",
+                "interval_end_utc": "TIMESTAMPTZ",
+                "horizon": "VARCHAR",
+                "forecast_issue_time": "TIMESTAMPTZ",
+                "publication_time": "TIMESTAMPTZ",
+                "retrieved_at": "TIMESTAMPTZ DEFAULT current_timestamp",
+                "source_version": "VARCHAR",
+                "source_hash": "VARCHAR",
+                "lead_time_minutes": "INTEGER",
+                "forecast_value": "DOUBLE",
+                "actual_value": "DOUBLE",
+                "minimum_value": "DOUBLE",
+                "maximum_value": "DOUBLE",
+                "capacity_mw": "DOUBLE",
+                "source_file_id": "VARCHAR",
+                "source_file_name": "VARCHAR",
+                "observation_type": "VARCHAR DEFAULT 'forecast'",
+                "finality": "VARCHAR DEFAULT 'unknown'",
+                "completeness": "VARCHAR DEFAULT 'complete'",
+                "schema_version": "INTEGER DEFAULT 3",
+            },
         }
         for table, columns in additions.items():
             existing = {
@@ -739,12 +1012,53 @@ class HistoricalStore:
             "UPDATE market_series SET interval_end_utc = interval_end "
             "WHERE interval_end_utc IS NULL AND interval_end IS NOT NULL"
         )
-        for table in ("generation", "market_series", "source_manifest"):
+        for table in ("generation", "market_series", "source_manifest", "forecast_vintages"):
             connection.execute(
                 f"UPDATE {table} SET schema_version = ? WHERE schema_version IS NULL "  # noqa: S608
                 "OR schema_version < ?",
                 [_SCHEMA_VERSION, _SCHEMA_VERSION],
             )
+
+        # The v2 market table kept only one forecast value per target.  Copy
+        # that last-known value into the new vintage relation so migration is
+        # additive and old data remains queryable.  Its publication chronology
+        # is unknown, therefore an ``as_of`` query intentionally excludes it;
+        # an unrestricted query still exposes the legacy value.
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO forecast_vintages (
+                vintage_id, series, interval_start, interval_end,
+                interval_start_utc, interval_end_utc, horizon,
+                forecast_issue_time, publication_time, retrieved_at,
+                source_version, source_hash, lead_time_minutes,
+                forecast_value, actual_value, minimum_value, maximum_value,
+                capacity_mw, unit, source_product, source_file_id,
+                source_file_name, observation_type, finality, completeness,
+                schema_version
+            )
+            SELECT concat('sha256:', sha256(concat_ws(
+                       '|',
+                       CASE WHEN series = 'load' THEN 'ail' ELSE series END,
+                       CAST(COALESCE(interval_start_utc, interval_start) AS VARCHAR),
+                       'legacy-market-series-v2', COALESCE(source_hash, '')
+                   ))),
+                   CASE WHEN series = 'load' THEN 'ail' ELSE series END,
+                   COALESCE(interval_start_utc, interval_start),
+                   COALESCE(interval_end_utc, interval_end,
+                            COALESCE(interval_start_utc, interval_start) + INTERVAL 1 HOUR),
+                   COALESCE(interval_start_utc, interval_start),
+                   COALESCE(interval_end_utc, interval_end,
+                            COALESCE(interval_start_utc, interval_start) + INTERVAL 1 HOUR),
+                   NULL, NULL, NULL,
+                   COALESCE(source_retrieved_at, current_timestamp),
+                   'legacy-market-series-v2', source_hash, NULL,
+                   forecast_value, actual_value, NULL, NULL, NULL,
+                   unit, source_product, source_file_id, source_file_name,
+                   'forecast', finality, completeness, 3
+            FROM market_series
+            WHERE forecast_value IS NOT NULL
+            """
+        )
 
     @staticmethod
     def _arrow_table(rows: Sequence[dict[str, Any]]):
@@ -812,6 +1126,26 @@ class HistoricalStore:
                 ORDER BY COALESCE(interval_start_utc, interval_start), series
                 """,
                 [series, "load" if series == "ail" else series, year, month],
+            )
+            rebuilt += 1
+        return rebuilt
+
+    def _rebuild_forecast_partitions(
+        self, connection: Any, partitions: Iterable[tuple[int, int]]
+    ) -> int:
+        rebuilt = 0
+        for year, month in partitions:
+            target = self._partition_path("forecast_vintages", year, month)
+            self._copy_partition(
+                connection,
+                target,
+                """
+                SELECT * FROM forecast_vintages
+                WHERE year(timezone('UTC', interval_start_utc)) = ?
+                  AND month(timezone('UTC', interval_start_utc)) = ?
+                ORDER BY interval_start_utc, series, vintage_id
+                """,
+                [year, month],
             )
             rebuilt += 1
         return rebuilt
@@ -961,6 +1295,136 @@ class HistoricalStore:
             "schema_version": _SCHEMA_VERSION,
         }
 
+    @classmethod
+    def _normalize_forecast_row(
+        cls,
+        row: ForecastVintage | ForecastInterval | dict[str, Any],
+    ) -> dict[str, Any]:
+        if isinstance(row, (ForecastVintage, ForecastInterval)):
+            source = row.model_dump(mode="python")
+        else:
+            source = dict(row)
+        # Accept the target/issue aliases used by research callers while the
+        # response-facing model retains the established interval names.
+        if "interval_start" not in source and "target_interval_start" in source:
+            source["interval_start"] = source["target_interval_start"]
+        if "interval_end" not in source and "target_interval_end" in source:
+            source["interval_end"] = source["target_interval_end"]
+        if "forecast_issue_time" not in source and "issue_time" in source:
+            source["forecast_issue_time"] = source["issue_time"]
+        if "retrieved_at" not in source and "source_retrieved_at" in source:
+            source["retrieved_at"] = source["source_retrieved_at"]
+
+        start_value = source.get("interval_start")
+        if not isinstance(start_value, datetime):
+            raise DataValidationError("Forecast-vintage interval_start must be a datetime.")
+        start_utc = _as_utc(start_value)
+        end_value = source.get("interval_end")
+        end_utc = (
+            _as_utc(end_value)
+            if isinstance(end_value, datetime)
+            else start_utc + timedelta(hours=1)
+        )
+        if end_utc <= start_utc:
+            raise DataValidationError("Forecast-vintage interval_end must be after interval_start.")
+        series = _canonical_forecast_series(str(source.get("series", "")))
+        actual = source.get("actual_value")
+        forecast = source.get("forecast_value")
+        if actual is None and forecast is None:
+            raise DataValidationError(
+                "Forecast-vintage rows must contain a forecast_value or actual_value."
+            )
+        source_product = source.get("source_product")
+        if not isinstance(source_product, str) or not source_product.strip():
+            raise DataValidationError("Forecast-vintage source_product is required.")
+        unit = source.get("unit")
+        if not isinstance(unit, str) or not unit.strip():
+            raise DataValidationError("Forecast-vintage unit is required.")
+        issue_value = source.get("forecast_issue_time")
+        issue_utc = _as_utc(issue_value) if isinstance(issue_value, datetime) else None
+        publication_value = source.get("publication_time")
+        publication_utc = (
+            _as_utc(publication_value) if isinstance(publication_value, datetime) else None
+        )
+        retrieved_value = source.get("retrieved_at")
+        retrieved_utc = (
+            _as_utc(retrieved_value) if isinstance(retrieved_value, datetime) else datetime.now(UTC)
+        )
+        lead_time = source.get("lead_time_minutes")
+        if lead_time is None and issue_utc is not None:
+            elapsed_minutes = int((start_utc - issue_utc).total_seconds() / 60)
+            if elapsed_minutes >= 0:
+                lead_time = elapsed_minutes
+        if lead_time is not None:
+            try:
+                lead_time = int(lead_time)
+            except (TypeError, ValueError) as exc:
+                raise DataValidationError(
+                    "Forecast-vintage lead_time_minutes must be an integer."
+                ) from exc
+            if lead_time < 0:
+                raise DataValidationError(
+                    "Forecast-vintage lead_time_minutes must be non-negative."
+                )
+        source_version = _optional_text(source.get("source_version"))
+        source_hash = _optional_text(source.get("source_hash"))
+        horizon = _optional_text(source.get("horizon"))
+        vintage_id = _forecast_vintage_id(
+            series=series,
+            interval_start_utc=start_utc,
+            interval_end_utc=end_utc,
+            forecast_issue_time=issue_utc,
+            publication_time=publication_utc,
+            horizon=horizon,
+            source_version=source_version,
+            forecast_value=float(forecast) if forecast is not None else None,
+            minimum_value=(
+                float(source["minimum_value"]) if source.get("minimum_value") is not None else None
+            ),
+            maximum_value=(
+                float(source["maximum_value"]) if source.get("maximum_value") is not None else None
+            ),
+            capacity_mw=(
+                float(source["capacity_mw"]) if source.get("capacity_mw") is not None else None
+            ),
+            unit=unit.strip(),
+            source_product=source_product.strip(),
+        )
+        return {
+            "vintage_id": vintage_id,
+            "series": series,
+            "interval_start": start_utc,
+            "interval_end": end_utc,
+            "interval_start_utc": start_utc,
+            "interval_end_utc": end_utc,
+            "horizon": horizon,
+            "forecast_issue_time": issue_utc,
+            "publication_time": publication_utc,
+            "retrieved_at": retrieved_utc,
+            "source_version": source_version,
+            "source_hash": source_hash,
+            "lead_time_minutes": lead_time,
+            "forecast_value": float(forecast) if forecast is not None else None,
+            "actual_value": float(actual) if actual is not None else None,
+            "minimum_value": (
+                float(source["minimum_value"]) if source.get("minimum_value") is not None else None
+            ),
+            "maximum_value": (
+                float(source["maximum_value"]) if source.get("maximum_value") is not None else None
+            ),
+            "capacity_mw": (
+                float(source["capacity_mw"]) if source.get("capacity_mw") is not None else None
+            ),
+            "unit": unit.strip(),
+            "source_product": source_product.strip(),
+            "source_file_id": _optional_text(source.get("source_file_id")),
+            "source_file_name": _optional_text(source.get("source_file_name")),
+            "observation_type": _enum_text(source.get("observation_type"), "forecast"),
+            "finality": _enum_text(source.get("finality"), "unknown"),
+            "completeness": _enum_text(source.get("completeness"), "complete"),
+            "schema_version": _SCHEMA_VERSION,
+        }
+
     @staticmethod
     def _plain_row(row: dict[str, Any]) -> dict[str, Any]:
         plain = {key: _enum_text(value, value) for key, value in row.items()}
@@ -1017,6 +1481,87 @@ def _missing_ranges(
     return ranges
 
 
+def _forecast_row_to_model(row: tuple[Any, ...]) -> ForecastVintage:
+    (
+        vintage_id,
+        series,
+        interval_start,
+        interval_end,
+        _interval_start_utc,
+        _interval_end_utc,
+        horizon,
+        forecast_issue_time,
+        publication_time,
+        retrieved_at,
+        source_version,
+        source_hash,
+        lead_time_minutes,
+        forecast_value,
+        actual_value,
+        minimum_value,
+        maximum_value,
+        capacity_mw,
+        unit,
+        source_product,
+        source_file_id,
+        source_file_name,
+        observation_type,
+        finality,
+        completeness,
+        schema_version,
+    ) = row
+    start_utc = _as_utc(interval_start)
+    end_utc = _as_utc(interval_end)
+    issue_utc = _as_utc(forecast_issue_time) if forecast_issue_time is not None else None
+    publication_utc = _as_utc(publication_time) if publication_time is not None else None
+    return ForecastVintage(
+        vintage_id=str(vintage_id),
+        interval_start=start_utc.astimezone(MARKET_TZ),
+        interval_end=end_utc.astimezone(MARKET_TZ),
+        series=str(series),  # type: ignore[arg-type]
+        horizon=horizon,  # type: ignore[arg-type]
+        forecast_issue_time=issue_utc,
+        publication_time=publication_utc,
+        retrieved_at=_as_utc(retrieved_at),
+        source_version=(str(source_version) if source_version is not None else None),
+        source_hash=(str(source_hash) if source_hash is not None else None),
+        lead_time_minutes=(int(lead_time_minutes) if lead_time_minutes is not None else None),
+        forecast_value=float(forecast_value) if forecast_value is not None else None,
+        actual_value=float(actual_value) if actual_value is not None else None,
+        minimum_value=float(minimum_value) if minimum_value is not None else None,
+        maximum_value=float(maximum_value) if maximum_value is not None else None,
+        capacity_mw=float(capacity_mw) if capacity_mw is not None else None,
+        unit=str(unit),
+        source_product=str(source_product),
+        source_file_id=(str(source_file_id) if source_file_id is not None else None),
+        source_file_name=(str(source_file_name) if source_file_name is not None else None),
+        observation_type=observation_type,
+        finality=finality,
+        completeness=completeness,
+        schema_version=int(schema_version),
+    )
+
+
+def _generation_row_to_model(
+    columns: Sequence[str], row: tuple[Any, ...]
+) -> HistoricalGenerationInterval:
+    values = dict(zip(columns, row, strict=True))
+    for field in ("interval_start", "interval_end"):
+        value = values.get(field)
+        if isinstance(value, datetime):
+            values[field] = _market_datetime(value)
+    for field in (
+        "interval_start_utc",
+        "interval_end_utc",
+        "source_updated_at",
+        "source_retrieved_at",
+    ):
+        value = values.get(field)
+        if isinstance(value, datetime):
+            values[field] = _as_utc(value)
+    return HistoricalGenerationInterval.model_validate(values)
+
+
 def _market_row_to_model(row: tuple[Any, ...], series: str) -> HistoricalMarketSeriesInterval:
     (
         interval_start,
@@ -1054,6 +1599,82 @@ def _market_row_to_model(row: tuple[Any, ...], series: str) -> HistoricalMarketS
         completeness=completeness,
         schema_version=int(schema_version),
     )
+
+
+def _canonical_forecast_series(series: str) -> str:
+    value = getattr(series, "value", series)
+    text = str(value).strip().lower()
+    aliases = {
+        "ail": "ail",
+        "ail_forecast": "ail",
+        "load": "ail",
+        "load_forecast": "ail",
+        "pool_price": "pool_price",
+        "pool_price_forecast": "pool_price",
+        "wind": "wind",
+        "solar": "solar",
+        "wind_solar": "wind_solar",
+    }
+    try:
+        return aliases[text]
+    except KeyError as exc:
+        raise ValueError(
+            "Unsupported forecast series; expected ail, pool_price, wind, solar, or wind_solar."
+        ) from exc
+
+
+def _forecast_vintage_id(
+    *,
+    series: str,
+    interval_start_utc: datetime,
+    interval_end_utc: datetime,
+    forecast_issue_time: datetime | None,
+    publication_time: datetime | None,
+    horizon: str | None,
+    source_version: str | None,
+    forecast_value: float | None,
+    minimum_value: float | None,
+    maximum_value: float | None,
+    capacity_mw: float | None,
+    unit: str,
+    source_product: str,
+) -> str:
+    """Return a stable identity for one forecast publication/target pair.
+
+    The raw source hash is provenance, not identity: public report files can
+    change when a later actual or finality value is filled in.  The identity
+    instead includes a canonical forecast-only payload hash so that such
+    enrichment updates the existing vintage while a revised forecast value
+    still creates a distinct publication.
+    """
+
+    forecast_payload = {
+        "series": series,
+        "interval_start": interval_start_utc.isoformat(),
+        "interval_end": interval_end_utc.isoformat(),
+        "forecast_issue_time": (
+            forecast_issue_time.isoformat() if forecast_issue_time is not None else None
+        ),
+        "publication_time": (
+            publication_time.isoformat() if publication_time is not None else None
+        ),
+        "horizon": horizon,
+        "source_version": source_version,
+        "forecast_value": forecast_value,
+        "minimum_value": minimum_value,
+        "maximum_value": maximum_value,
+        "capacity_mw": capacity_mw,
+        "unit": unit,
+        "source_product": source_product,
+    }
+    canonical = json.dumps(
+        forecast_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    forecast_hash = f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+    return forecast_hash
 
 
 def _aggregate_finality(values: set[str]):
@@ -1103,8 +1724,25 @@ def _optional_text(value: Any) -> str | None:
 
 
 def _as_utc(value: datetime) -> datetime:
+    # Public requests interpret naive timestamps as Alberta market time; use
+    # the same convention for storage writes and reads before binding UTC
+    # values into DuckDB.
+    return to_utc(value)
+
+
+def _market_datetime(value: Any) -> datetime | None:
+    """Normalize DuckDB timestamps to the public Alberta market timezone."""
+
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        raise DataValidationError("Historical-store timestamp was not a datetime.")
+    return _as_utc(value).astimezone(MARKET_TZ)
+
+
+def _as_of_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
-        return value.replace(tzinfo=UTC)
+        raise ValueError("as_of must be timezone-aware.")
     return value.astimezone(UTC)
 
 

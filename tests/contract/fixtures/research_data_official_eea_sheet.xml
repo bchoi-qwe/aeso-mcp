@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">
+      <c r="A1" t="inlineStr"><is><t>Year</t></is></c>
+      <c r="B1" t="inlineStr"><is><t>Count of Events</t></is></c>
+      <c r="C1" t="inlineStr"><is><t>Month</t></is></c>
+      <c r="D1" t="inlineStr"><is><t>Quarter</t></is></c>
+      <c r="E1" t="inlineStr"><is><t>Start Date</t></is></c>
+      <c r="F1" t="inlineStr"><is><t>End Date</t></is></c>
+      <c r="G1" t="inlineStr"><is><t>Length in Hours</t></is></c>
+      <c r="H1" t="inlineStr"><is><t>length in minutes</t></is></c>
+      <c r="I1" t="inlineStr"><is><t>Highest Level Declared</t></is></c>
+      <c r="J1" t="inlineStr"><is><t>Comment(s)</t></is></c>
+    </row>
+    <row r="2">
+      <c r="A2"><v>2024</v></c><c r="B2"><v>1</v></c>
+      <c r="C2" t="inlineStr"><is><t>January</t></is></c><c r="D2"><v>1</v></c>
+      <c r="E2"><v>45292</v></c><c r="F2"><v>45292.0416666667</v></c>
+      <c r="G2"><v>1</v></c><c r="H2"><v>60</v></c>
+      <c r="I2" t="inlineStr"><is><t>EEA1</t></is></c>
+      <c r="J2" t="inlineStr"><is><t>Test event</t></is></c>
+    </row>
+  </sheetData>
+</worksheet>

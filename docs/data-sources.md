@@ -45,6 +45,14 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | AIL actual / forecast | `get_forecast(series="ail")` | APIM Actual Forecast API | key | load merge | None | implemented |
 | Pool Price forecast / actual | `get_forecast(series="pool_price")` | ETS Forecast and Actual Pool Price CSV | none | No | named public report | implemented |
 | Wind / solar forecast | `get_forecast(series="wind"|"solar"|"wind_solar")` | [AESO wind and solar forecasting](https://www.aeso.ca/grid/grid-planning/forecasting/wind-and-solar-power-forecasting/) | none | No | fixed current CSVs; yearly aeso.ca links | implemented |
+| Historical adequacy / cushion web codes | `get_research_data(dataset="supply_adequacy"|"supply_cushion")` | [AESO historical web-code files](https://www.aeso.ca/market/market-and-system-reporting/data-requests/historical-supply-adequacy-and-supply-cushion-web-codes/) | none | No | fixed XLSX assets | implemented |
+| Historical transmission outages | `get_research_data(dataset="transmission_outages")` | [AESO historical transmission-outage data](https://www.aeso.ca/market/market-and-system-reporting/data-requests/historical-transmission-outages-data/) | none | No | fixed XLSX asset | implemented |
+| Planning-area load/generation | `get_research_data(dataset="planning_area")` | [AESO planning-area hourly data](https://www.aeso.ca/market/market-and-system-reporting/data-requests/planning-area-hourly-load-and-generation/) | none | No | fixed yearly ZIP/CSV assets | implemented |
+| Constrained volume by area/fuel | `get_research_data(dataset="constrained_volume")` | [AESO constrained-volume data](https://www.aeso.ca/market/market-and-system-reporting/data-requests/constrained-volume-by-planning-area-and-fuel-type/) | none | No | fixed CSV asset | implemented |
+| Historical EEA / Grid Alerts | `get_research_data(dataset="eea_events")` | [AESO data requests](https://www.aeso.ca/market/market-and-system-reporting/data-requests/) | none | No | fixed XLSX asset | implemented |
+| Historical OR directives | `get_research_data(dataset="or_directives")` | [AESO data requests](https://www.aeso.ca/market/market-and-system-reporting/data-requests/) | none | No | fixed XLSX assets | implemented |
+| Pool Participant registry | `get_research_data(dataset="pool_participants")` | APIM Pool Participant API | key | No | Do not scrape | implemented |
+| System frequency | `analyze_system_frequency` | [AESO 10-second frequency archive](https://www.aeso.ca/market/market-and-system-reporting/data-requests/) | none | No | fixed yearly CSV/ZIP assets; compact analysis only | implemented |
 | Supply adequacy / market supply cushion | `get_supply_adequacy` | ETS Supply Adequacy named report | none | No | narrow HTML status-grid parser | implemented |
 | Supply surplus | `get_supply_surplus` | ETS Supply Surplus named report | none | No | narrow HTML status parser | implemented |
 | FFR Net Schedule | `get_ffr_net_schedule` | ETS historical intertie-capability CSV | none | No | fixed public CSV | implemented |
@@ -67,7 +75,8 @@ source-specific client, not a separate runtime mode: the complete MCP server alw
 - Historical CSD generation is operational average MW, not settlement-metered generation.
 - Current wind/solar 12-hour forecasts have ten-minute cadence; seven-day and historical
   actual-versus-forecast files are hourly. Historical wind and solar are separate files, so the
-  combined series has no historical mode.
+  combined series has no historical mode. `as_of` uses only persisted or retrieved vintages with
+  known issue/publication chronology; unknown chronology is excluded.
 - Supply-adequacy and supply-cushion publications expose official categorical bands. Null numeric
   MW fields mean the source did not publish a numeric value; the service never substitutes a band
   midpoint.
@@ -79,3 +88,13 @@ source-specific client, not a separate runtime mode: the complete MCP server alw
   authoritative and the service does not infer an end timestamp.
 - Active reserve price, standby premium, activation strike, and clearing blended price are
   separate economic fields and must not be collapsed into one generic reserve price.
+- Historical adequacy/cushion values are categorical web codes, not numeric MW. Planning-area
+  blank numeric cells remain null. AESO defines the constrained archive's `Constrained_MW` column
+  as constrained volume for the entire hour in MWh; the typed contract follows that published
+  semantic rather than the header spelling alone.
+- Pool Participant is a current registry. Participant, agent, asset operator, owner, and corporate
+  parent are not interchangeable; concentration analysis reports its current-mapping basis and
+  unmapped historical blocks.
+- Raw system-frequency observations are not exposed through MCP. Threshold exposure is a count of
+  flagged ten-second intervals expressed as an upper-bound proxy, not exact duration outside a
+  threshold.

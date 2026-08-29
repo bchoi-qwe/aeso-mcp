@@ -10,6 +10,7 @@ APIM subscription key can never reach ETS or the public aeso.ca host.
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import re
 from collections.abc import Sequence
@@ -93,6 +94,15 @@ def _provenance(product: str, url: str) -> dict[str, object]:
     }
 
 
+def _source_hash(raw: bytes) -> str:
+    return f"sha256:{hashlib.sha256(raw).hexdigest()}"
+
+
+def _combined_hash(values: Sequence[str]) -> str:
+    joined = "\n".join(values).encode("utf-8")
+    return f"sha256:{hashlib.sha256(joined).hexdigest()}"
+
+
 class AesoForecastProvider:
     """Named, credential-free AESO forecast report adapter."""
 
@@ -111,11 +121,22 @@ class AesoForecastProvider:
                 "Current forecast horizon is only supported for wind, solar, and wind_solar."
             )
         raw = await self._http.get_bytes(url)
-        intervals = _parse_current_forecast_csv(raw, series=series, horizon=horizon)
+        content_hash = _source_hash(raw)
+        intervals = _parse_current_forecast_csv(
+            raw,
+            series=series,
+            horizon=horizon,
+            source_hash=content_hash,
+            source_version=url,
+        )
+        provenance = _provenance(
+            f"{_series_name(series)} {horizon.replace('_', ' ')} forecast", url
+        )
+        provenance.update({"source_hash": content_hash, "source_version": url})
         return (
             intervals,
             None,
-            _provenance(f"{_series_name(series)} {horizon.replace('_', ' ')} forecast", url),
+            provenance,
         )
 
     async def get_historical_forecast(
@@ -145,6 +166,7 @@ class AesoForecastProvider:
         links = _historical_year_links(page)
         all_intervals: list[ForecastInterval] = []
         source_urls: list[str] = []
+        source_hashes: list[str] = []
         for year in years:
             product = "Wind" if series == "wind" else "Solar"
             url = links.get((product.casefold(), year))
@@ -153,20 +175,37 @@ class AesoForecastProvider:
                     f"AESO forecasting page has no {product} actual-vs-forecast file for {year}."
                 )
             raw = await self._http.get_bytes(url)
-            all_intervals.extend(_parse_historical_forecast_csv(raw, series=series, year=year))
+            content_hash = _source_hash(raw)
+            all_intervals.extend(
+                _parse_historical_forecast_csv(
+                    raw,
+                    series=series,
+                    year=year,
+                    source_hash=content_hash,
+                    source_version=str(year),
+                )
+            )
             source_urls.append(url)
+            source_hashes.append(content_hash)
         filtered = [
             item
             for item in all_intervals
             if in_half_open_range(item.interval_start, start_m, end_m)
         ]
         filtered.sort(key=lambda item: chronological_instant(item.interval_start))
+        provenance = _provenance(
+            f"{_series_name(series)} historical actual-vs-forecast", ";".join(source_urls)
+        )
+        provenance.update(
+            {
+                "source_hash": _combined_hash(source_hashes),
+                "source_version": ";".join(str(year) for year in years),
+            }
+        )
         return (
             filtered,
             None,
-            _provenance(
-                f"{_series_name(series)} historical actual-vs-forecast", ";".join(source_urls)
-            ),
+            provenance,
         )
 
     async def get_pool_price_forecast(
@@ -190,13 +229,27 @@ class AesoForecastProvider:
             f"&endDate={end_date:%m%d%Y}&contentType=csv"
         )
         raw = await self._http.get_bytes(url)
-        intervals, report_date = _parse_pool_price_forecast_csv(raw)
+        content_hash = _source_hash(raw)
+        intervals, report_date = _parse_pool_price_forecast_csv(raw, source_hash=content_hash)
         intervals = [
             item
             for item in intervals
             if start_date <= to_market(item.interval_start).date() <= end_date
         ]
-        return intervals, report_date, _provenance("Forecast and Actual Pool Price", url)
+        provenance = _provenance("Forecast and Actual Pool Price", url)
+        provenance.update(
+            {
+                "source_hash": content_hash,
+                "source_version": url,
+                "source_report_date": report_date.date().isoformat()
+                if report_date is not None
+                else None,
+            }
+        )
+        # The report header exposes only a calendar date, not a publication
+        # instant.  Keep that date as provenance, but do not turn midnight
+        # into a false information boundary for point-in-time queries.
+        return intervals, None, provenance
 
 
 # Literal aliases keep the provider signatures narrow without importing the
@@ -215,37 +268,53 @@ def _parse_current_forecast_csv(
     *,
     series: LiteralForecastSeries,
     horizon: LiteralForecastHorizon,
+    source_hash: str | None = None,
+    source_version: str | None = None,
 ) -> list[ForecastInterval]:
     reader = _csv_reader(raw)
     _require_columns(reader.fieldnames, _FORECAST_REQUIRED, "AESO wind/solar forecast")
     rows: list[ForecastInterval] = []
     seen: set[datetime] = set()
+    previous_start: datetime | None = None
     cadence = timedelta(minutes=10) if horizon == "current_12_hour" else timedelta(hours=1)
     for raw_row in reader:
         row = _clean_row(raw_row)
         label = _cell(row, "Forecast Transaction Date")
         if label is None:
             continue
-        start = _parse_local_timestamp(label, "wind/solar forecast target")
+        start = _disambiguate_local_timestamp(
+            _parse_local_timestamp(label, "wind/solar forecast target"), previous_start
+        )
         key = to_utc(start)
         if key in seen:
             raise DataValidationError(
                 f"AESO wind/solar forecast contains duplicate target interval {label}."
             )
         seen.add(key)
+        previous_start = start
+        forecast = _optional_float(_cell(row, "Most Likely"))
+        actual = _optional_float(_cell(row, "Actual"))
+        if forecast is None and actual is None:
+            # A report may include a target row whose forecast and actual are
+            # both unavailable.  It is unobserved, not a zero-valued
+            # observation; leave it out so response metadata can expose the
+            # resulting partial coverage.
+            continue
         rows.append(
             ForecastInterval(
                 interval_start=start,
                 interval_end=add_elapsed(start, cadence),
                 series=series,
                 horizon=horizon,
-                forecast_value=_optional_float(_cell(row, "Most Likely")),
-                actual_value=_optional_float(_cell(row, "Actual")),
+                forecast_value=forecast,
+                actual_value=actual,
                 minimum_value=_optional_float(_cell(row, "Min")),
                 maximum_value=_optional_float(_cell(row, "Max")),
                 capacity_mw=_optional_float(_cell(row, "MCR")),
                 unit="MW",
                 source_product=f"{_series_name(series)} {horizon.replace('_', ' ')} forecast",
+                source_version=source_version,
+                source_hash=source_hash,
                 observation_type=ObservationType.FORECAST,
                 finality=FinalityStatus.PRELIMINARY,
             )
@@ -261,6 +330,8 @@ def _parse_historical_forecast_csv(
     *,
     series: LiteralRenewableSeries,
     year: int,
+    source_hash: str | None = None,
+    source_version: str | None = None,
 ) -> list[ForecastInterval]:
     reader = _csv_reader(raw)
     _require_columns(reader.fieldnames, _HISTORICAL_REQUIRED, f"AESO {series} data {year}")
@@ -279,19 +350,25 @@ def _parse_historical_forecast_csv(
                 f"AESO {series} historical file contains duplicate target interval {local_label}."
             )
         seen.add(key)
+        forecast = _optional_float(_cell(row, "OPT"))
+        actual = _optional_float(_cell(row, "ACTUAL"))
+        if forecast is None and actual is None:
+            continue
         rows.append(
             ForecastInterval(
                 interval_start=start,
                 interval_end=add_elapsed(start, timedelta(hours=1)),
                 series=series,
                 horizon="historical",
-                forecast_value=_optional_float(_cell(row, "OPT")),
-                actual_value=_optional_float(_cell(row, "ACTUAL")),
+                forecast_value=forecast,
+                actual_value=actual,
                 minimum_value=_optional_float(_cell(row, "MIN")),
                 maximum_value=_optional_float(_cell(row, "MAX")),
                 capacity_mw=_optional_float(_cell(row, "MCR")),
                 unit="MW",
                 source_product=f"{_series_name(series)} historical actual-vs-forecast {year}",
+                source_version=source_version,
+                source_hash=source_hash,
                 observation_type=ObservationType.FORECAST,
                 finality=FinalityStatus.FINAL,
             )
@@ -304,6 +381,8 @@ def _parse_historical_forecast_csv(
 
 def _parse_pool_price_forecast_csv(
     raw: bytes,
+    *,
+    source_hash: str | None = None,
 ) -> tuple[list[ForecastInterval], datetime | None]:
     text = raw.decode("utf-8-sig", errors="replace")
     lines = text.splitlines()
@@ -350,6 +429,7 @@ def _parse_pool_price_forecast_csv(
                 actual_value=actual,
                 unit="CAD/MWh",
                 source_product="Forecast and Actual Pool Price",
+                source_hash=source_hash,
                 observation_type=ObservationType.FORECAST,
                 finality=FinalityStatus.PRELIMINARY,
             )
@@ -447,6 +527,17 @@ def _parse_local_timestamp(value: str, report: str) -> datetime:
         raise DataValidationError(f"{report} has malformed timestamp {value!r}.") from exc
 
 
+def _disambiguate_local_timestamp(value: datetime, previous: datetime | None) -> datetime:
+    """Preserve both occurrences when a current report spans fall-back."""
+
+    candidates = [value.replace(fold=0), value.replace(fold=1)]
+    if previous is None:
+        return candidates[0]
+    previous_instant = to_utc(previous)
+    later = [candidate for candidate in candidates if to_utc(candidate) > previous_instant]
+    return min(later, key=chronological_instant) if later else candidates[0]
+
+
 def _parse_historical_timestamp(local_value: str, gmt_value: str) -> datetime:
     try:
         # The GMT column preserves chronology through a fall-back hour.  Keep
@@ -455,7 +546,8 @@ def _parse_historical_timestamp(local_value: str, gmt_value: str) -> datetime:
         return utc_value.astimezone(MARKET_TZ)
     except ValueError:
         try:
-            return datetime.fromisoformat(local_value.strip()).replace(tzinfo=MARKET_TZ)
+            local = datetime.fromisoformat(local_value.strip())
+            return to_market(local)
         except ValueError as fallback_exc:
             raise DataValidationError(
                 f"AESO historical forecast has malformed timestamp {local_value!r}/{gmt_value!r}."

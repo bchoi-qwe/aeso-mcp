@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from importlib.metadata import version as installed_version
 from pathlib import Path
@@ -74,6 +75,12 @@ EXPECTED_TOOLS = {
     "get_operating_reserve_forecast",
     "get_operating_reserve_activations",
     "summarize_operating_reserve_market",
+    "get_research_data",
+    "analyze_participant_concentration",
+    "analyze_regional_load_generation",
+    "analyze_constrained_volume",
+    "analyze_scarcity",
+    "analyze_system_frequency",
 }
 EXPECTED_PROMPTS = {"daily_market_brief", "investigate_price_event", "compare_market_days"}
 EXPECTED_RESOURCES = {
@@ -98,6 +105,7 @@ EXPECTED_RESOURCES = {
     "aeso://methodology/supply-tightness",
     "aeso://methodology/historical-generation",
     "aeso://methodology/research-analytics",
+    "aeso://methodology/official-research-data",
     "aeso://methodology/operating-reserve-market",
     "aeso://methodology/uc-settlement",
     "aeso://methodology/official-forecasts",
@@ -121,6 +129,13 @@ async def smoke() -> None:
     """List the packaged MCP surface and read a packaged data resource."""
     _assert_imported_from_wheel()
 
+    expected_version = os.environ.get("AESO_MCP_EXPECTED_VERSION")
+    actual_version = installed_version("aeso-mcp")
+    if expected_version is not None and actual_version != expected_version:
+        raise SystemExit(
+            f"Installed wheel version mismatch: expected {expected_version}, got {actual_version}"
+        )
+
     settings = Settings(aeso_api_key=SecretStr("wheel-smoke-key"))
     container = build_container(settings)
     try:
@@ -139,12 +154,13 @@ async def smoke() -> None:
                 f"Installed wheel resource mismatch: {sorted(resources ^ EXPECTED_RESOURCES)}"
             )
         glossary = await mcp.read_resource("aeso://glossary")
-        if "Pool Price" not in glossary.contents[0].content:
+        glossary_content = glossary.contents[0].content
+        if not isinstance(glossary_content, str) or "Pool Price" not in glossary_content:
             raise SystemExit("Installed wheel glossary resource did not load")
     finally:
         await container.aclose()
 
-    sys.stdout.write(f"Installed wheel MCP smoke passed ({installed_version('aeso-mcp')})\n")
+    sys.stdout.write(f"Installed wheel MCP smoke passed ({actual_version})\n")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from aeso_mcp.providers.operations import AesoOperationsProvider
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 from aeso_mcp.providers.reports import AesoReportsProvider
+from aeso_mcp.providers.research_data import AesoResearchDataProvider
 from aeso_mcp.services.analytics import AnalyticsService
 from aeso_mcp.services.assets import AssetsService
 from aeso_mcp.services.cache import AsyncTTLCache
@@ -26,6 +27,7 @@ from aeso_mcp.services.market_power import MarketPowerService
 from aeso_mcp.services.operations import OperationsService
 from aeso_mcp.services.reports import ReportsService
 from aeso_mcp.services.research import ResearchService
+from aeso_mcp.services.research_data import ResearchDataService
 from aeso_mcp.services.reserves import OperatingReserveService
 from aeso_mcp.services.transmission import TransmissionService
 from aeso_mcp.storage.history import HistoricalStore
@@ -48,6 +50,7 @@ class AppContainer:
     forecasts: ForecastService
     reports: ReportsService
     research: ResearchService
+    research_data: ResearchDataService
     reserves: OperatingReserveService
     apim_http: AesoHttpClient
     public_reports_http: AesoPublicReportsHttpClient
@@ -83,6 +86,7 @@ def build_container(settings: Settings) -> AppContainer:
         settings,
         cache,
         ail_provider=provider,
+        store=historical_store,
     )
     reports = ReportsService(reports_provider, settings, cache)
     transmission = TransmissionService(
@@ -94,6 +98,18 @@ def build_container(settings: Settings) -> AppContainer:
     market_power = MarketPowerService(public_reports, settings, cache)
     operations_provider = AesoOperationsProvider(apim_http)
     operations = OperationsService(operations_provider, market, settings, cache, reports=reports)
+    research_data_provider = AesoResearchDataProvider(
+        public_http,
+        participant_provider=operations_provider,
+    )
+    research_data = ResearchDataService(
+        research_data_provider,
+        settings,
+        cache,
+        market=market,
+        operations=operations,
+        assets=assets,
+    )
     history = HistoryService(
         historical_generation,
         public_reports,
@@ -134,6 +150,7 @@ def build_container(settings: Settings) -> AppContainer:
         forecasts=forecasts,
         reports=reports,
         research=research,
+        research_data=research_data,
         reserves=reserves,
         apim_http=apim_http,
         public_reports_http=public_http,

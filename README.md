@@ -18,16 +18,23 @@
 - Official individual-asset Historical CSD Generation Data at hourly and five-minute resolution
 - Optional incremental DuckDB index and partitioned Parquet snapshots for repeatable research
 - Official AIL, Pool Price, wind, solar, and combined wind/solar forecast publications through
-  one typed `get_forecast` contract
+  one typed `get_forecast` contract, with persisted publication vintages and point-in-time
+  `as_of` selection that excludes unknown publication chronology
 - Official supply-adequacy, supply-surplus, FFR Net Schedule, Dispatch Down Service, TMR
   reference-price, and AIES system-event reports
+- Official historical adequacy/cushion web codes, transmission outages, planning-area hourly
+  load/generation, constrained volume, EEA events, operating-reserve directives, and the current
+  Pool Participant registry through one typed research-archive contract
 - Authenticated APIM reports for merit order, commitments, capability/outages, interties,
   metered volumes, and operating-reserve offer control
 - Deterministic analytics: compact history summaries, period comparison, event detection,
   condition evidence, price distributions, capture price, net load, supply stack, generation,
   outage association, generalized forecast accuracy, asset gross energy revenue, CSD-versus-
   metered comparisons, ramps, supply-surplus associations, and transparent supply-tightness
-  indicators
+  indicators, plus participant concentration, regional, constrained-volume, scarcity, and compact
+  system-frequency analysis
+- Deterministic research manifests identify exact input publications, parameters, methodology,
+  completeness, and degradation warnings for multi-source market-event analysis
 - Public operating-reserve active/standby prices, seven-day forecasts, activations, and summaries
 - One complete server package and startup path: `AESO_API_KEY` is always required; there is no
   reduced credential-free server mode
@@ -65,6 +72,7 @@
 | Assets | `get_assets` | Registry with filters |
 | Historical CSD generation | `get_historical_generation` | Individual assets; hourly / five-minute operational MW |
 | Official forecasts | `get_forecast` | AIL / Pool Price / wind / solar; source-specific horizons and cadence |
+| Official research archive | `get_research_data` | Historical adequacy/cushion, transmission, planning-area, constraint, EEA, OR-directive, and current participant records |
 | Supply adequacy / cushion | `get_supply_adequacy` | Official hourly categorical status bands |
 | Supply surplus | `get_supply_surplus` | Official hourly zero-price forecast status |
 | FFR Net Schedule | `get_ffr_net_schedule` | Hourly scheduled imports (negative) / exports (positive) MW |
@@ -82,8 +90,10 @@ Analytics: `summarize_market_history`, `assess_supply_tightness`, `compare_marke
 `calculate_capture_prices`, `analyze_net_load`, `analyze_supply_stack`,
 `analyze_intertie_utilization`, `analyze_generation_mix`, `analyze_asset_dispatch`,
 `analyze_outage_impact`, `analyze_forecast_error`, `calculate_asset_energy_revenue`,
-`compare_csd_to_metered`, `analyze_ramps`, `analyze_supply_surplus_events`, and
-`summarize_operating_reserve_market`.
+`compare_csd_to_metered`, `analyze_ramps`, `analyze_supply_surplus_events`,
+`summarize_operating_reserve_market`, `analyze_participant_concentration`,
+`analyze_regional_load_generation`, `analyze_constrained_volume`, `analyze_scarcity`, and
+`analyze_system_frequency`.
 
 ## Architecture
 
@@ -261,6 +271,7 @@ or secrets. See [.env.example](.env.example) for all bounded runtime settings.
 | `sync_historical_store` | Incremental local DuckDB/Parquet ingestion |
 | `get_historical_store_status` | Local coverage, manifests, and partition status |
 | `get_forecast` | Official AIL, Pool Price, wind, solar, and combined wind/solar forecasts |
+| `get_research_data` | Bounded page from one verified official historical/spatial/reliability archive |
 | `get_supply_adequacy` | Official supply-adequacy and market-supply-cushion status bands |
 | `get_supply_surplus` | Official hourly supply-surplus forecast status |
 | `get_ffr_net_schedule` | Historical scheduled FFR intertie transfer |
@@ -287,6 +298,11 @@ or secrets. See [.env.example](.env.example) for all bounded runtime settings.
 | `get_operating_reserve_forecast` | Seven-day reserve-volume forecast |
 | `get_operating_reserve_activations` | Hourly standby activations |
 | `summarize_operating_reserve_market` | Product price/volume/activation summary |
+| `analyze_participant_concentration` | Offered-volume shares and HHI using current participant mapping |
+| `analyze_regional_load_generation` | Planning-area and regional load/generation aggregates |
+| `analyze_constrained_volume` | Planning-area/fuel constrained MWh and optional price association |
+| `analyze_scarcity` | Historical adequacy/cushion web codes, EEA, and price context |
+| `analyze_system_frequency` | Compact six-hour 10-second frequency statistics; no raw row output |
 
 Market and research tools are read-only. `sync_historical_store` writes only to the configured
 local historical-store root; it does not mutate AESO or another external system.
@@ -311,6 +327,9 @@ Prompts: `daily_market_brief`, `investigate_price_event`, and `compare_market_da
 - **Units**: Pool Price / SMP → CAD/MWh; load / generation / interchange / reserves → MW.
 - **Status**: Metadata includes `actual` / `forecast` / etc. Forecasts are never implied to be settled actuals.
 - **Finality**: Operational feeds may be preliminary; do not assume final settlement.
+- **Point-in-time forecasts**: `as_of` selects only vintages with known issue/publication times at
+  or before the boundary. Unknown chronology is excluded; target intervals absent from persisted
+  history remain unobserved rather than being backfilled from a later publication.
 - **Completeness**: Metadata reports available/missing series and expected/missing observations
   where the source cadence is known. Optional enrichment failures are surfaced as partial or
   degraded results with warnings.
@@ -318,6 +337,8 @@ Prompts: `daily_market_brief`, `investigate_price_event`, and `compare_market_da
   with `next_offset`. Use `summarize_market_history` before retrieving long raw series.
 - **Cache timing**: `retrieved_at` identifies the upstream fetch; `served_at`, `cache_hit`, and
   `cache_age` identify when and how the response was served.
+- **Research identity**: `analyze_market_event.analysis_manifest` records exact sources,
+  parameters, methodology version, warnings, and a deterministic SHA-256 `analysis_id`.
 
 ## Development
 
@@ -360,7 +381,8 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 
 Version 0.3.0 includes the historical store, full CSD generation adapter, official forecast/report
 providers, general research analytics, operating-reserve market surface, eval suite, and
-documentation site.
+documentation site. Unreleased work adds point-in-time forecast vintages, reproducibility
+manifests, release-policy hardening, and the verified official research-data archive.
 
 ## Contributing
 

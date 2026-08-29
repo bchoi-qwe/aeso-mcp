@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">
+      <c r="A1" t="inlineStr"><is><t>BEGIN_DATE_GMT</t></is></c>
+      <c r="B1" t="inlineStr"><is><t>BEGIN_DATE_LOCAL</t></is></c>
+      <c r="C1" t="inlineStr"><is><t>VERSION_START_TIME_GMT</t></is></c>
+      <c r="D1" t="inlineStr"><is><t>VERSION_START_LOCAL</t></is></c>
+      <c r="E1" t="inlineStr"><is><t>WEB_CODE</t></is></c>
+    </row>
+    <row r="2">
+      <c r="A2"><v>45292.2916666667</v></c>
+      <c r="B2"><v>45292</v></c>
+      <c r="C2"><v>45292.2951388889</v></c>
+      <c r="D2"><v>45292.0034722222</v></c>
+      <c r="E2"><v>4</v></c>
+    </row>
+    <row r="3">
+      <c r="A3"><v>45292.3333333333</v></c>
+      <c r="B3"><v>45292.0416666667</v></c>
+      <c r="C3"><v>45292.3368055556</v></c>
+      <c r="D3"><v>45292.0868055556</v></c>
+      <c r="E3"><v>5</v></c>
+    </row>
+  </sheetData>
+</worksheet>

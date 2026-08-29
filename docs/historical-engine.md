@@ -29,7 +29,9 @@ schema version.
 
 - historical CSD generation;
 - hourly Pool Price; and
-- AIL actual/forecast observations.
+- AIL actual/forecast observations; and
+- immutable AIL, Pool Price, wind, solar, and combined wind/solar forecast vintages as those
+  publications are retrieved through `get_forecast`.
 
 The DuckDB index owns deduplication keys and source manifests. Duplicate primary observations are
 counted in sync results and reduced deterministically to the last source observation. Parquet
@@ -56,6 +58,24 @@ without coupling the domain service to FastMCP.
 partitions, schema version, configured path, detected cadence gaps, and dependency availability.
 The source manifest retains object identity/hash, update and retrieval times, row count, coverage,
 observation semantics, and schema version for upstream lineage.
+
+## Forecast vintages and `as_of`
+
+Schema version 3 adds a separate `forecast_vintages` relation. A vintage retains target interval,
+forecast issue and publication times, horizon, forecast and actual values, source version/hash,
+retrieval time, lead time, finality, completeness, and source-file identity. Its key uses the
+canonical forecast-only payload rather than retrieval time or the raw file hash, so a raw report
+that later fills in actual/finality fields enriches the same publication while a revised forecast
+remains a distinct vintage.
+
+`get_forecast(..., as_of=...)` selects the latest eligible vintage per target interval. Every known
+issue and publication timestamp must be at or before `as_of`; rows with unknown publication
+chronology are excluded. Existing schema-v2 forecast values migrate additively and remain
+available without `as_of`, but are deliberately excluded from point-in-time queries because their
+original information time cannot be reconstructed.
+
+Point-in-time results report unknown completeness unless the source establishes full persisted
+coverage. A missing target interval is unobserved, never silently filled from a later forecast.
 
 ## Additional historical reports
 

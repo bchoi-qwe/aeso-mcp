@@ -1,0 +1,14 @@
+{
+  "return": {
+    "pool_participant_list": [
+      {
+        "pool_participant_ID": "PP1",
+        "pool_participant_name": "Participant One",
+        "corporate_contact": "contact@example.invalid",
+        "agent_list": [
+          {"agent_ID": "AG1", "agent_name": "Agent One"}
+        ]
+      }
+    ]
+  }
+}

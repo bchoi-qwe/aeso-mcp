@@ -231,8 +231,21 @@ class ForecastRequest(DateRangeRequest):
     """Retrieve paired actual/forecast observations for a supported series."""
 
     series: ForecastSeries = "ail"
+    as_of: datetime | None = Field(
+        default=None,
+        description=(
+            "Optional timezone-aware publication/issue boundary for selecting a forecast "
+            "vintage from local history."
+        ),
+    )
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=500, ge=1, le=2_000)
+
+    @model_validator(mode="after")
+    def _as_of_is_aware(self) -> ForecastRequest:
+        if self.as_of is not None and self.as_of.tzinfo is None:
+            raise ValueError("as_of must be timezone-aware.")
+        return self
 
 
 class ForecastInterval(BaseModel):
@@ -246,6 +259,12 @@ class ForecastInterval(BaseModel):
     actual_value: float
     forecast_value: float | None = None
     unit: str
+    forecast_issue_time: datetime | None = None
+    publication_time: datetime | None = None
+    retrieved_at: datetime | None = None
+    source_version: str | None = None
+    source_hash: str | None = None
+    vintage_id: str | None = None
 
 
 class ForecastResponse(WarningMixin):

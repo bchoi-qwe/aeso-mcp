@@ -10,6 +10,7 @@ another.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Literal
 
@@ -44,8 +45,21 @@ class OfficialForecastRequest(DateRangeRequest):
     series: ForecastSeries = "ail"
     horizon: ForecastHorizon | None = None
     include_actual: bool = True
+    as_of: datetime | None = Field(
+        default=None,
+        description=(
+            "Return only forecast information published or issued no later than this "
+            "timezone-aware instant. When omitted, the latest available vintage is returned."
+        ),
+    )
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=500, ge=1, le=2_000)
+
+    @model_validator(mode="after")
+    def _as_of_is_aware(self) -> OfficialForecastRequest:
+        if self.as_of is not None and self.as_of.tzinfo is None:
+            raise ValueError("as_of must be timezone-aware.")
+        return self
 
 
 class ForecastInterval(BaseModel):
@@ -69,6 +83,13 @@ class ForecastInterval(BaseModel):
     maximum_value: float | None = None
     capacity_mw: float | None = None
     forecast_issue_time: datetime | None = None
+    publication_time: datetime | None = None
+    retrieved_at: datetime | None = None
+    source_version: str | None = None
+    source_hash: str | None = None
+    source_file_id: str | None = None
+    source_file_name: str | None = None
+    vintage_id: str | None = None
     lead_time_minutes: int | None = Field(default=None, ge=0)
     unit: str
     source_product: str
@@ -76,11 +97,111 @@ class ForecastInterval(BaseModel):
     finality: FinalityStatus = FinalityStatus.UNKNOWN
     completeness: DataCompleteness = DataCompleteness.COMPLETE
 
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_target_aliases(cls, values: object) -> object:
+        if not isinstance(values, Mapping):
+            return values
+        normalized = dict(values)
+        aliases = {
+            "target_interval_start": "interval_start",
+            "target_interval_end": "interval_end",
+            "issue_time": "forecast_issue_time",
+        }
+        for alias, field in aliases.items():
+            if field not in normalized and alias in normalized:
+                normalized[field] = normalized[alias]
+            normalized.pop(alias, None)
+        return normalized
+
     @model_validator(mode="after")
     def _has_value(self) -> ForecastInterval:
         if self.forecast_value is None and self.actual_value is None:
             raise ValueError("A forecast interval must contain a forecast or actual value.")
         return self
+
+
+class ForecastVintage(BaseModel):
+    """One immutable forecast publication for one target interval.
+
+    A forecast vintage is identified by ``vintage_id``.  The ID is derived from
+    the series, target interval, issue/publication timestamps, source version,
+    and canonical forecast-only payload by the historical store.  It is
+    deliberately independent of retrieval time, raw content hash, later actual
+    enrichment, finality, and completeness so repeated ingestion deduplicates
+    the same publication.
+    ``ForecastInterval`` remains the response-facing type so existing callers
+    continue to receive the same semantic abstraction.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    interval_start: datetime
+    interval_end: datetime
+    series: ForecastSeries
+    horizon: ForecastHorizon | None = None
+    forecast_value: float | None = None
+    actual_value: float | None = None
+    minimum_value: float | None = None
+    maximum_value: float | None = None
+    capacity_mw: float | None = None
+    forecast_issue_time: datetime | None = None
+    publication_time: datetime | None = None
+    retrieved_at: datetime | None = None
+    source_version: str | None = None
+    source_hash: str | None = None
+    source_file_id: str | None = None
+    source_file_name: str | None = None
+    vintage_id: str | None = None
+    schema_version: int = Field(default=3, ge=1)
+    lead_time_minutes: int | None = Field(default=None, ge=0)
+    unit: str
+    source_product: str
+    observation_type: ObservationType = ObservationType.FORECAST
+    finality: FinalityStatus = FinalityStatus.UNKNOWN
+    completeness: DataCompleteness = DataCompleteness.COMPLETE
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_storage_aliases(cls, values: object) -> object:
+        if not isinstance(values, Mapping):
+            return values
+        normalized = dict(values)
+        aliases = {
+            "target_interval_start": "interval_start",
+            "target_interval_end": "interval_end",
+            "issue_time": "forecast_issue_time",
+            "source_retrieved_at": "retrieved_at",
+        }
+        for alias, field in aliases.items():
+            if field not in normalized and alias in normalized:
+                normalized[field] = normalized[alias]
+            normalized.pop(alias, None)
+        return normalized
+
+    @model_validator(mode="after")
+    def _has_value(self) -> ForecastVintage:
+        if self.forecast_value is None and self.actual_value is None:
+            raise ValueError("A forecast vintage must contain a forecast or actual value.")
+        return self
+
+    @property
+    def target_interval_start(self) -> datetime:
+        """Alias used by storage/research code for the forecast target."""
+
+        return self.interval_start
+
+    @property
+    def target_interval_end(self) -> datetime:
+        """Alias used by storage/research code for the forecast target."""
+
+        return self.interval_end
+
+    @property
+    def issue_time(self) -> datetime | None:
+        """Short alias for the source forecast issue timestamp."""
+
+        return self.forecast_issue_time
 
 
 class ForecastResponse(WarningMixin):

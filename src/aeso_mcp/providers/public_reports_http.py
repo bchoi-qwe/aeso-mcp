@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 ALLOWED_PUBLIC_REPORT_HOSTS = frozenset({"ets.aeso.ca", "aeso.ca", "www.aeso.ca"})
 _MAX_REDIRECTS = 5
 _MAX_PUBLIC_REPORT_BYTES = 25 * 1024 * 1024
+# The largest verified fixed frequency asset is the 2023 raw CSV at 192,445,819
+# bytes; 192 MiB covers it and the 2025 148,813,587-byte file with a small
+# margin without allowing an arbitrary large response through this path.
+_MAX_PUBLIC_ASSET_BYTES = 192 * 1024 * 1024
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -83,6 +87,26 @@ class AesoPublicReportsHttpClient:
         self._assert_allowed_url(url)
         response = await self._get(url)
         _validate_report_body(response.content)
+        return response.content
+
+    async def get_binary_asset(self, url: str) -> bytes:
+        """GET one official AESO downloadable asset without text-body assumptions.
+
+        The data-request archive publishes XLSX/ZIP assets as well as CSV files.
+        Those files are still fetched through the same credential-free, manually
+        redirected client, but cannot pass the normal report-body NUL check.  Keep
+        this method deliberately narrower than :meth:`get_bytes`: only HTTPS
+        ``www.aeso.ca/assets/Uploads/`` assets with a known archive/text suffix
+        are accepted, and the compressed response is bounded.
+        """
+        self._assert_binary_asset_url(url)
+        response = await self._get(url)
+        # Redirects are followed by the shared client only after the general
+        # AESO host allow-list check. Re-apply the narrower asset boundary to
+        # the final URL so a fixed asset cannot redirect to an unrelated public
+        # endpoint on another allow-listed host.
+        self._assert_binary_asset_url(str(response.url))
+        _validate_binary_asset_body(response.content)
         return response.content
 
     def resolve_outage_report_url(self, href: str, *, base: str) -> str:
@@ -172,9 +196,36 @@ class AesoPublicReportsHttpClient:
         if "api-key" in query or "subscription-key" in query or "aeso_api_key" in query:
             raise DataValidationError("Credentials must not appear in public report URLs.")
 
+    def _assert_binary_asset_url(self, url: str) -> None:
+        self._assert_allowed_url(url)
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        path = parsed.path
+        suffix = path.rsplit("/", 1)[-1].lower().rsplit(".", 1)[-1] if "." in path else ""
+        if host != "www.aeso.ca" or not path.startswith("/assets/Uploads/"):
+            raise DataValidationError(
+                "Binary public assets must be fixed files under www.aeso.ca/assets/Uploads/."
+            )
+        if parsed.query or parsed.fragment or suffix not in {"csv", "xlsx", "zip"}:
+            raise DataValidationError("Binary public assets must use a known static file URL.")
+
 
 def _validate_report_body(content: bytes) -> None:
     if len(content) > _MAX_PUBLIC_REPORT_BYTES:
         raise DataValidationError("AESO public report exceeded the 25 MiB safety limit.")
     if b"\x00" in content[:4096]:
         raise DataValidationError("AESO public report returned unexpected binary content.")
+
+
+def _validate_binary_asset_body(content: bytes) -> None:
+    if len(content) > _MAX_PUBLIC_ASSET_BYTES:
+        raise DataValidationError("AESO public asset exceeded the 192 MiB safety limit.")
+    if not content:
+        raise DataValidationError("AESO public asset returned an empty body.")
+    # XLSX and ZIP files are ZIP containers.  CSV assets remain text and are
+    # accepted without a NUL check here because a fixed source parser validates
+    # their header and numeric fields before returning observations.
+    if content[:2] == b"PK":
+        return
+    if b"\x00" in content[:4096]:
+        raise DataValidationError("AESO public asset returned unexpected binary content.")

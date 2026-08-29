@@ -88,6 +88,12 @@ EXPECTED_TOOLS = {
     "get_operating_reserve_forecast",
     "get_operating_reserve_activations",
     "summarize_operating_reserve_market",
+    "get_research_data",
+    "analyze_participant_concentration",
+    "analyze_regional_load_generation",
+    "analyze_constrained_volume",
+    "analyze_scarcity",
+    "analyze_system_frequency",
 }
 
 EXPECTED_RESOURCES = {
@@ -112,6 +118,7 @@ EXPECTED_RESOURCES = {
     "aeso://methodology/supply-tightness",
     "aeso://methodology/historical-generation",
     "aeso://methodology/research-analytics",
+    "aeso://methodology/official-research-data",
     "aeso://methodology/operating-reserve-market",
     "aeso://methodology/uc-settlement",
     "aeso://methodology/official-forecasts",
@@ -284,6 +291,7 @@ def container(settings: Settings) -> AppContainer:
         forecasts=AsyncMock(),
         reports=AsyncMock(),
         research=AsyncMock(),
+        research_data=AsyncMock(),
         reserves=AsyncMock(),
         apim_http=AsyncMock(),
         public_reports_http=AsyncMock(),

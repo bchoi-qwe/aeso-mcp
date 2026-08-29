@@ -18,6 +18,7 @@ from aeso_mcp.models.operations import (
     OperatingReserveOfferBlock,
     UnitCommitmentDirective,
 )
+from aeso_mcp.models.research_data import PoolParticipantAgent, PoolParticipantRecord
 from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.timeutil import MARKET_TZ, parse_aeso_hour_ending, to_market
 
@@ -371,6 +372,66 @@ class AesoOperationsProvider:
                 )
         return blocks, _provenance("Operating Reserve Offer Control Report", "v1")
 
+    async def get_pool_participants(
+        self,
+        *,
+        pool_participant_ids: list[str],
+        pool_participant_name: str | None,
+    ) -> tuple[list[PoolParticipantRecord], dict[str, str]]:
+        """Fetch the current Pool Participant API registry.
+
+        The Azure APIM portal documents ``GET /poolparticipantlist`` with
+        optional ``pool_participant_ID`` (up to 20 comma-separated IDs) and
+        case-sensitive ``pool_participant_name`` filters.  This is a current
+        registry; it must not be presented as historical ownership.
+        """
+        params: dict[str, str] = {}
+        if pool_participant_ids:
+            params["pool_participant_ID"] = ",".join(pool_participant_ids)
+        if pool_participant_name:
+            params["pool_participant_name"] = pool_participant_name
+        data = await self._http.get_json(
+            "poolparticipant-api/v1/poolparticipantlist",
+            params=params or None,
+        )
+        rows = _pool_participant_rows(data)
+        participants: list[PoolParticipantRecord] = []
+        for item in rows:
+            participant_id = _text(item.get("pool_participant_ID"))
+            participant_name = _text(item.get("pool_participant_name"))
+            if participant_id is None or participant_name is None:
+                raise DataValidationError(
+                    "Pool Participant API row is missing pool_participant_ID or "
+                    "pool_participant_name."
+                )
+            raw_agents = item.get("agent_list") or []
+            if isinstance(raw_agents, dict):
+                raw_agents = [raw_agents]
+            if not isinstance(raw_agents, list):
+                raise DataValidationError("Pool Participant API agent_list has an invalid shape.")
+            agents: list[PoolParticipantAgent] = []
+            for raw_agent in raw_agents:
+                if not isinstance(raw_agent, dict):
+                    raise DataValidationError("Pool Participant API agent_list contains a bad row.")
+                agent_id = _text(raw_agent.get("agent_ID"))
+                if agent_id is None:
+                    raise DataValidationError("Pool Participant API agent row is missing agent_ID.")
+                agents.append(
+                    PoolParticipantAgent(
+                        agent_id=agent_id,
+                        agent_name=_text(raw_agent.get("agent_name")),
+                    )
+                )
+            participants.append(
+                PoolParticipantRecord(
+                    pool_participant_id=participant_id,
+                    pool_participant_name=participant_name,
+                    corporate_contact=_text(item.get("corporate_contact")),
+                    agents=agents,
+                )
+            )
+        return participants, _provenance("Pool Participant API", "v1")
+
 
 def _unwrap_return(data: Any) -> Any:
     if isinstance(data, dict) and "return" in data:
@@ -459,6 +520,35 @@ def _metered_reports(data: Any) -> list[dict[str, Any]]:
             if isinstance(value, dict):
                 return [value]
     raise DataValidationError("Unexpected Metered Volume response shape.")
+
+
+def _pool_participant_rows(data: Any) -> list[dict[str, Any]]:
+    """Normalize the portal's object response and conservative list wrappers."""
+    payload = _unwrap_return(data)
+    if isinstance(payload, dict):
+        if "pool_participant_ID" in payload or "pool_participant_name" in payload:
+            return [payload]
+        for key in (
+            "pool_participant_list",
+            "Pool Participant List",
+            "poolParticipantList",
+            "data",
+        ):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                return [value]
+            if isinstance(value, list):
+                if not all(isinstance(item, dict) for item in value):
+                    raise DataValidationError(
+                        "Pool Participant API list contains a non-object row."
+                    )
+                return value
+        raise DataValidationError("Unexpected Pool Participant API response shape.")
+    if isinstance(payload, list):
+        if not all(isinstance(item, dict) for item in payload):
+            raise DataValidationError("Pool Participant API list contains a non-object row.")
+        return payload
+    raise DataValidationError("Unexpected Pool Participant API response shape.")
 
 
 def _parse_datetime(value: Any, *, assume_utc: bool = False) -> datetime | None:

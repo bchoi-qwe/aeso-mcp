@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Immutable forecast-vintage storage with additive schema-v3 migration, source version/hash,
+  issue/publication/retrieval time, stable deduplication, DST-safe target identity, and bounded
+  `as_of` selection through the existing `get_forecast` abstraction
+- One typed official research-archive contract for historical adequacy/cushion web codes,
+  transmission outages, planning-area load/generation, constrained volume, EEA events,
+  operating-reserve directives, and the current Pool Participant registry
+- Participant concentration, regional load/generation, constrained-volume, scarcity-context, and
+  compact six-hour system-frequency analyses; raw high-frequency rows remain server-side
+- Deterministic `analysis_manifest` output for multi-source market-event research, including exact
+  inputs, methodology version, normalized parameters, warnings, and a SHA-256 analysis identity
+- Exact lockfile prerelease-policy checks, substantive low-covered provider/service tests, and an
+  exact-version public-PyPI installation smoke after manual Trusted Publishing
+- Seven canonical agent-use eval cases for forecast vintages and the new archive/analysis routes,
+  bringing the evaluation catalog to 70 cases
+
+### Changed
+
+- Global prerelease resolution no longer admits unrelated beta/dev packages; FastMCP and its
+  matching slim distribution remain the only exact prerelease allowlist entries
+- Branch-aware coverage floor raised from 65% to 75%
+
+### Fixed
+
+- Point-in-time forecast queries exclude vintages with unknown or later information timestamps,
+  preventing later publications from entering historical `as_of` results
+- Planning-area analysis preserves missing source fields instead of treating them as observed zero
+
 ## [0.3.0] - 2026-08-26
 
 ### Added

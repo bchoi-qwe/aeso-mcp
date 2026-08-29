@@ -75,8 +75,9 @@ requires = ["uv_build>=0.12.2,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv]
-# FastMCP 4 is currently prerelease-only while targeting MCP 2026-07-28.
-prerelease = "allow"
+# Permit a prerelease only when a requirement explicitly needs it or no stable candidate satisfies
+# the requirement. FastMCP 4 is currently prerelease-only while targeting MCP 2026-07-28.
+prerelease = "if-necessary"
 
 [tool.uv.build-backend]
 module-name = "aeso_mcp"
@@ -128,7 +129,7 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
-fail_under = 65
+fail_under = 75
 
 [tool.pyright]
 include = ["src", "tests"]

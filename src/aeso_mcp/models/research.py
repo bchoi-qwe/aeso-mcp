@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from aeso_mcp.models.common import DatasetMetadata, DateRangeRequest, WarningMixin
 from aeso_mcp.models.operations import EnergyMeritOrderBlock
+from aeso_mcp.models.provenance import AnalysisManifest
 
 
 class PriceStatisticsRequest(DateRangeRequest):
@@ -174,6 +175,7 @@ class MarketEventResponse(WarningMixin):
     metrics: list[ResearchMetric]
     ranked_associations: list[str]
     methodology: str
+    analysis_manifest: AnalysisManifest
     metadata: DatasetMetadata
 
 

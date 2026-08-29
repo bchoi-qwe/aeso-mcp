@@ -1868,5 +1868,110 @@
     "prohibited_interpretations": ["correlation equals causation"],
     "required_caveats": ["Optional source failures remain warnings and missing evidence, never fabricated zeroes."],
     "expected_numerical_relationships": ["absolute change equals focus value minus baseline value for each comparable metric"]
+  },
+  {
+    "id": "forecast-vintage-001",
+    "question": "What wind forecast was actually available by noon for these later target hours?",
+    "expected_tools": ["get_forecast"],
+    "required_concepts": ["as_of information boundary", "forecast vintage", "no look-ahead"],
+    "forbidden_claims": ["latest forecast was known at noon"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "series", "as_of"],
+      "constraints": ["as_of is timezone-aware and no later publication may enter the result"]
+    },
+    "expected_datasets": ["Forecast vintage store"],
+    "prohibited_interpretations": ["latest forecast was known at noon"],
+    "required_caveats": ["Targets absent from persisted eligible vintages are unobserved, not filled from a later publication."],
+    "expected_numerical_relationships": ["selected issue and publication times are at or before as_of"]
+  },
+  {
+    "id": "research-data-001",
+    "question": "Retrieve the official historical transmission-outage records for this bounded interval.",
+    "expected_tools": ["get_research_data"],
+    "required_concepts": ["transmission_outages dataset", "planned interval", "official fixed publication"],
+    "forbidden_claims": ["planned end is observed restoration"],
+    "expected_arguments": {
+      "required_fields": ["dataset", "start", "end"],
+      "constraints": ["dataset is transmission_outages and the range is at most 366 days"]
+    },
+    "expected_datasets": ["Historical Transmission Outages"],
+    "prohibited_interpretations": ["planned end is observed restoration"],
+    "required_caveats": ["The source planned end is not an observed restoration timestamp."],
+    "expected_numerical_relationships": []
+  },
+  {
+    "id": "participant-concentration-001",
+    "question": "How concentrated were offered merit-order volumes by mapped Pool Participant in this period?",
+    "expected_tools": ["analyze_participant_concentration"],
+    "required_concepts": ["current participant mapping", "offered-volume share", "HHI", "unmapped blocks"],
+    "forbidden_claims": ["participant mapping proves historical ownership"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded range of at most 31 days"]
+    },
+    "expected_datasets": ["Energy Merit Order", "Asset Registry", "Pool Participant Registry"],
+    "prohibited_interpretations": ["participant mapping proves historical ownership"],
+    "required_caveats": ["Shares cover mapped current-registry relationships; unmapped blocks are reported and excluded."],
+    "expected_numerical_relationships": ["HHI equals the sum of squared mapped offered-volume shares"]
+  },
+  {
+    "id": "regional-001",
+    "question": "Compare observed hourly load and generation across Alberta planning areas in this period.",
+    "expected_tools": ["analyze_regional_load_generation"],
+    "required_concepts": ["planning area", "region", "observed numeric fields", "MWh from elapsed duration"],
+    "forbidden_claims": ["blank source field is zero"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded range of at most 366 days"]
+    },
+    "expected_datasets": ["Planning Area - Hourly Load and Generation"],
+    "prohibited_interpretations": ["blank source field is zero"],
+    "required_caveats": ["Each average uses only observed values for that field; missing fields remain null."],
+    "expected_numerical_relationships": ["observed actual-load MWh equals the sum of MW times elapsed interval hours"]
+  },
+  {
+    "id": "constraint-001",
+    "question": "Which planning areas and fuel types had the most constrained volume, and what Pool Prices matched those hours?",
+    "expected_tools": ["analyze_constrained_volume"],
+    "required_concepts": ["constrained MWh", "constrained minutes", "exact UTC price match"],
+    "forbidden_claims": ["constraint caused Pool Price"],
+    "expected_arguments": {
+      "required_fields": ["start", "end"],
+      "constraints": ["use a bounded range of at most 366 days and request price context explicitly"]
+    },
+    "expected_datasets": ["Constrained Volume by Planning Area and Fuel Type", "Pool Price"],
+    "prohibited_interpretations": ["constraint caused Pool Price"],
+    "required_caveats": ["Pool Price averages include matched observations only; unmatched prices remain null."],
+    "expected_numerical_relationships": ["group constrained volume is the sum of published hourly constrained MWh"]
+  },
+  {
+    "id": "scarcity-history-001",
+    "question": "What historical adequacy, cushion, EEA, and price context was observed during this scarcity window?",
+    "expected_tools": ["analyze_scarcity"],
+    "required_concepts": ["categorical web codes", "EEA levels", "price threshold context"],
+    "forbidden_claims": ["web code is numeric reserve margin"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "high_price_threshold_cad_per_mwh"],
+      "constraints": ["use a bounded range of at most 366 days"]
+    },
+    "expected_datasets": ["Historical Supply Adequacy Web Codes", "Historical Supply Cushion Web Codes", "Historical EEA Events", "Pool Price"],
+    "prohibited_interpretations": ["web code is numeric reserve margin"],
+    "required_caveats": ["Missing cushion years and price observations are unavailable, not zero."],
+    "expected_numerical_relationships": ["high-price count includes only observed Pool Prices at or above the explicit threshold"]
+  },
+  {
+    "id": "frequency-001",
+    "question": "Summarize system-frequency behavior around this short reliability event without returning raw samples.",
+    "expected_tools": ["analyze_system_frequency"],
+    "required_concepts": ["10-second compact statistics", "frequency nadir", "flagged interval exposure"],
+    "forbidden_claims": ["flagged interval seconds are exact time outside threshold"],
+    "expected_arguments": {
+      "required_fields": ["start", "end", "lower_threshold_hz", "upper_threshold_hz"],
+      "constraints": ["the elapsed window is at most six hours and thresholds are ordered"]
+    },
+    "expected_datasets": ["System Frequency (10-second)"],
+    "prohibited_interpretations": ["flagged interval seconds are exact time outside threshold"],
+    "required_caveats": ["Threshold exposure is a ten-second interval proxy and upper bound; raw rows and RoCoF are not returned."],
+    "expected_numerical_relationships": ["flagged interval exposure equals flagged observation count times ten seconds"]
   }
 ]

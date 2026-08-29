@@ -20,6 +20,11 @@ They are deterministic: the same source observations and request produce the sam
 | `compare_csd_to_metered` | operational CSD MW converted by interval duration versus metered MWh |
 | `analyze_ramps` | cadence-aware AIL, net-load, wind, solar, or selected-asset ramps |
 | `analyze_supply_surplus_events` | explicit surplus-event bounds aligned to price, load, and renewables |
+| `analyze_participant_concentration` | mapped offered-volume shares, HHI, and explicit unmapped-block counts |
+| `analyze_regional_load_generation` | planning-area/region averages and observed actual-load energy |
+| `analyze_constrained_volume` | constrained MWh/minutes by area/fuel with optional exact-hour price joins |
+| `analyze_scarcity` | categorical adequacy/cushion and EEA counts with optional price context |
+| `analyze_system_frequency` | compact 10-second frequency statistics for at most six elapsed hours |
 
 ## Interpretation boundaries
 
@@ -39,6 +44,19 @@ warnings and degraded completeness.
 establishes causation. A useful research answer should state the time window, source completeness,
 missing series, and which additional evidence would be needed for a causal conclusion.
 
+## Reproducibility manifests
+
+`analyze_market_event` includes an `analysis_manifest` for the exact calculation. The manifest
+records the methodology version, normalized request parameters, every focus, baseline, and context
+source, publication and retrieval timestamps when available, requested bounds, observation counts,
+finality, completeness, source identifiers or hashes, and any degradation warnings.
+
+`analysis_id` is a deterministic SHA-256 identity derived from the methodology version, normalized
+parameters, ordered source records, and warnings. It changes when any of those inputs change. The
+manifest therefore identifies a calculation; it does not claim that a revisable AESO publication
+will retain the same content indefinitely. Persist the returned manifest with downstream research
+results when exact point-in-time reproducibility matters.
+
 The intertie metric uses gross offers divided by available transfer capability. It is an
 offer-to-capability proxy, not metered interchange flow.
 
@@ -47,3 +65,10 @@ It is not total settlement revenue and excludes operating reserves, uplift, unit
 transmission, and other settlement components. CSD comparison keeps operational average MW and
 settlement-metered MWh distinct. Supply-surplus and event results are observed associations, not
 causal attribution.
+
+Participant concentration uses the current AESO asset and Pool Participant registries to map
+historical merit-order blocks. It is not historical ownership or corporate-parent concentration,
+and unmapped blocks remain explicit. Constrained-volume and scarcity results are descriptive
+associations. System-frequency threshold exposure counts flagged ten-second intervals as an
+exposure proxy/upper bound; source minima and maxima do not establish exact seconds outside a
+threshold, and raw frequency rows are not exposed through MCP.

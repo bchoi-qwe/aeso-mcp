@@ -109,6 +109,7 @@ def test_pool_price_forecast_keeps_forecast_distinct_and_parses_accounting_negat
     assert publication_time.date().isoformat() == "2026-08-26"
     assert rows[0].forecast_value == 42.5
     assert rows[0].actual_value == 40.0
+    assert all(row.publication_time is None for row in rows)
     assert rows[1].forecast_value == -15.25
     assert rows[1].actual_value is None
 

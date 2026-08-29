@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetData>
+    <row r="1">
+      <c r="A1" t="inlineStr"><is><t>Owner</t></is></c>
+      <c r="B1" t="inlineStr"><is><t>Name</t></is></c>
+      <c r="C1" t="inlineStr"><is><t>Outage Start</t></is></c>
+      <c r="D1" t="inlineStr"><is><t>Planned End</t></is></c>
+      <c r="E1" t="inlineStr"><is><t>Tie Line</t></is></c>
+      <c r="F1" t="inlineStr"><is><t>Significant Outage</t></is></c>
+      <c r="G1" t="inlineStr"><is><t>Activity</t></is></c>
+      <c r="H1" t="inlineStr"><is><t>Equipment Type</t></is></c>
+      <c r="I1" t="inlineStr"><is><t>Outage Event</t></is></c>
+      <c r="J1" t="inlineStr"><is><t>Outage Reason</t></is></c>
+      <c r="K1" t="inlineStr"><is><t>Outage Condition</t></is></c>
+    </row>
+    <row r="2">
+      <c r="A2" t="inlineStr"><is><t>ALTALINK</t></is></c>
+      <c r="B2" t="inlineStr"><is><t>Line 1</t></is></c>
+      <c r="C2"><v>45292</v></c>
+      <c r="D2"><v>45292.5</v></c>
+      <c r="E2" t="inlineStr"><is><t>N</t></is></c>
+      <c r="F2" t="inlineStr"><is><t>Y</t></is></c>
+      <c r="G2" t="inlineStr"><is><t>Maintenance</t></is></c>
+      <c r="H2" t="inlineStr"><is><t>Line</t></is></c>
+      <c r="K2" t="inlineStr"><is><t>Pre-Condition</t></is></c>
+    </row>
+    <row r="3">
+      <c r="A3" t="inlineStr"><is><t>ALTALINK</t></is></c>
+      <c r="B3" t="inlineStr"><is><t>Line 1</t></is></c>
+      <c r="C3"><v>45292</v></c>
+      <c r="D3"><v>45292.5</v></c>
+      <c r="E3" t="inlineStr"><is><t>N</t></is></c>
+      <c r="F3" t="inlineStr"><is><t>Y</t></is></c>
+      <c r="G3" t="inlineStr"><is><t>Road work</t></is></c>
+      <c r="H3" t="inlineStr"><is><t>Line</t></is></c>
+      <c r="K3" t="inlineStr"><is><t>Contingency</t></is></c>
+    </row>
+  </sheetData>
+</worksheet>

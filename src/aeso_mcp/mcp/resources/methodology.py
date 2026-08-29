@@ -212,6 +212,12 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
 - **Forecast error**: Error is forecast minus actual; MAPE excludes zero actual observations.
 - **Intertie metric**: Gross offer divided by available transfer capability is a utilization
   proxy, not metered interchange flow.
+- **Reproducibility**: `analyze_market_event` returns an `analysis_manifest` containing the
+  methodology version, normalized parameters, ordered input-source records, and degradation
+  warnings. Its deterministic SHA-256 `analysis_id` changes when those inputs change.
+- **Source identity**: Manifest records preserve publication and retrieval times, requested bounds,
+  observation counts, finality, completeness, and available source identifiers or hashes. Missing
+  optional evidence remains a warning rather than an observed zero.
 - **Caveat**: Window changes, high-outage differences, and correlation are descriptive
   associations. They do not establish causation.
 """,
@@ -227,6 +233,25 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
   activation prices are volume-weighted.
 - **Caveat**: Offer-control blocks, procurement prices, forecast volumes, and activations are
   different report concepts and are not silently merged.
+""",
+    "official-research-data": """# Methodology: Official Research Data
+
+- **Archive contract**: `get_research_data` selects one named official dataset and returns a
+  bounded page. Historical adequacy/cushion web codes, transmission outages, planning-area
+  load/generation, constrained volume, EEA events, OR directives, and the current Pool Participant
+  registry retain their distinct fields, periods, finality, and units.
+- **Missing values**: Blank planning-area numeric fields remain null. Missing years, participant
+  mappings, price matches, and report families are unobserved, never zero.
+- **Constraint units**: AESO defines the fixed CSV's `Constrained_MW` field as constrained volume
+  for the entire hour in MWh; the typed output follows that published definition.
+- **Participant mapping**: Concentration joins historical merit-order asset IDs to current asset
+  and Pool Participant registries. It does not establish historical ownership, operator identity,
+  corporate parent, market power, or causality; unmapped blocks remain explicit.
+- **Frequency**: Raw rows are internal and input windows are limited to six elapsed hours.
+  Threshold exposure counts ten-second intervals whose minimum/maximum crossed a threshold, so it
+  is a proxy/upper bound rather than exact time outside the threshold. RoCoF is not inferred.
+- **Association boundary**: Regional, constraint-price, and scarcity results are descriptive.
+  They do not establish why a constraint, alert, or price outcome occurred.
 """,
     "uc-settlement": """# Methodology: Unit Commitment Settlement Summary
 
