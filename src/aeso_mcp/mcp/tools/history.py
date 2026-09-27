@@ -31,9 +31,10 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="get_historical_generation",
         description=(
-            "Returns official AESO CSD individual-asset generation over [start, end), at "
-            "hourly or five-minute resolution. Supports bounded asset/fuel filters and "
-            "pagination. This operational CSD archive is not settlement-metered data."
+            "Retrieves historical AESO CSD generation by individual asset or fuel over "
+            "[start, end), at hourly or five-minute resolution. Use for historical wind, "
+            "solar, or other generator output and asset-level CSD records. Supports bounded "
+            "asset/fuel filters and pagination. This operational archive is not settlement-metered data."
         ),
         annotations={
             "readOnlyHint": True,
@@ -51,10 +52,11 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="sync_historical_store",
         description=(
-            "Incrementally ingests selected AESO generation, pool-price, and load datasets "
-            "into the configured local DuckDB index and partitioned Parquet snapshots. Reports "
-            "gaps and duplicate source observations and refreshes preliminary intervals. Requires "
-            "the optional analytics dependencies."
+            "Persist selected AESO historical generation, Pool Price, and load observations "
+            "into the configured local DuckDB/Parquet historical store. Use to save, sync, or "
+            "backfill a bounded period in the local history store. Incrementally ingests "
+            "and refreshes preliminary intervals; reports source gaps and duplicate records. "
+            "Use to sync or backfill a bounded date range. Requires optional analytics dependencies."
         ),
         annotations={
             "readOnlyHint": False,
@@ -76,9 +78,9 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="get_historical_store_status",
         description=(
-            "Reports local DuckDB/Parquet coverage, detected cadence gaps, source-file and "
-            "partition counts, schema version, and whether optional storage dependencies are "
-            "installed."
+            "Reports what AESO historical data is currently stored locally in the DuckDB/Parquet "
+            "historical store, including dataset coverage, detected cadence gaps, source-file and "
+            "partition counts, schema version, and optional storage dependency availability."
         ),
         annotations={
             "readOnlyHint": True,
@@ -97,7 +99,7 @@ def register_history_tools(mcp: FastMCP, container: AppContainer) -> None:
             "Returns typed official AESO actual and forecast observations over [start, end) "
             "for AIL, Pool Price, wind, solar, or combined wind/solar where the requested "
             "source horizon exists. An optional timezone-aware as_of selects the latest "
-            "vintage published or issued by that instant, avoiding look-ahead bias."
+            "vintage retrieved and published or issued by that instant; unknown chronology is excluded."
         ),
         annotations={
             "readOnlyHint": True,

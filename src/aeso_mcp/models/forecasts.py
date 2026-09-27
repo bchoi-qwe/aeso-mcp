@@ -48,8 +48,9 @@ class OfficialForecastRequest(DateRangeRequest):
     as_of: datetime | None = Field(
         default=None,
         description=(
-            "Return only forecast information published or issued no later than this "
-            "timezone-aware instant. When omitted, the latest available vintage is returned."
+            "Return only forecast information whose source data was retrieved no later than this "
+            "timezone-aware instant, and whose known publication and issue times are also no later. "
+            "When omitted, the latest available vintage is returned."
         ),
     )
     offset: int = Field(default=0, ge=0)

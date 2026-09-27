@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 from scripts.evaluate_agent_results import score
+from scripts.evaluate_tool_discovery import evaluate_tool_discovery
 
 from aeso_mcp.app import build_container
 from aeso_mcp.config import Settings
@@ -74,6 +75,26 @@ def test_eval_scorer_accepts_complete_structural_oracle() -> None:
     assert summary["dataset_selection_recall"] == 1
     assert summary["required_caveat_recall"] == 1
     assert summary["numerical_relationship_recall"] == 1
+
+
+@pytest.mark.asyncio
+async def test_bm25_progressive_discovery_prototype_regression() -> None:
+    report = await evaluate_tool_discovery()
+
+    assert report["full_catalog_tool_count"] == 63
+    assert report["progressive_catalog_tool_count"] == 5
+    assert report["discovery_calls_for_supported_routes"] == 58
+    assert report["top1_correct_or_pinned"] == 57
+    assert report["top5_complete_routes"] == 66
+    assert report["top5_miss_cases"] == []
+    assert report["schema_retrieval_failures"] == []
+    assert len(report["no_tool_cases_with_search_suggestions"]) == 4
+    assert (
+        report["search_result_wire_chars_for_all_cases"]
+        > report["search_result_wire_chars_for_supported_routes"]
+    )
+    assert report["estimated_character_reduction_percent"] == 85.4
+    assert report["model_answer_benchmark_run"] is False
 
 
 @pytest.mark.asyncio

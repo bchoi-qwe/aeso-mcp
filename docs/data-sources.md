@@ -76,7 +76,8 @@ source-specific client, not a separate runtime mode: the complete MCP server alw
 - Current wind/solar 12-hour forecasts have ten-minute cadence; seven-day and historical
   actual-versus-forecast files are hourly. Historical wind and solar are separate files, so the
   combined series has no historical mode. `as_of` uses only persisted or retrieved vintages with
-  known issue/publication chronology; unknown chronology is excluded.
+  known issue/publication chronology and retrieval time no later than the boundary; unknown
+  chronology is excluded.
 - Supply-adequacy and supply-cushion publications expose official categorical bands. Null numeric
   MW fields mean the source did not publish a numeric value; the service never substitutes a band
   midpoint.

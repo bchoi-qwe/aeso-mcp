@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+from fastmcp import Client
+from fastmcp.server.transforms.search import BM25SearchTransform
 from pydantic import SecretStr
 
 from aeso_mcp.app import AppContainer
@@ -309,6 +312,17 @@ async def test_tool_discovery_stable(container: AppContainer, settings: Settings
 
 
 @pytest.mark.asyncio
+async def test_protocol_negotiates_modern_and_legacy_clients(
+    container: AppContainer, settings: Settings
+) -> None:
+    mcp = create_mcp_server(settings, container)
+    for mode, protocol in (("auto", "2026-07-28"), ("legacy", "2025-11-25")):
+        async with Client(mcp, mode=mode) as client:
+            assert client.protocol_version == protocol
+            assert {tool.name for tool in await client.list_tools()} == EXPECTED_TOOLS
+
+
+@pytest.mark.asyncio
 async def test_resource_discovery(container: AppContainer, settings: Settings) -> None:
     mcp = create_mcp_server(settings, container)
     resources = await mcp.list_resources()
@@ -415,6 +429,56 @@ async def test_methodology_and_capabilities_resources(
     assert "Alberta Internal Load" in load.contents[0].content
     assert "total_outage_mw" in outages.contents[0].content
     assert "daily_market_brief" in capabilities.contents[0].content
+
+
+@pytest.mark.asyncio
+async def test_progressive_search_returns_schema_and_proxy_preserves_structured_result(
+    container: AppContainer, settings: Settings
+) -> None:
+    mcp = create_mcp_server(settings, container)
+    mcp.add_transform(
+        BM25SearchTransform(
+            max_results=5,
+            always_visible=["get_market_snapshot", "analyze_market_event", "get_forecast"],
+        )
+    )
+
+    async with Client(mcp) as client:
+        visible = await client.list_tools()
+        assert {tool.name for tool in visible} == {
+            "get_market_snapshot",
+            "analyze_market_event",
+            "get_forecast",
+            "search_tools",
+            "call_tool",
+        }
+
+        discovered = await client.call_tool(
+            "search_tools", {"query": "hourly Alberta Pool Price observations in CAD/MWh"}
+        )
+        definitions = json.loads(discovered.content[0].text)
+        pool_prices = next(tool for tool in definitions if tool["name"] == "get_pool_prices")
+        assert pool_prices["inputSchema"]["properties"]["request"]["required"] == ["start", "end"]
+        assert pool_prices["outputSchema"]["properties"]["intervals"]
+
+        result = await client.call_tool(
+            "call_tool",
+            {
+                "name": "get_pool_prices",
+                "arguments": {
+                    "request": {
+                        "start": "2024-01-15T00:00:00-07:00",
+                        "end": "2024-01-16T00:00:00-07:00",
+                    }
+                },
+            },
+        )
+        assert not result.is_error
+        payload = result.structured_content or result.data
+        if hasattr(payload, "model_dump"):
+            payload = payload.model_dump()
+        assert payload["intervals"][0]["pool_price_cad_per_mwh"] == 42.0
+        assert payload["metadata"]["units"]["pool_price_cad_per_mwh"] == "CAD/MWh"
 
 
 @pytest.mark.asyncio

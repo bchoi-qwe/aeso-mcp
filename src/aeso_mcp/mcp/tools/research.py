@@ -52,8 +52,10 @@ def register_research_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="get_price_statistics",
         description=(
-            "Calculates count, mean, median, range, population standard deviation, negative/high "
-            "price hours, and requested percentiles from complete hourly Pool Price observations."
+            "Calculates a statistical summary and price distribution for complete hourly Pool "
+            "Price observations: count, mean, median, range, population standard deviation, "
+            "negative/high-price hours, and requested percentiles such as the 95th percentile. "
+            "Use for historical Pool Price statistics, not raw price retrieval."
         ),
         annotations=_READ_ONLY,
     )

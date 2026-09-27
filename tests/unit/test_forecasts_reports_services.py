@@ -45,6 +45,30 @@ def _provenance(product: str) -> dict[str, object]:
 
 
 @pytest.mark.asyncio
+async def test_dds_report_empty_half_open_range_has_consistent_metadata() -> None:
+    provider = AsyncMock()
+    start = datetime(2026, 8, 26, 12, tzinfo=MARKET_TZ)
+    provider.get_dds_market_report.return_value = (
+        [
+            DdsAvailabilityRecord(observed_at=start - timedelta(seconds=1), available_dds_mw=25.0),
+            DdsAvailabilityRecord(observed_at=start + timedelta(hours=1), available_dds_mw=30.0),
+        ],
+        None,
+        _provenance("Dispatch Down Service Market Report"),
+    )
+    service = ReportsService(cast(AesoReportsProvider, provider), _settings(), AsyncTTLCache())
+
+    response = await service.get_dds_market_report(
+        DdsMarketReportRequest(start=start, end=start + timedelta(hours=1))
+    )
+
+    assert response.records == []
+    assert response.page.total == response.metadata.observation_count == 0
+    assert response.page.returned == 0
+    assert response.metadata.completeness.value == "empty"
+
+
+@pytest.mark.asyncio
 async def test_forecast_service_routes_shared_series_contract_and_paginates() -> None:
     provider = AsyncMock()
     ail_provider = AsyncMock()

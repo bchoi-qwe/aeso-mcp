@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-26
+
 ### Added
 
 - Immutable forecast-vintage storage with additive schema-v3 migration, source version/hash,
@@ -23,11 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exact-version public-PyPI installation smoke after manual Trusted Publishing
 - Seven canonical agent-use eval cases for forecast vintages and the new archive/analysis routes,
   bringing the evaluation catalog to 70 cases
+- Reproducible evaluation of FastMCP BM25 progressive discovery on all 70 canonical cases; the
+  full MCP tool catalog remains the default pending evidence of improved model routing
 
 ### Changed
 
-- Global prerelease resolution no longer admits unrelated beta/dev packages; FastMCP and its
-  matching slim distribution remain the only exact prerelease allowlist entries
+- Upgrade to stable FastMCP 4.0.10 for MCP `2026-07-28`; the stable runtime retains legacy
+  protocol negotiation and removes the beta-only dependency allowlist
+- CI rejects all prerelease packages in the lockfile, and the dependency canary checks only newer
+  stable FastMCP 4.0.x patches
+- Tool descriptions more clearly distinguish historical retrieval, statistical analysis, and
+  local-store operations to improve discovery without adding duplicate tool paths
+- The live DDS canary accepts schema-valid empty rolling windows while checking half-open range
+  filtering and completeness metadata, rather than requiring an in-window publication each run
+- Credential-free AESO public report and asset streams are capped at 25 MiB and 384 MiB before
+  full-response assembly
 - Branch-aware coverage floor raised from 65% to 75%
 
 ### Fixed
@@ -35,6 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Point-in-time forecast queries exclude vintages with unknown or later information timestamps,
   preventing later publications from entering historical `as_of` results
 - Planning-area analysis preserves missing source fields instead of treating them as observed zero
+- Point-in-time reads also enforce retrieval boundaries and retain immutable retrieval snapshots,
+  preventing later actual/finality enrichment from rewriting earlier query results
+- Research manifests hash typed observations when upstream hashes are absent and totally order
+  source entries; research summaries preserve unknown finality, missing prices, and partial coverage
+- Annual frequency assets fit bounded download/decompression limits verified against official
+  files; large planning-area and frequency parsing runs outside the async event loop
 
 ## [0.3.0] - 2026-08-26
 
@@ -173,7 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit, contract, MCP, and optional live integration tests
 - GitHub Actions CI, Dockerfile, Renovate config, and MCP registry `server.json`
 
-[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/bchoi-qwe/aeso-mcp/compare/v0.1.0...v0.1.1

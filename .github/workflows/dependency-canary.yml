@@ -27,17 +27,16 @@ jobs:
       - name: Sync locked baseline first
         run: uv sync --locked --group dev
 
-      - name: Attempt newer FastMCP/MCP beyond exact pin
+      - name: Attempt newer stable FastMCP 4.x within the supported minor line
         run: |
-          # Exact pins in pyproject.toml prevent `uv lock --upgrade-package` from
-          # seeing newer FastMCP prereleases. Rewrite to a lower-bound so the
-          # canary can actually probe newer MCP stacks.
+          # The release pin protects ordinary installs. The canary relaxes only
+          # the patch-level pin, never crosses into a different FastMCP minor.
           python - <<'PY'
           from pathlib import Path
           path = Path("pyproject.toml")
           text = path.read_text()
-          old = 'fastmcp==4.0.0b3'
-          new = 'fastmcp>=4.0.0b3'
+          old = 'fastmcp==4.0.10'
+          new = 'fastmcp>=4.0.10,<4.1'
           if old not in text:
               raise SystemExit(f"Expected {old!r} in pyproject.toml")
           path.write_text(text.replace(old, new, 1))

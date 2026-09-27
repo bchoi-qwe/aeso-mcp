@@ -2,7 +2,12 @@
 
 The server keeps protocol adaptation, domain calculations, source access, and optional local
 storage as separate boundaries. Analytics consume complete internal source results; public MCP
-responses remain typed and bounded.
+responses remain typed and bounded. The MCP adapter uses
+[stable FastMCP 4.0.10](https://github.com/PrefectHQ/fastmcp/releases/tag/v4.0.10), targets
+protocol revision `2026-07-28`, and relies on FastMCP's per-connection negotiation to retain
+legacy session-based client support. The full typed tool catalog remains directly visible; the
+BM25 progressive-discovery prototype and its evaluation are documented in
+[Agent-use evaluation](evals.md#progressive-discovery-prototype).
 
 ![AESO MCP architecture](assets/architecture.svg)
 

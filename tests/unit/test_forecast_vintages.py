@@ -120,7 +120,18 @@ def test_store_preserves_vintages_and_selects_latest_eligible_target(tmp_path: P
         paginate=False,
     )
     assert as_of_total == 1
-    assert [row.forecast_value for row in as_of_rows] == [81.0]
+    # The late publication was not retrieved until minute six.
+    assert [row.forecast_value for row in as_of_rows] == [100.0]
+    observed, _ = store.query_forecast(
+        "wind",
+        start=target,
+        end=target + timedelta(hours=1),
+        as_of=issue_late + timedelta(minutes=6),
+        paginate=False,
+    )
+    assert observed[0].forecast_value == 81.0
+    assert observed[0].actual_value == 50.0
+    assert observed[0].retrieved_at == issue_late + timedelta(minutes=6)
 
     current_rows, current_total = store.query_forecast(
         "wind",
@@ -223,11 +234,18 @@ def test_store_keeps_dst_fall_back_target_instants_distinct(tmp_path: Path) -> N
     assert selected[1].interval_start.utcoffset() != selected[2].interval_start.utcoffset()
 
 
-def test_store_migrates_v2_market_forecast_without_losing_actual(tmp_path: Path) -> None:
+@pytest.mark.parametrize("legacy_version", [1, 2])
+def test_store_migrates_v2_market_forecast_without_losing_actual(
+    tmp_path: Path, legacy_version: int
+) -> None:
     duckdb = pytest.importorskip("duckdb")
     root = tmp_path / "history"
     root.mkdir()
     connection = duckdb.connect(str(root / "history.duckdb"))
+    connection.execute("CREATE TABLE store_metadata (key VARCHAR PRIMARY KEY, value VARCHAR)")
+    connection.execute(
+        "INSERT INTO store_metadata VALUES ('schema_version', ?)", [str(legacy_version)]
+    )
     connection.execute(
         """
         CREATE TABLE market_series (
@@ -508,6 +526,7 @@ async def test_forecast_service_as_of_filters_provider_rows_without_lookahead() 
             horizon="historical",
             forecast_issue_time=early_issue,
             publication_time=early_issue + timedelta(minutes=5),
+            retrieved_at=early_issue + timedelta(minutes=5),
             forecast_value=100.0,
             actual_value=50.0,
             source_version="early",
@@ -595,3 +614,75 @@ async def test_forecast_service_marks_missing_target_intervals_partial() -> None
     assert response.warnings == [
         "1 forecast target interval(s) were unobserved in the requested range."
     ]
+
+
+@pytest.mark.parametrize("retrieval_delay", [None, 1])
+def test_in_memory_as_of_excludes_unknown_or_later_retrieval(retrieval_delay: int | None) -> None:
+    from aeso_mcp.services.forecasts import _select_as_of_vintages
+
+    boundary = datetime(2025, 1, 1, 12, tzinfo=UTC)
+    row = _vintage(boundary, issue=boundary - timedelta(hours=1), value=80).model_copy(
+        update={
+            "retrieved_at": None
+            if retrieval_delay is None
+            else boundary + timedelta(seconds=retrieval_delay)
+        }
+    )
+    assert _select_as_of_vintages([row], boundary) == []
+
+
+def test_forecast_observations_preserve_history_across_refresh_and_reopen(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    target = datetime(2025, 1, 1, 18, tzinfo=UTC)
+    original = _vintage(target, issue=target - timedelta(hours=4), value=80).model_copy(
+        update={"actual_value": None, "finality": FinalityStatus.PRELIMINARY}
+    )
+    enriched = original.model_copy(
+        update={
+            "retrieved_at": target + timedelta(days=1),
+            "actual_value": 55,
+            "finality": FinalityStatus.FINAL,
+            "source_hash": "later-actuals",
+        }
+    )
+    store.upsert_forecast_vintages([original, enriched])
+    # Out-of-order replays cannot replace latest state, nor delete earlier observations.
+    store.upsert_forecast_vintages([original])
+    reopened = HistoricalStore(store.root)
+    before, count = reopened.query_forecast(
+        "wind", start=target, end=target + timedelta(hours=1), as_of=target
+    )
+    assert count == 1
+    assert before[0].actual_value is None
+    assert before[0].finality == FinalityStatus.PRELIMINARY
+    assert before[0].source_hash == original.source_hash
+    after, count = reopened.query_forecast("wind", start=target, end=target + timedelta(hours=1))
+    assert count == 1
+    assert after[0].actual_value == 55
+    assert after[0].finality == FinalityStatus.FINAL
+    assert before[0].vintage_id == after[0].vintage_id
+
+
+def test_existing_v3_store_backfills_only_retained_retrieval_state(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    target = datetime(2025, 1, 1, 18, tzinfo=UTC)
+    row = _vintage(target, issue=target - timedelta(hours=1), value=80)
+    store.upsert_forecast_vintages([row])
+    with store._connect() as connection:
+        connection.execute("DROP TABLE forecast_observations")
+    reopened = HistoricalStore(store.root)
+    for _ in range(2):
+        reopened.initialize()
+        rows, count = reopened.query_forecast(
+            "wind", start=target, end=target + timedelta(hours=1), as_of=target
+        )
+        assert count == 1
+        assert rows[0].forecast_value == 80
+        assert rows[0].retrieved_at == row.retrieved_at
+        rows, count = reopened.query_forecast(
+            "wind",
+            start=target,
+            end=target + timedelta(hours=1),
+            as_of=row.retrieved_at - timedelta(seconds=1),
+        )
+        assert rows == [] and count == 0

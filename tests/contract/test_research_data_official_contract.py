@@ -280,7 +280,17 @@ async def test_public_binary_client_restricts_fixed_official_asset_boundary() ->
 
 
 def test_public_binary_asset_bound_covers_verified_frequency_file_with_margin() -> None:
-    assert _MAX_PUBLIC_ASSET_BYTES == 192 * 1024 * 1024
+    # Both observed official annual files must fit, while oversized assets
+    # remain rejected. These are live-verified sizes, not generated fixtures.
+    assert 301_000_235 < _MAX_PUBLIC_ASSET_BYTES == 384 * 1024 * 1024
+    from aeso_mcp.providers.public_reports_http import _validate_binary_asset_body
+
+    class Oversized(bytes):
+        def __len__(self) -> int:
+            return _MAX_PUBLIC_ASSET_BYTES + 1
+
+    with pytest.raises(DataValidationError, match="safety limit"):
+        _validate_binary_asset_body(Oversized(b"csv"))
 
 
 def test_archive_member_expansion_is_bounded() -> None:

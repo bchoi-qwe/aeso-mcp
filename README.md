@@ -13,6 +13,8 @@
 ## Features
 
 - Typed MCP tools with Pydantic inputs/outputs and structured results
+- Stable FastMCP 4.0.10 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
+  negotiation for legacy session-based clients
 - Current market snapshot combining price, load, generation, interchange, and reserves
 - Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
 - Official individual-asset Historical CSD Generation Data at hourly and five-minute resolution
@@ -327,7 +329,7 @@ Prompts: `daily_market_brief`, `investigate_price_event`, and `compare_market_da
 - **Units**: Pool Price / SMP → CAD/MWh; load / generation / interchange / reserves → MW.
 - **Status**: Metadata includes `actual` / `forecast` / etc. Forecasts are never implied to be settled actuals.
 - **Finality**: Operational feeds may be preliminary; do not assume final settlement.
-- **Point-in-time forecasts**: `as_of` selects only vintages with known issue/publication times at
+- **Point-in-time forecasts**: `as_of` selects only vintages with known issue/publication times and retrieval times at
   or before the boundary. Unknown chronology is excluded; target intervals absent from persisted
   history remain unobserved rather than being backfilled from a later publication.
 - **Completeness**: Metadata reports available/missing series and expected/missing observations
@@ -379,9 +381,9 @@ See [SECURITY.md](SECURITY.md). Highlights: no arbitrary URL/shell/SQL tools, ho
 
 ## Development status
 
-Version 0.3.0 includes the historical store, full CSD generation adapter, official forecast/report
+Version 0.4.0 includes the historical store, full CSD generation adapter, official forecast/report
 providers, general research analytics, operating-reserve market surface, eval suite, and
-documentation site. Unreleased work adds point-in-time forecast vintages, reproducibility
+documentation site. It also includes point-in-time forecast vintages, reproducibility
 manifests, release-policy hardening, and the verified official research-data archive.
 
 ## Contributing

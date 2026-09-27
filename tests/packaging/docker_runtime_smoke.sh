@@ -6,11 +6,9 @@ image_name=${1:?usage: docker_runtime_smoke.sh IMAGE}
 container_name="aeso-mcp-runtime-smoke-${RANDOM}-$$"
 port="${MCP_SMOKE_PORT:-18080}"
 bearer_token="container-smoke-bearer-token"
-response_file=$(mktemp)
 
 cleanup() {
   docker rm --force "$container_name" >/dev/null 2>&1 || true
-  rm -f "$response_file"
 }
 trap cleanup EXIT
 
@@ -29,13 +27,37 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-curl --fail-with-body --silent --show-error \
-  --output "$response_file" \
+if [[ "$status" != "200" ]]; then
+  echo "Docker runtime readiness probe failed (HTTP ${status})." >&2
+  exit 1
+fi
+
+unauthenticated_status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --request POST "http://127.0.0.1:${port}/mcp" \
   --header 'content-type: application/json' \
   --header 'accept: application/json, text/event-stream' \
-  --header "authorization: Bearer ${bearer_token}" \
-  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"docker-smoke","version":"0"}}}'
+  --data '{}')
+if [[ "$unauthenticated_status" != "401" ]]; then
+  echo "Expected unauthenticated MCP request to return 401; got ${unauthenticated_status}." >&2
+  exit 1
+fi
 
-grep --quiet '"serverInfo"' "$response_file"
-echo "Docker runtime MCP initialize smoke passed"
+docker exec --interactive "$container_name" python - <<'PY'
+import asyncio
+import os
+
+from fastmcp import Client
+
+
+async def smoke() -> None:
+    token = os.environ["AESO_MCP_HTTP_BEARER_TOKEN"]
+    for mode, protocol in (("auto", "2026-07-28"), ("legacy", "2025-11-25")):
+        async with Client("http://127.0.0.1:8000/mcp", auth=token, mode=mode) as client:
+            tools = await client.list_tools()
+            assert client.protocol_version == protocol
+            assert any(tool.name == "get_market_snapshot" for tool in tools)
+
+
+asyncio.run(smoke())
+print("Docker runtime authenticated MCP modern/legacy negotiation smoke passed")
+PY

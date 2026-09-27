@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from aeso_mcp.models.common import DataCompleteness, FinalityStatus
 from aeso_mcp.models.provenance import AnalysisSource
@@ -93,3 +93,81 @@ def test_analysis_identity_includes_normalized_degradation_warnings() -> None:
     assert first.analysis_id == reordered.analysis_id
     assert first.warnings == ["missing reserve history", "partial outage coverage"]
     assert first.analysis_id != complete.analysis_id
+
+
+def test_analysis_identity_totally_orders_sources_with_matching_labels() -> None:
+    source = _source("Pool Price", datetime(2026, 8, 3, tzinfo=UTC))
+    other = source.model_copy(update={"observation_count": 12})
+    first = build_analysis_manifest(
+        methodology_version="v1", sources=[source, other], parameters={}
+    )
+    second = build_analysis_manifest(
+        methodology_version="v1", sources=[other, source], parameters={}
+    )
+    assert first.analysis_id == second.analysis_id
+
+
+def test_analysis_source_hash_canonicalizes_date_valued_observations() -> None:
+    from aeso_mcp.models.common import DatasetMetadata, ProviderName
+    from aeso_mcp.models.operations import PageInfo
+    from aeso_mcp.models.reports import TmrReferencePrice, TmrReferencePriceResponse
+    from aeso_mcp.services.provenance import analysis_source_from_response
+
+    retrieved_at = datetime(2026, 8, 3, tzinfo=UTC)
+    response = TmrReferencePriceResponse(
+        records=[
+            TmrReferencePrice(effective_date=date(2026, 8, 1), reference_price_cad_per_mwh=42.0)
+        ],
+        page=PageInfo(offset=0, limit=1, returned=1, total=1),
+        metadata=DatasetMetadata(
+            dataset="TMR reference price",
+            provider=ProviderName.AESO_PUBLIC_REPORT,
+            retrieved_at=retrieved_at,
+        ),
+    )
+
+    source = analysis_source_from_response(
+        response,
+        role="focus",
+        dataset="TMR reference price",
+        requested_start=None,
+        requested_end=None,
+    )
+
+    assert source.source_hash is not None
+    assert source.source_hash.startswith("sha256:")
+
+
+def test_analysis_source_hash_detects_changed_observations_without_upstream_hash() -> None:
+    from aeso_mcp.models.common import DatasetMetadata, ProviderName
+    from aeso_mcp.models.operations import PageInfo
+    from aeso_mcp.models.prices import PoolPriceInterval, PoolPriceResponse
+    from aeso_mcp.services.provenance import analysis_source_from_response
+
+    timestamp = datetime(2026, 8, 3, tzinfo=UTC)
+    response = PoolPriceResponse(
+        page=PageInfo(offset=0, limit=1, returned=1, total=1),
+        intervals=[
+            PoolPriceInterval(
+                interval_start=timestamp,
+                interval_end=timestamp.replace(hour=1),
+                pool_price_cad_per_mwh=40,
+            )
+        ],
+        metadata=DatasetMetadata(
+            dataset="Pool Price", provider=ProviderName.AESO_APIM, retrieved_at=timestamp
+        ),
+    )
+    changed = response.model_copy(
+        update={
+            "intervals": [response.intervals[0].model_copy(update={"pool_price_cad_per_mwh": 80})]
+        }
+    )
+    first = analysis_source_from_response(
+        response, role="focus", dataset="Pool Price", requested_start=None, requested_end=None
+    )
+    second = analysis_source_from_response(
+        changed, role="focus", dataset="Pool Price", requested_start=None, requested_end=None
+    )
+    assert first.source_hash is not None
+    assert first.source_hash != second.source_hash

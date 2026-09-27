@@ -374,7 +374,7 @@ class ScarcityAnalysisResponse(WarningMixin):
     cushion_code_counts: dict[int, int]
     eea_event_count: int
     eea_level_counts: dict[str, int]
-    high_price_observation_count: int
+    high_price_observation_count: int | None
     average_pool_price_cad_per_mwh: float | None = None
     methodology: str
     metadata: DatasetMetadata

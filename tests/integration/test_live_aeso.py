@@ -353,7 +353,13 @@ async def test_live_official_forecasts_and_named_operational_reports(
             SystemEventsRequest(start=report_start, end=now), paginate=False
         )
         assert ffr.intervals
-        assert dds.records
+        # DDS is a revisable, point-in-time publication and can have no row inside a
+        # rolling half-open window even when the source returns a valid older row.
+        # A valid empty result remains a canary: the client and report schema are parsed.
+        assert dds.metadata.observation_count == dds.page.total
+        assert dds.page.returned == len(dds.records)
+        assert dds.metadata.completeness.value in {"complete", "empty"}
+        assert all(report_start <= row.observed_at < now for row in dds.records)
         assert tmr.records
         assert events.records
         assert all(

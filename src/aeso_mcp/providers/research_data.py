@@ -10,6 +10,7 @@ need an optional spreadsheet engine.
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import io
@@ -86,10 +87,10 @@ _MST = timezone(timedelta(hours=-7), name="MST")
 _ONE_HOUR = timedelta(hours=1)
 _TEN_SECONDS = timedelta(seconds=10)
 _CSV_ENCODING = "utf-8-sig"
-# Verified frequency ZIP members are well below this bound.  The HTTP client
-# caps compressed bytes separately; this cap prevents an allow-listed upstream
-# archive from expanding without limit in the streaming CSV/XLSX parsers.
-_MAX_ARCHIVE_MEMBER_BYTES = 256 * 1024 * 1024
+# The official 2024 annual frequency member is 301,000,235 bytes. The HTTP client
+# bounds the downloaded asset separately; this cap prevents an allow-listed archive
+# member from expanding without limit in the streaming CSV/XLSX parsers.
+_MAX_ARCHIVE_MEMBER_BYTES = 384 * 1024 * 1024
 
 _PUBLICATION_DATES: dict[str, str] = {
     "supply_adequacy": "2026-03-04",
@@ -237,7 +238,8 @@ class AesoResearchDataProvider:
                 "planning_area",
             )
             rows.extend(
-                _parse_planning_area_zip(
+                await asyncio.to_thread(
+                    _parse_planning_area_zip,
                     raw,
                     start=start,
                     end=end,
@@ -354,7 +356,7 @@ class AesoResearchDataProvider:
                     f"AESO 10-second system-frequency data is unavailable for {year}."
                 )
             raw, item_provenance = await self._asset(url, "system_frequency")
-            rows.extend(_parse_frequency_asset(raw, start=start, end=end))
+            rows.extend(await asyncio.to_thread(_parse_frequency_asset, raw, start=start, end=end))
             _merge_asset_provenance(provenance, item_provenance)
             hash_value = item_provenance.get("source_hash")
             if isinstance(hash_value, str):
@@ -996,7 +998,7 @@ def _shared_strings(archive: zipfile.ZipFile) -> list[str]:
 def _validate_archive_member(info: zipfile.ZipInfo, report: str) -> None:
     if info.is_dir() or info.file_size > _MAX_ARCHIVE_MEMBER_BYTES:
         raise DataValidationError(
-            f"{report} archive member exceeded the 256 MiB uncompressed safety limit."
+            f"{report} archive member exceeded the 384 MiB uncompressed safety limit."
         )
 
 

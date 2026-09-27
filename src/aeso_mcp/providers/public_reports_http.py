@@ -8,6 +8,7 @@ endpoints resolved by provider methods — not arbitrary user-supplied URLs.
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -30,10 +31,10 @@ logger = logging.getLogger(__name__)
 ALLOWED_PUBLIC_REPORT_HOSTS = frozenset({"ets.aeso.ca", "aeso.ca", "www.aeso.ca"})
 _MAX_REDIRECTS = 5
 _MAX_PUBLIC_REPORT_BYTES = 25 * 1024 * 1024
-# The largest verified fixed frequency asset is the 2023 raw CSV at 192,445,819
-# bytes; 192 MiB covers it and the 2025 148,813,587-byte file with a small
-# margin without allowing an arbitrary large response through this path.
-_MAX_PUBLIC_ASSET_BYTES = 192 * 1024 * 1024
+# Annual research CSVs exceed 256 MiB (2019 frequency: 274,662,571 bytes;
+# 2024 uncompressed frequency: 301,000,235 bytes). Keep a finite bound with
+# room for the supported annual files, separate from small ETS report limits.
+_MAX_PUBLIC_ASSET_BYTES = 384 * 1024 * 1024
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -78,14 +79,22 @@ class AesoPublicReportsHttpClient:
     async def get_text(self, url: str) -> str:
         """GET an allow-listed absolute URL and return response text."""
         self._assert_allowed_url(url)
-        response = await self._get(url)
+        response = await self._get(
+            url,
+            max_body_bytes=_MAX_PUBLIC_REPORT_BYTES,
+            body_kind="AESO public report",
+        )
         _validate_report_body(response.content)
         return response.text
 
     async def get_bytes(self, url: str) -> bytes:
         """GET an allow-listed absolute URL and return raw bytes."""
         self._assert_allowed_url(url)
-        response = await self._get(url)
+        response = await self._get(
+            url,
+            max_body_bytes=_MAX_PUBLIC_REPORT_BYTES,
+            body_kind="AESO public report",
+        )
         _validate_report_body(response.content)
         return response.content
 
@@ -94,13 +103,17 @@ class AesoPublicReportsHttpClient:
 
         The data-request archive publishes XLSX/ZIP assets as well as CSV files.
         Those files are still fetched through the same credential-free, manually
-        redirected client, but cannot pass the normal report-body NUL check.  Keep
+        redirected client, but cannot pass the normal report-body NUL check. Keep
         this method deliberately narrower than :meth:`get_bytes`: only HTTPS
         ``www.aeso.ca/assets/Uploads/`` assets with a known archive/text suffix
-        are accepted, and the compressed response is bounded.
+        are accepted, and the streamed response size is bounded.
         """
         self._assert_binary_asset_url(url)
-        response = await self._get(url)
+        response = await self._get(
+            url,
+            max_body_bytes=_MAX_PUBLIC_ASSET_BYTES,
+            body_kind="AESO public asset",
+        )
         # Redirects are followed by the shared client only after the general
         # AESO host allow-list check. Re-apply the narrower asset boundary to
         # the final URL so a fixed asset cannot redirect to an unrelated public
@@ -126,7 +139,13 @@ class AesoPublicReportsHttpClient:
         self._assert_allowed_url(url)
         return url
 
-    async def _get(self, url: str) -> httpx.Response:
+    async def _get(
+        self,
+        url: str,
+        *,
+        max_body_bytes: int,
+        body_kind: str,
+    ) -> httpx.Response:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._settings.http_max_retries + 1),
             wait=wait_exponential_jitter(initial=0.5, max=8.0),
@@ -135,49 +154,85 @@ class AesoPublicReportsHttpClient:
             reraise=True,
         ):
             with attempt:
-                return await self._get_once(url)
+                return await self._get_once(
+                    url,
+                    max_body_bytes=max_body_bytes,
+                    body_kind=body_kind,
+                )
         raise UpstreamUnavailableError("AESO public report request failed after retries.")
 
-    async def _get_once(self, url: str) -> httpx.Response:
+    async def _get_once(
+        self,
+        url: str,
+        *,
+        max_body_bytes: int,
+        body_kind: str,
+    ) -> httpx.Response:
         current = url
         for _ in range(_MAX_REDIRECTS + 1):
             self._assert_allowed_url(current)
+            started_at = perf_counter()
             try:
-                response = await self._client.get(current)
+                async with self._client.stream("GET", current) as response:
+                    status = response.status_code
+                    path = urlparse(str(response.url)).path
+                    if status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("Location")
+                        if not location:
+                            raise DataValidationError(
+                                f"AESO public report redirect missing Location (HTTP {status})."
+                            )
+                        current = urljoin(str(response.url), location)
+                        continue
+                    if status == 404:
+                        raise DataValidationError(f"AESO public report not found: {path}")
+                    if status == 429:
+                        retry_after = response.headers.get("Retry-After")
+                        retry_s = (
+                            float(retry_after) if retry_after and retry_after.isdigit() else None
+                        )
+                        raise RateLimitError(retry_after_s=retry_s)
+                    if status >= 500:
+                        raise UpstreamUnavailableError(
+                            f"AESO public report returned HTTP {status}."
+                        )
+                    if status >= 400:
+                        raise DataValidationError(
+                            f"AESO public report rejected the request (HTTP {status})."
+                        )
+
+                    chunks: list[bytes] = []
+                    total_bytes = 0
+                    async for chunk in response.aiter_bytes():
+                        total_bytes += len(chunk)
+                        if total_bytes > max_body_bytes:
+                            size_limit = (
+                                f"{max_body_bytes // (1024 * 1024)} MiB"
+                                if max_body_bytes % (1024 * 1024) == 0
+                                else f"{max_body_bytes:,} bytes"
+                            )
+                            raise DataValidationError(
+                                f"{body_kind} exceeded the {size_limit} safety limit."
+                            )
+                        chunks.append(chunk)
+                    buffered_response = httpx.Response(
+                        status_code=status,
+                        headers=response.headers,
+                        content=b"".join(chunks),
+                        request=response.request,
+                    )
             except httpx.TimeoutException as exc:
                 raise UpstreamUnavailableError("AESO public report request timed out.") from exc
             except httpx.TransportError as exc:
                 raise UpstreamUnavailableError("Failed to connect to AESO public reports.") from exc
 
-            status = response.status_code
-            path = urlparse(str(response.url)).path
             logger.info(
                 "aeso_public_report_get path=%s status=%s duration_ms=%.1f",
                 path,
                 status,
-                response.elapsed.total_seconds() * 1000,
+                (perf_counter() - started_at) * 1000,
             )
-            if status in {301, 302, 303, 307, 308}:
-                location = response.headers.get("Location")
-                if not location:
-                    raise DataValidationError(
-                        f"AESO public report redirect missing Location (HTTP {status})."
-                    )
-                current = urljoin(str(response.url), location)
-                continue
-            if status == 404:
-                raise DataValidationError(f"AESO public report not found: {path}")
-            if status == 429:
-                retry_after = response.headers.get("Retry-After")
-                retry_s = float(retry_after) if retry_after and retry_after.isdigit() else None
-                raise RateLimitError(retry_after_s=retry_s)
-            if status >= 500:
-                raise UpstreamUnavailableError(f"AESO public report returned HTTP {status}.")
-            if status >= 400:
-                raise DataValidationError(
-                    f"AESO public report rejected the request (HTTP {status})."
-                )
-            return response
+            return buffered_response
         raise DataValidationError(
             f"AESO public report exceeded {_MAX_REDIRECTS} redirects while staying allow-listed."
         )
@@ -219,7 +274,7 @@ def _validate_report_body(content: bytes) -> None:
 
 def _validate_binary_asset_body(content: bytes) -> None:
     if len(content) > _MAX_PUBLIC_ASSET_BYTES:
-        raise DataValidationError("AESO public asset exceeded the 192 MiB safety limit.")
+        raise DataValidationError("AESO public asset exceeded the 384 MiB safety limit.")
     if not content:
         raise DataValidationError("AESO public asset returned an empty body.")
     # XLSX and ZIP files are ZIP containers.  CSV assets remain text and are

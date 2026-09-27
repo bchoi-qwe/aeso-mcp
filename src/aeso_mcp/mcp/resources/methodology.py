@@ -272,6 +272,9 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
 - **Units**: Renewable and AIL values are MW; Pool Price is CAD/MWh.
 - **Semantics**: Forecast, actual, minimum, maximum, capacity, issue time, and target time remain
   distinct. Missing actuals are not replaced with forecasts or zero.
+- **Point in time**: `as_of` requires known issue/publication chronology and retrieval no later
+  than the boundary. Immutable retrieval snapshots prevent later actual/finality enrichment
+  from rewriting historical results. Missing prior observations remain unobserved.
 - **Finality**: Current forecasts and recently posted actuals are preliminary/revisable. Yearly
   historical renewable files are marked final only according to their source publication.
 """,

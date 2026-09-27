@@ -72,3 +72,9 @@ and unmapped blocks remain explicit. Constrained-volume and scarcity results are
 associations. System-frequency threshold exposure counts flagged ten-second intervals as an
 exposure proxy/upper bound; source minima and maxima do not establish exact seconds outside a
 threshold, and raw frequency rows are not exposed through MCP.
+
+Research archive finality remains unknown unless established by the source. Regional aggregates
+report partial coverage when observed areas have missing hours; absent areas are not inferred.
+Constrained-volume observations describe only reported constraint hours, so missing rows are not
+zero constraints. Scarcity high-price counts are null when no price observations are available.
+Frequency exposure is an upper-bound interval proxy, not exact time outside a threshold.

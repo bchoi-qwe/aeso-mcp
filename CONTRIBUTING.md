@@ -19,10 +19,11 @@ Obtain an API key from the [AESO developer portal](https://developer-apim.aeso.c
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
 uv run pyright src
-uv run pytest tests/unit tests/contract tests/mcp tests/evals --cov=aeso_mcp
+uv run pytest tests/unit tests/contract tests/mcp tests/evals tests/packaging --cov=aeso_mcp
 uv run python scripts/generate_catalog.py --check
 uv run mkdocs build --strict
 uv run python tests/packaging/check_release_metadata.py
+uv run python tests/packaging/check_lock_prereleases.py
 uv build
 ```
 
@@ -80,8 +81,9 @@ The scheduled live canary uses the protected `aeso-live` GitHub environment and 
 ## MCP / FastMCP version policy
 
 - Normal CI uses the locked dependency graph (`uv.lock`)
-- FastMCP 4.x may be pinned to a prerelease while targeting MCP `2026-07-28`
-- Dependency canary workflow may test newer allowed versions without blocking merge
+- FastMCP is pinned to an exact stable 4.0.x release; the lockfile must contain no prereleases
+- The non-blocking dependency canary tests newer stable FastMCP 4.0.x patches without crossing the
+  supported minor line
 - Do not auto-merge major FastMCP / MCP SDK upgrades
 
 ## Pre-PyPI checklist

@@ -254,8 +254,8 @@ class ResearchDataService:
                 DataCompleteness.EMPTY
                 if not aggregate
                 else DataCompleteness.DEGRADED
-                if unmapped_blocks or missing_volume_blocks
-                else DataCompleteness.COMPLETE
+                if unmapped_blocks or missing_volume_blocks or asset_response.truncated
+                else DataCompleteness.UNKNOWN
             ),
         )
         return ParticipantConcentrationResponse(
@@ -383,7 +383,9 @@ class ResearchDataService:
                             "actual_load_mw",
                         )
                     )
-                    else DataCompleteness.COMPLETE
+                    else DataCompleteness.PARTIAL
+                    if any(group["count"] < elapsed_hours(start, end) for group in groups.values())
+                    else DataCompleteness.UNKNOWN
                 ),
             ),
             warnings=warnings,
@@ -503,7 +505,7 @@ class ResearchDataService:
                     if not groups
                     else DataCompleteness.DEGRADED
                     if request.include_pool_price and matched_prices < len(records)
-                    else DataCompleteness.COMPLETE
+                    else DataCompleteness.UNKNOWN
                 ),
             ),
             warnings=warnings,
@@ -589,7 +591,7 @@ class ResearchDataService:
             cushion_code_counts=dict(sorted(cushion_counts.items())),
             eea_event_count=len(eea_records),
             eea_level_counts=dict(sorted(level_counts.items())),
-            high_price_observation_count=len(high_prices),
+            high_price_observation_count=len(high_prices) if price_values else None,
             average_pool_price_cad_per_mwh=(mean(price_values) if price_values else None),
             methodology=(
                 "Counts AESO-published categorical Supply Adequacy and Supply Cushion web codes "
@@ -609,8 +611,11 @@ class ResearchDataService:
                     DataCompleteness.EMPTY
                     if not max(len(adequacy), len(cushion), len(eea_records))
                     else DataCompleteness.DEGRADED
-                    if not adequacy or not cushion
-                    else DataCompleteness.COMPLETE
+                    if not adequacy or not cushion or not price_values
+                    else DataCompleteness.PARTIAL
+                    if min(len(adequacy), len(cushion), len(price_values))
+                    < elapsed_hours(start, end)
+                    else DataCompleteness.UNKNOWN
                 ),
             ),
             warnings=warnings,
@@ -758,7 +763,7 @@ def _dataset_state(
         return DataStatus.FORECAST, ObservationType.FORECAST, FinalityStatus.FINAL
     if dataset == "pool_participants":
         return DataStatus.ACTUAL, ObservationType.ACTUAL, FinalityStatus.UNKNOWN
-    return DataStatus.ACTUAL, ObservationType.ACTUAL, FinalityStatus.FINAL
+    return DataStatus.ACTUAL, ObservationType.ACTUAL, FinalityStatus.UNKNOWN
 
 
 def _dataset_metadata(
@@ -812,9 +817,11 @@ def _source_metadata_from_provenance(
     return _meta(
         dataset=dataset,
         prov=provenance,
-        status=DataStatus.ACTUAL,
-        observation_type=ObservationType.ACTUAL,
-        finality=FinalityStatus.FINAL,
+        status=DataStatus.FORECAST if "Web Codes" in dataset else DataStatus.ACTUAL,
+        observation_type=(
+            ObservationType.FORECAST if "Web Codes" in dataset else ObservationType.ACTUAL
+        ),
+        finality=FinalityStatus.UNKNOWN,
         units={},
         granularity=None,
         count=None,
@@ -864,7 +871,7 @@ def _derived_metadata(
         prov=provenance,
         status=DataStatus.ACTUAL,
         observation_type=ObservationType.DERIVED,
-        finality=FinalityStatus.FINAL,
+        finality=FinalityStatus.UNKNOWN,
         units=units,
         granularity=granularity,
         start=start,
@@ -947,10 +954,10 @@ def _sort_records(records: Sequence[Any]) -> list[Any]:
     return sorted(
         records,
         key=lambda record: (
-            chronological_instant(record.interval_start)
+            chronological_instant(record.interval_start).isoformat()
             if hasattr(record, "interval_start")
-            else datetime.min,
-            getattr(record, "pool_participant_id", ""),
+            else "",
+            json.dumps(record.model_dump(mode="json"), sort_keys=True),
         ),
     )
 

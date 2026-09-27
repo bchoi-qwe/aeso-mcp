@@ -624,7 +624,9 @@ def _select_as_of_vintages(
         publication = interval.publication_time
         issue = interval.forecast_issue_time
         known = [value for value in (publication, issue) if value is not None]
-        if not known:
+        if not known or interval.retrieved_at is None:
+            continue
+        if to_utc(interval.retrieved_at) > as_of:
             continue
         if any(to_utc(value) > as_of for value in known):
             continue

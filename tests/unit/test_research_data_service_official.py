@@ -260,3 +260,37 @@ async def test_congestion_analysis_keeps_unmatched_prices_null() -> None:
     assert result.results[0].average_pool_price_cad_per_mwh is None
     assert result.results[0].matched_pool_price_observations == 0
     assert any("matched 0" in warning for warning in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_regional_missing_hours_are_not_complete() -> None:
+    start = datetime(2024, 1, 1, tzinfo=MARKET_TZ)
+    row = PlanningAreaLoadGenerationInterval(
+        interval_start=start,
+        interval_end=start + timedelta(hours=1),
+        region="Central",
+        planning_area="56",
+        load_mw=10,
+        system_generation_mw=5,
+        csd_generation_mw=5,
+        behind_the_fence_generation_mw=0,
+        actual_load_mw=10,
+    )
+    result = await _service(_FakeResearchProvider({"planning_area": [row]})).analyze_regional(
+        RegionalAnalysisRequest(start=start, end=start + timedelta(hours=2))
+    )
+    assert result.metadata.completeness.value == "partial"
+    assert result.results[0].total_actual_load_mwh == 10
+
+
+@pytest.mark.asyncio
+async def test_scarcity_missing_price_context_is_not_zero_high_price_hours() -> None:
+    from aeso_mcp.models.research_data import ScarcityAnalysisRequest
+
+    start = datetime(2024, 1, 1, tzinfo=MARKET_TZ)
+    result = await _service(_FakeResearchProvider({})).analyze_scarcity(
+        ScarcityAnalysisRequest(start=start, end=start + timedelta(hours=2))
+    )
+    assert result.high_price_observation_count is None
+    assert result.average_pool_price_cad_per_mwh is None
+    assert result.warnings

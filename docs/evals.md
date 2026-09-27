@@ -1,6 +1,6 @@
 # Agent-use evaluation
 
-The repository includes 50 canonical user questions in `tests/evals/cases.json`. Cases cover
+The repository includes 70 canonical user questions in `tests/evals/cases.json`. Cases cover
 current conditions, source selection, historical generation, store operations, research
 analytics, operating reserves, timestamp/finality semantics, and safe refusal boundaries.
 
@@ -11,8 +11,44 @@ analytics, operating reserves, timestamp/finality semantics, and safe refusal bo
 - every case identifies expected argument fields and authoritative datasets;
 - every case identifies prohibited interpretations, required caveats, and any numerical
   relationships that should hold;
-- all roadmap tool families have canonical coverage; and
+- all implemented tool families have canonical coverage; and
 - the generated MCP catalog is current.
+
+## Progressive discovery prototype
+
+The deterministic evaluation also prototypes FastMCP's stable `BM25SearchTransform` against the
+same 70 canonical cases. It keeps `get_market_snapshot`, `analyze_market_event`, and `get_forecast`
+always visible and returns at most five search matches. Run the reproducible measurement with:
+
+```bash
+uv run python scripts/evaluate_tool_discovery.py
+```
+
+On the checked-in catalog, the full listing contains 63 tools and serializes to 355,321 characters
+(about 88,830 tokens at a rough four-characters-per-token estimate). The transformed listing
+contains three pinned tools plus `search_tools` and `call_tool`: 26,617 characters (about 6,654
+rough tokens), a 92.5% smaller initial tool catalog.
+
+Across the 66 cases with an expected tool, the 5-result search included every expected tool in its
+candidate set in all 66 cases. The first BM25 result (or a pinned tool) was the expected route in
+57/66 cases; nine cases ranked a different tool first. Eight cases were handled directly by a
+pinned tool, leaving 58 search calls and 58 additional tool-call round trips compared with direct
+full-catalog routing. Search results include the full input/output schemas; their total text was
+1,642,926 characters across the 58 supported-route discoveries. The four no-tool probes also
+returned suggestions (113,441 characters combined). Counting an initial catalog per case plus all
+62 queried result sets (58 supported routes and four no-tool cases), the measured content was
+3,619,557 characters versus 24,872,470 for the full catalog, an estimated 85.4% reduction. These
+are wire-character estimates divided by four, not model-tokenizer measurements; they exclude other
+prompt content and client caching.
+
+The four no-tool safety/semantics cases are important counter-evidence: BM25 returned five tool
+suggestions for each when probed. Search ranking is not an abstention mechanism. The benchmark uses
+MCP-shaped in-process calls, not an external model or a matrix of third-party clients. Therefore,
+progressive discovery is **not enabled by default**: its context reduction is substantial, but
+actual model routing improvement and behavior across Inspector/other clients have not been
+established, it adds a discovery round trip for specialized requests, and it can suggest an
+irrelevant tool for a refusal question. The server retains the full interoperable catalog while
+this is re-evaluated against identified client/model versions.
 
 ## Optional model benchmark
 

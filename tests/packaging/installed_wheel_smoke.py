@@ -10,6 +10,8 @@ import sys
 from importlib.metadata import version as installed_version
 from pathlib import Path
 
+from fastmcp import Client
+from fastmcp.client.transports import StdioTransport
 from pydantic import SecretStr
 
 import aeso_mcp
@@ -119,10 +121,32 @@ EXPECTED_RESOURCES = {
 
 def _assert_imported_from_wheel() -> None:
     """Reject accidental imports from the checkout's source tree."""
-    checkout_source = (Path.cwd() / "src" / "aeso_mcp").resolve()
+    checkout_source = (Path(__file__).resolve().parents[2] / "src" / "aeso_mcp").resolve()
     module_path = Path(aeso_mcp.__file__).resolve()
     if module_path.is_relative_to(checkout_source):
         raise SystemExit(f"Wheel smoke imported checkout source: {module_path}")
+
+
+async def _stdio_smoke() -> None:
+    """Launch the installed console script and negotiate both protocol eras over stdio."""
+    executable = Path(sys.executable).with_name("aeso-mcp")
+    if not executable.is_file():
+        raise SystemExit(f"Installed wheel console script is missing: {executable}")
+
+    for mode, protocol in (("auto", "2026-07-28"), ("legacy", "2025-11-25")):
+        transport = StdioTransport(
+            command=str(executable),
+            args=["--transport", "stdio"],
+            keep_alive=False,
+        )
+        async with Client(transport, mode=mode) as client:
+            tools = {tool.name for tool in await client.list_tools()}
+            if client.protocol_version != protocol or tools != EXPECTED_TOOLS:
+                raise SystemExit(
+                    "Installed wheel stdio mismatch: "
+                    f"mode={mode}, protocol={client.protocol_version}, "
+                    f"tools={sorted(tools ^ EXPECTED_TOOLS)}"
+                )
 
 
 async def smoke() -> None:
@@ -131,6 +155,13 @@ async def smoke() -> None:
 
     expected_version = os.environ.get("AESO_MCP_EXPECTED_VERSION")
     actual_version = installed_version("aeso-mcp")
+    framework_version = installed_version("fastmcp")
+    slim_version = installed_version("fastmcp-slim")
+    if (framework_version, slim_version) != ("4.0.10", "4.0.10"):
+        raise SystemExit(
+            "Installed wheel FastMCP framework mismatch: "
+            f"fastmcp={framework_version}, fastmcp-slim={slim_version}"
+        )
     if expected_version is not None and actual_version != expected_version:
         raise SystemExit(
             f"Installed wheel version mismatch: expected {expected_version}, got {actual_version}"
@@ -153,6 +184,23 @@ async def smoke() -> None:
             raise SystemExit(
                 f"Installed wheel resource mismatch: {sorted(resources ^ EXPECTED_RESOURCES)}"
             )
+        async with Client(mcp) as client:
+            status = await client.call_tool("get_historical_store_status", {})
+            if status.is_error:
+                raise SystemExit("Installed package store-status tool failed")
+            invalid = await client.call_tool(
+                "get_forecast",
+                {
+                    "request": {
+                        "start": "2025-01-01T00:00:00Z",
+                        "end": "2025-01-01T01:00:00Z",
+                        "as_of": "2025-01-01T00:00:00",
+                    }
+                },
+                raise_on_error=False,
+            )
+            if not invalid.is_error:
+                raise SystemExit("Installed package accepted naive as_of")
         glossary = await mcp.read_resource("aeso://glossary")
         glossary_content = glossary.contents[0].content
         if not isinstance(glossary_content, str) or "Pool Price" not in glossary_content:
@@ -160,7 +208,8 @@ async def smoke() -> None:
     finally:
         await container.aclose()
 
-    sys.stdout.write(f"Installed wheel MCP smoke passed ({actual_version})\n")
+    await _stdio_smoke()
+    sys.stdout.write(f"Installed wheel MCP and stdio smoke passed ({actual_version})\n")
 
 
 if __name__ == "__main__":

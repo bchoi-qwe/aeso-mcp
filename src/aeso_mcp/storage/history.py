@@ -354,9 +354,12 @@ class HistoricalStore:
         self.initialize()
         if not rows:
             return 0, 0
+        observations = [self._normalize_forecast_row(row) for row in rows]
         by_id: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            normalized = self._normalize_forecast_row(row)
+        for normalized in sorted(
+            observations,
+            key=lambda row: (row["retrieved_at"], json.dumps(row, default=str, sort_keys=True)),
+        ):
             by_id[normalized["vintage_id"]] = normalized
         normalized_rows = list(by_id.values())
         partitions = sorted(
@@ -371,12 +374,24 @@ class HistoricalStore:
         with self._connect() as connection:
             connection.begin()
             try:
-                self._insert_arrow_rows(
-                    connection,
-                    "incoming_forecast_vintages",
-                    normalized_rows,
-                    "forecast_vintages",
-                )
+                connection.register("incoming_forecast_vintages", self._arrow_table(observations))
+                try:
+                    connection.execute("""
+                        INSERT OR IGNORE INTO forecast_observations BY NAME
+                        SELECT v.*, sha256(to_json(v)) AS observation_id
+                        FROM incoming_forecast_vintages v
+                    """)
+                    connection.execute("""
+                        INSERT OR REPLACE INTO forecast_vintages BY NAME
+                        SELECT * EXCLUDE (observation_id) FROM forecast_observations
+                        WHERE vintage_id IN (SELECT vintage_id FROM incoming_forecast_vintages)
+                        QUALIFY row_number() OVER (
+                            PARTITION BY vintage_id
+                            ORDER BY retrieved_at DESC, observation_id DESC
+                        ) = 1
+                    """)
+                finally:
+                    connection.unregister("incoming_forecast_vintages")
                 connection.commit()
             except Exception:
                 connection.rollback()
@@ -401,7 +416,7 @@ class HistoricalStore:
         """Read forecast publications with deterministic point-in-time selection.
 
         ``as_of`` is an information boundary, not a target-date filter: a row
-        is eligible only when every known issue/publication timestamp is at or
+        is eligible only when retrieval and every known issue/publication timestamp are at or
         before that instant.  Rows without either timestamp are excluded from
         an ``as_of`` query because their publication chronology is unknown and
         returning them could introduce look-ahead bias.  An ``as_of`` query
@@ -444,10 +459,13 @@ class HistoricalStore:
                     "(publication_time IS NOT NULL OR forecast_issue_time IS NOT NULL)",
                     "(publication_time IS NULL OR publication_time <= ?)",
                     "(forecast_issue_time IS NULL OR forecast_issue_time <= ?)",
+                    "retrieved_at <= ?",
                 ]
             )
-            params.extend([as_of_utc, as_of_utc])
+            params.extend([as_of_utc, as_of_utc, as_of_utc])
         where = " AND ".join(predicates)
+        relation = "forecast_observations" if as_of is not None else "forecast_vintages"
+        tie_breaker = "observation_id" if as_of is not None else "vintage_id"
         ranked = f"""
             WITH eligible AS (
                 SELECT *,
@@ -459,8 +477,11 @@ class HistoricalStore:
                            WHEN forecast_issue_time IS NOT NULL THEN forecast_issue_time
                            ELSE NULL
                        END AS information_time
-                FROM forecast_vintages
+                FROM {relation}
                 WHERE {where}
+                QUALIFY row_number() OVER (
+                    PARTITION BY vintage_id ORDER BY retrieved_at DESC, {tie_breaker} DESC
+                ) = 1
             ), ranked AS (
                 SELECT eligible.*,
                        row_number() OVER (
@@ -1059,6 +1080,23 @@ class HistoricalStore:
             WHERE forecast_value IS NOT NULL
             """
         )
+
+        # Preserve the state actually retrieved, independently of forecast identity.
+        # Existing v3 stores can only supply their last retained state; never invent
+        # earlier actuals, finality, hashes, or retrieval times during migration.
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS forecast_observations AS
+            SELECT v.*, sha256(to_json(v)) AS observation_id
+            FROM forecast_vintages v WHERE false
+        """)
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS forecast_observation_identity
+            ON forecast_observations (observation_id)
+        """)
+        connection.execute("""
+            INSERT OR IGNORE INTO forecast_observations BY NAME
+            SELECT v.*, sha256(to_json(v)) AS observation_id FROM forecast_vintages v
+        """)
 
     @staticmethod
     def _arrow_table(rows: Sequence[dict[str, Any]]):

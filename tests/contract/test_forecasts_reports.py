@@ -176,6 +176,10 @@ def test_dds_tmr_and_system_event_reports_keep_source_semantics() -> None:
     assert [event.event_type for event in events] == ["supply_surplus", "energy_emergency"]
 
 
+def test_dds_valid_header_with_no_publications_is_an_empty_report() -> None:
+    assert _parse_dds_csv(b"Date/Time,Available DDS (MW)\n") == []
+
+
 @pytest.mark.parametrize(
     ("parser", "payload", "message"),
     [

@@ -61,15 +61,18 @@ observation semantics, and schema version for upstream lineage.
 
 ## Forecast vintages and `as_of`
 
-Schema version 3 adds a separate `forecast_vintages` relation. A vintage retains target interval,
+Schema version 3 adds `forecast_vintages` and immutable `forecast_observations` relations. A vintage retains target interval,
 forecast issue and publication times, horizon, forecast and actual values, source version/hash,
 retrieval time, lead time, finality, completeness, and source-file identity. Its key uses the
 canonical forecast-only payload rather than retrieval time or the raw file hash, so a raw report
 that later fills in actual/finality fields enriches the same publication while a revised forecast
-remains a distinct vintage.
+remains a distinct vintage. Each retrieval snapshot retains its own actuals, finality, and source
+hash. Refreshing the latest view does not rewrite earlier point-in-time observations. Existing v3
+stores seed snapshots from their retained state only; overwritten historical states cannot be
+reconstructed. Schema-v1 and v2 market rows remain readable after additive migration.
 
 `get_forecast(..., as_of=...)` selects the latest eligible vintage per target interval. Every known
-issue and publication timestamp must be at or before `as_of`; rows with unknown publication
+issue and publication timestamp, and the retrieval time, must be at or before `as_of`; rows with unknown publication
 chronology are excluded. Existing schema-v2 forecast values migrate additively and remain
 available without `as_of`, but are deliberately excluded from point-in-time queries because their
 original information time cannot be reconstructed.

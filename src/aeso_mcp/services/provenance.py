@@ -6,11 +6,11 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, date, datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 
 from aeso_mcp.models.common import DataCompleteness, FinalityStatus
 from aeso_mcp.models.provenance import AnalysisManifest, AnalysisSource, AnalysisSourceRole
@@ -56,7 +56,8 @@ def analysis_source_from_response(
         observation_count=observation_count,
         finality=finality,
         completeness=completeness,
-        source_hash=_first_text(extra.get("source_hash"), extra.get("content_hash")),
+        source_hash=_first_text(extra.get("source_hash"), extra.get("content_hash"))
+        or _response_hash(response),
     )
 
 
@@ -70,7 +71,13 @@ def build_analysis_manifest(
 ) -> AnalysisManifest:
     """Build a stable analysis identity independent of fetch completion order."""
 
-    normalized_sources = sorted(sources, key=_source_sort_key)
+    normalized_sources = sorted(
+        [
+            AnalysisSource.model_validate(_canonical_value(source.model_dump()))
+            for source in sources
+        ],
+        key=_source_sort_key,
+    )
     normalized_parameters = dict(sorted(parameters.items()))
     normalized_warnings = sorted(set(warnings))
     identity_payload = {
@@ -91,20 +98,31 @@ def build_analysis_manifest(
     )
 
 
-def _source_sort_key(source: AnalysisSource) -> tuple[str, ...]:
-    return (
-        source.role,
-        source.dataset,
-        source.source_product or "",
-        source.source_version or "",
-        source.source_file_id or "",
-        source.source_file_name or "",
-        source.requested_start.isoformat() if source.requested_start is not None else "",
-        source.requested_end.isoformat() if source.requested_end is not None else "",
-        source.publication_time.isoformat() if source.publication_time is not None else "",
-        source.retrieved_at.isoformat() if source.retrieved_at is not None else "",
-        source.source_hash or "",
-    )
+def _source_sort_key(source: AnalysisSource) -> str:
+    # A total ordering must include all fields, even when source labels tie.
+    return json.dumps(source.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+
+
+def _response_hash(response: object) -> str | None:
+    if not isinstance(response, BaseModel):
+        return None
+    payload = response.model_dump(mode="python", exclude={"metadata", "warnings", "page"})
+    canonical = json.dumps(_canonical_value(payload), sort_keys=True, separators=(",", ":"))
+    return f"sha256:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+
+def _canonical_value(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).isoformat() if value.tzinfo is not None else value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Mapping):
+        return {key: _canonical_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_value(item) for item in value]
+    if isinstance(value, Enum):
+        return value.value
+    return value
 
 
 def _response_count(response: object) -> int | None:

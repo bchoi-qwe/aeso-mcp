@@ -169,6 +169,35 @@ async def test_public_client_maps_http_failures(status: int, error_type: type[Ex
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_public_client_stops_reading_when_stream_exceeds_body_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ChunkedBody(httpx.AsyncByteStream):
+        fully_consumed = False
+
+        async def __aiter__(self):
+            yield b"123"
+            yield b"456"
+            self.fully_consumed = True
+            yield b"789"
+
+        async def aclose(self) -> None:
+            pass
+
+    stream = ChunkedBody()
+    monkeypatch.setattr("aeso_mcp.providers.public_reports_http._MAX_PUBLIC_REPORT_BYTES", 4)
+    respx.get("http://ets.aeso.ca/report.csv").mock(return_value=httpx.Response(200, stream=stream))
+    client = AesoPublicReportsHttpClient(_settings())
+    try:
+        with pytest.raises(DataValidationError, match="4 bytes safety limit"):
+            await client.get_bytes("http://ets.aeso.ca/report.csv")
+        assert not stream.fully_consumed
+    finally:
+        await client.aclose()
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_public_client_rejects_unexpected_binary_content() -> None:
     respx.get("http://ets.aeso.ca/report.csv").mock(
         return_value=httpx.Response(200, content=b"PK\x00binary")
