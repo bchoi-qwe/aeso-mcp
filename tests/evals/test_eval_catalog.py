@@ -93,7 +93,7 @@ async def test_bm25_progressive_discovery_prototype_regression() -> None:
         report["search_result_wire_chars_for_all_cases"]
         > report["search_result_wire_chars_for_supported_routes"]
     )
-    assert report["estimated_character_reduction_percent"] == 85.4
+    assert report["estimated_character_reduction_percent"] == 85.2
     assert report["model_answer_benchmark_run"] is False
 
 

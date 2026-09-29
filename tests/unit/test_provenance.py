@@ -5,8 +5,11 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
+import pytest
+from pydantic import ValidationError
+
 from aeso_mcp.models.common import DataCompleteness, FinalityStatus
-from aeso_mcp.models.provenance import AnalysisSource
+from aeso_mcp.models.provenance import AnalysisManifest, AnalysisSource
 from aeso_mcp.services.provenance import build_analysis_manifest
 
 
@@ -105,6 +108,53 @@ def test_analysis_identity_totally_orders_sources_with_matching_labels() -> None
         methodology_version="v1", sources=[other, source], parameters={}
     )
     assert first.analysis_id == second.analysis_id
+
+
+def test_analysis_manifest_parameters_use_recursive_json_schema() -> None:
+    schema = AnalysisManifest.model_json_schema()
+    parameters = schema["properties"]["parameters"]
+    value_ref = parameters["additionalProperties"]["$ref"]
+    value_name = value_ref.rsplit("/", maxsplit=1)[-1]
+    value_schema = schema["$defs"][value_name]
+
+    assert parameters["type"] == "object"
+    assert {choice.get("type") for choice in value_schema["anyOf"]} == {
+        "boolean",
+        "integer",
+        "number",
+        "string",
+        "array",
+        "object",
+        "null",
+    }
+    recursive_ref = {"$ref": value_ref}
+    assert (
+        next(choice for choice in value_schema["anyOf"] if choice.get("type") == "array")["items"]
+        == recursive_ref
+    )
+    assert (
+        next(choice for choice in value_schema["anyOf"] if choice.get("type") == "object")[
+            "additionalProperties"
+        ]
+        == recursive_ref
+    )
+
+    manifest = AnalysisManifest(
+        analysis_id="sha256:test",
+        methodology_version="v1",
+        generated_at=datetime(2026, 8, 4, tzinfo=UTC),
+        sources=[],
+        parameters={"nested": {"values": [1, True, None, "text"]}},
+    )
+    assert manifest.parameters["nested"] == {"values": [1, True, None, "text"]}
+    with pytest.raises(ValidationError):
+        AnalysisManifest(
+            analysis_id="sha256:test",
+            methodology_version="v1",
+            generated_at=datetime(2026, 8, 4, tzinfo=UTC),
+            sources=[],
+            parameters={"unsupported": object()},
+        )
 
 
 def test_analysis_source_hash_canonicalizes_date_valued_observations() -> None:

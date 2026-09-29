@@ -99,7 +99,8 @@ Analytics: `summarize_market_history`, `assess_supply_tightness`, `compare_marke
 
 ## Architecture
 
-The documentation site includes a full [architecture and MCP Inspector walkthrough](docs/architecture.md).
+The documentation site includes a full [architecture and MCP Inspector walkthrough](docs/architecture.md)
+and an [MCP interoperability and security matrix](docs/mcp-interoperability.md).
 
 ```text
 MCP clients
@@ -179,7 +180,9 @@ docker run --rm \
 ```
 
 Send the same token in the MCP client's `Authorization: Bearer ...` header. The image binds to
-`0.0.0.0`, so it intentionally requires bearer authentication by default.
+`0.0.0.0`, so it intentionally requires bearer authentication by default. The built-in HTTP listener
+does not terminate TLS; for off-host traffic, terminate TLS at a trusted reverse proxy and never
+send bearer credentials over public plaintext HTTP. See [MCP interoperability and security](docs/mcp-interoperability.md).
 
 ## Obtaining an AESO API key
 
@@ -218,7 +221,8 @@ uv run aeso-mcp --transport http --host 127.0.0.1 --port 8000
 ```
 
 HTTP always validates Host and Origin. A non-loopback bind now refuses to start unless
-`AESO_MCP_HTTP_BEARER_TOKEN` is configured. An explicit
+`AESO_MCP_HTTP_BEARER_TOKEN` is configured. The built-in listener is plain HTTP; terminate TLS at a
+trusted ingress before exposing it beyond a trusted private network. An explicit
 `AESO_MCP_HTTP_ALLOW_INSECURE_REMOTE=true` override exists for isolated environments that accept
 the risk; it is never the default. Also set `AESO_MCP_HTTP_ALLOWED_HOSTS` and
 `AESO_MCP_HTTP_ALLOWED_ORIGINS` for the deployment. `/healthz` and `/readyz` contain no market data

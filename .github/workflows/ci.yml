@@ -101,6 +101,9 @@ jobs:
       - name: Start MCP HTTP server
         env:
           AESO_API_KEY: test-ci-key-not-real
+          # Conformance sends many synthetic requests from one client IP; keep production defaults
+          # intact while preventing the test-only public HTTP rate limiter from masking assertions.
+          AESO_MCP_HTTP_RATE_LIMIT_REQUESTS: "100000"
         run: |
           uv run aeso-mcp --transport http --host 127.0.0.1 --port 8765 &
           echo $! > /tmp/aeso-mcp.pid
@@ -111,18 +114,52 @@ jobs:
             sleep 0.5
           done
 
-      - name: Run official conformance suite
+      - name: Run MCP 2025-11-25 conformance (legacy compatibility)
         run: |
           npx --yes @modelcontextprotocol/conformance@0.1.16 server \
             --url http://127.0.0.1:8765/mcp \
             --suite active \
             --expected-failures ./conformance-baseline.yml
 
+      - name: Run MCP 2026-07-28 required conformance
+        run: |
+          # The latest stable conformance CLI (0.1.16) predates 2026-07-28's
+          # stateless wire and frozen requirements; pin the official alpha runner
+          # that provides --requirements rather than silently testing an older suite.
+          npx --yes @modelcontextprotocol/conformance@0.2.0-alpha.11 server \
+            --url http://127.0.0.1:8765/mcp \
+            --requirements 2026-07-28 \
+            --expected-failures ./conformance-2026-baseline.yml
+
+      - name: MCP Inspector modern HTTP smoke and schema portability
+        run: |
+          npx --yes @modelcontextprotocol/inspector@2.8.0 --cli \
+            --transport http \
+            --server-url http://127.0.0.1:8765/mcp \
+            --protocol-era modern \
+            --method tools/list \
+            --strict \
+            --format json \
+            --connect-timeout 10000 \
+            | jq -e '(.result.tools | map(.name) | index("get_market_snapshot") != null) and ((.schemaFindings // []) | length == 0)'
+
+      - name: MCP Inspector legacy HTTP smoke
+        run: |
+          npx --yes @modelcontextprotocol/inspector@2.8.0 --cli \
+            --transport http \
+            --server-url http://127.0.0.1:8765/mcp \
+            --protocol-era legacy \
+            --method tools/list \
+            --format json \
+            --connect-timeout 10000 \
+            | jq -e '(.result.tools | map(.name) | index("get_market_snapshot") != null)'
+
       - name: Document conformance status
         if: always()
         run: |
-          echo "Official MCP conformance is exercised in CI."
-          echo "Application-server gaps are baselined in conformance-baseline.yml."
+          echo "Official MCP 2025-11-25 and frozen 2026-07-28 requirements are exercised in CI."
+          echo "Application-specific test assumptions are baselined by check in conformance-*-baseline.yml."
+          echo "MCP Inspector CLI 2.8.0 independently probes modern and legacy HTTP tool discovery."
 
   docker:
     name: Docker build

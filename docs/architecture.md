@@ -7,7 +7,9 @@ responses remain typed and bounded. The MCP adapter uses
 protocol revision `2026-07-28`, and relies on FastMCP's per-connection negotiation to retain
 legacy session-based client support. The full typed tool catalog remains directly visible; the
 BM25 progressive-discovery prototype and its evaluation are documented in
-[Agent-use evaluation](evals.md#progressive-discovery-prototype).
+[Agent-use evaluation](evals.md#progressive-discovery-prototype). See
+[MCP interoperability and security](mcp-interoperability.md) for the protocol matrix, HTTP auth
+scope, and independent CI gates.
 
 ![AESO MCP architecture](assets/architecture.svg)
 

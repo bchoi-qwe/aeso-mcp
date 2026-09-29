@@ -32,6 +32,10 @@ Out of scope / residual risk:
   upstream client for public reports (`ets.aeso.ca`) plus a separate fixed-share client for the
   official AESO CSD Box archive; the server still requires `AESO_API_KEY` at startup, and
   redirects are re-validated against the corresponding host allow-list
+- `AESO_API_KEY` is an upstream credential, not MCP client authentication. HTTP clients use a
+  separate configured static bearer token on non-loopback binds. That custom authentication is
+  not OAuth and does not expose OAuth Protected Resource Metadata; the built-in listener does not
+  terminate TLS, so external traffic must use a trusted TLS-terminating proxy
 - Bounded date ranges, observation caps, HTTP timeouts, and selective retries
 - Raw-series pagination plus compact server-side aggregation for long historical requests
 - HTTP Host/Origin validation, bearer authentication required for non-loopback binds by default,

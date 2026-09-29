@@ -24,10 +24,12 @@ always visible and returns at most five search matches. Run the reproducible mea
 uv run python scripts/evaluate_tool_discovery.py
 ```
 
-On the checked-in catalog, the full listing contains 63 tools and serializes to 355,321 characters
-(about 88,830 tokens at a rough four-characters-per-token estimate). The transformed listing
-contains three pinned tools plus `search_tools` and `call_tool`: 26,617 characters (about 6,654
-rough tokens), a 92.5% smaller initial tool catalog.
+On the checked-in catalog, the full listing contains 63 tools and serializes to 356,427 characters
+(about 89,106 tokens at a rough four-characters-per-token estimate). The transformed listing
+contains three pinned tools plus `search_tools` and `call_tool`: 27,723 characters (about 6,930
+rough tokens), a 92.2% smaller initial tool catalog. The recursive JSON-value schema for analysis
+provenance makes that initial catalog slightly larger but avoids advertising unconstrained output
+values.
 
 Across the 66 cases with an expected tool, the 5-result search included every expected tool in its
 candidate set in all 66 cases. The first BM25 result (or a pinned tool) was the expected route in
@@ -37,7 +39,7 @@ full-catalog routing. Search results include the full input/output schemas; thei
 1,642,926 characters across the 58 supported-route discoveries. The four no-tool probes also
 returned suggestions (113,441 characters combined). Counting an initial catalog per case plus all
 62 queried result sets (58 supported routes and four no-tool cases), the measured content was
-3,619,557 characters versus 24,872,470 for the full catalog, an estimated 85.4% reduction. These
+3,696,977 characters versus 24,949,890 for the full catalog, an estimated 85.2% reduction. These
 are wire-character estimates divided by four, not model-tokenizer measurements; they exclude other
 prompt content and client caching.
 

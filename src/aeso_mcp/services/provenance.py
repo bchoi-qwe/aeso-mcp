@@ -10,10 +10,15 @@ from datetime import UTC, date, datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 
 from aeso_mcp.models.common import DataCompleteness, FinalityStatus
-from aeso_mcp.models.provenance import AnalysisManifest, AnalysisSource, AnalysisSourceRole
+from aeso_mcp.models.provenance import (
+    AnalysisManifest,
+    AnalysisSource,
+    AnalysisSourceRole,
+    JSONValue,
+)
 from aeso_mcp.timeutil import utc_now
 
 
@@ -65,7 +70,7 @@ def build_analysis_manifest(
     *,
     methodology_version: str,
     sources: Sequence[AnalysisSource],
-    parameters: Mapping[str, JsonValue],
+    parameters: Mapping[str, JSONValue],
     warnings: Sequence[str] = (),
     generated_at: datetime | None = None,
 ) -> AnalysisManifest:

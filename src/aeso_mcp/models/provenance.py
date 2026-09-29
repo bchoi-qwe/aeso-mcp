@@ -6,11 +6,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field
 
 from aeso_mcp.models.common import DataCompleteness, FinalityStatus
 
 AnalysisSourceRole = Literal["focus", "baseline", "context"]
+
+# Pydantic's JsonValue currently emits `{}` in JSON Schema. This recursive alias
+# accurately constrains the public manifest to JSON values and keeps the MCP
+# output schema machine-readable instead of advertising unconstrained `Any`.
+type JSONValue = bool | int | float | str | list[JSONValue] | dict[str, JSONValue] | None
 
 
 class AnalysisSource(BaseModel):
@@ -46,7 +51,7 @@ class AnalysisManifest(BaseModel):
     methodology_version: str
     generated_at: datetime
     sources: list[AnalysisSource]
-    parameters: dict[str, JsonValue]
+    parameters: dict[str, JSONValue]
     warnings: list[str] = Field(default_factory=list)
 
 

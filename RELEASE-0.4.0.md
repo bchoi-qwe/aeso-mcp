@@ -1,13 +1,15 @@
-# 0.4.0 release-candidate audit — 2026-09-26
+# 0.4.0 release-candidate audit — updated 2026-09-28
 
-Status: **buildable candidate; release sign-off incomplete**. No commit, tag, push, publication, or
-external registry mutation was performed.
+Status: **buildable candidate; release sign-off incomplete**. Candidate commit `12102c0`
+(`Prepare 0.4.0 release candidate`) is synchronized with `origin/main`. This continuation adds
+uncommitted local interoperability, schema, and documentation checks. The Docker image build and
+runtime smoke passed. No package or Registry publication was performed; human review of the final
+diff and release limits remains outstanding.
 
-Audited HEAD: `535a14a` (`starting`), `main...origin/main`. The worktree was already dirty when
-this audit began, with substantial 0.4.0 source, test, and documentation changes plus this report
-present. Those changes were preserved; nothing was reset or committed. The first long test output
-in this continuation was truncated before a result, so it is not a reliable pre-edit baseline. The
-final checks below are authoritative for the current combined worktree.
+The continuation started from a clean worktree at `12102c0`; the final local changes are not yet
+committed or pushed. Earlier validation recorded below remains relevant, and the continuation
+results are listed separately so that earlier committed checks are not confused with this local
+follow-up.
 
 ## Findings and changes verified
 
@@ -18,10 +20,12 @@ final checks below are authoritative for the current combined worktree.
    2025-11-25 session negotiation list the full 63-tool surface.
 2. **Progressive discovery remains an experiment.** A reproducible FastMCP BM25 prototype measures
    all 70 canonical cases. Top-five routing finds all 66 expected routes; first choice is correct or
-   pinned in 57/66. Its measured catalog-and-query text is 85.4% smaller than repeatedly listing
-   all tools, but it adds discovery calls and suggests tools for all four no-tool cases. The full
-   catalog remains the default; there is no model-answer benchmark or claim of improved model
-   performance.
+   pinned in 57/66. Counting one catalog per case plus all search results, its content is
+   3,696,977 characters versus 24,949,890 for repeated full listings (85.2% lower). The initial
+   transformed catalog is 27,723 characters; the recursive typed provenance schema accounts for a
+   small increase over the previous measurement. These are character estimates, not tokenizer or
+   model-answer results. Discovery adds round trips and suggests tools for all four no-tool cases,
+   so the full catalog remains the default.
 3. **Forecast point-in-time selection is retrieval-aware.** Both in-memory and historical-store
    selectors require retrieval no later than `as_of`, and exclude records with unknown issue and
    publication chronology. Schema v3 preserves retrieval snapshots separately from the latest
@@ -42,6 +46,14 @@ final checks below are authoritative for the current combined worktree.
    generated catalog, builds the wheel through the sdist, and tests the installed console entry
    point over stdio. Docker smoke now checks bearer enforcement plus modern and legacy HTTP
    negotiation. Release metadata, limitations, and discovery measurements are synchronized.
+8. **MCP schemas are client-portable.** Analysis provenance parameters now use a recursive JSON
+   value type instead of unconstrained `{}` in the emitted output schema; focused tests cover its
+   JSON Schema shape and accepted/rejected values.
+9. **Independent interoperability gates are documented and automated.** CI exercises the active
+   legacy suite and frozen 2026-07-28 requirements with scenario-specific expected-failure
+   baselines, then uses Inspector for modern strict-schema and legacy HTTP discovery. Auth scope,
+   TLS termination, optional capability boundaries, Registry validation, and baseline policy are
+   documented without claiming OAuth support or full conformance for unadvertised capabilities.
 
 No new AESO dataset was added in this pass. The existing source matrix and `LIMITATIONS.md` retain
 known gaps and distinguish unsupported coverage from zero observations or inferred data.
@@ -54,20 +66,25 @@ known gaps and distinguish unsupported coverage from zero observations or inferr
 | `uv run ruff check src tests scripts` | PASS |
 | `uv run ruff format --check src tests scripts` | PASS; 131 files |
 | `uv run pyright src` | PASS; zero errors, warnings, or informations |
-| `uv run pytest --cov=aeso_mcp -q` | PASS; 287 passed, 11 live tests skipped; 80.87% branch-aware coverage (75% floor) |
+| `uv run pytest tests/unit tests/contract tests/mcp tests/evals tests/packaging --cov=aeso_mcp --cov-report=term-missing --cov-report=xml` | PASS; 288 passed; 80.87% branch-aware coverage (75% floor) |
 | `uv run python tests/packaging/check_lock_prereleases.py` / `uv lock --check` | PASS; no locked prereleases |
 | `uv run python scripts/generate_catalog.py --check` | PASS |
 | `uv run mkdocs build --strict` | PASS |
 | `uv run python tests/packaging/check_release_metadata.py` | PASS; version 0.4.0 |
 | `uv build --clear` | PASS; wheel built through the sdist |
-| Fresh isolated wheel smoke | PASS; exact FastMCP 4.0.10, 63 tools, 30 resources, 3 prompts, packaged resource and tool validation |
+| Fresh isolated wheel smoke | PASS; exact FastMCP 4.0.10, 63 tools, 30 resources, 3 prompts, packaged resource and tool validation; latest wheel CLI/stdio smoke also passed |
 | Installed console-script stdio smoke | PASS for modern 2026-07-28 and legacy 2025-11-25; both list all 63 tools |
 | Authenticated local HTTP smoke | PASS; anonymous request returned 401; modern and legacy clients listed all 63 tools |
 | Official MCP conformance active suite 0.1.16 | PASS against the application baseline: 12 passed, 20 expected unsupported-capability failures, zero unexpected failures |
 | `bash -n tests/packaging/docker_runtime_smoke.sh` | PASS |
-| `docker info` / Docker image runtime smoke | BLOCKED_EXTERNAL; Docker daemon unavailable, so image build/runtime was not executed |
+| Docker image build and authenticated modern/legacy runtime smoke | PASS in this continuation; `aeso-mcp:0.4.0-local-smoke` built and bearer enforcement plus both protocol eras passed |
 | `tests/integration` with `.env` loaded without displaying its contents | PASS; 11 passed in 15.91s |
 | `git diff --check` | PASS |
+| Legacy MCP conformance active suite 0.1.16 (continuation) | PASS against the application baseline |
+| MCP 2026-07-28 requirements via conformance 0.2.0-alpha.11 (continuation) | PASS against the check-level baseline; 112 checks passed, 56 baseline-expected or non-scored failures, zero unexpected failures |
+| MCP Inspector 2.8.0 modern/legacy HTTP discovery (continuation) | PASS; 63 tools listed in both eras, zero modern strict-schema findings |
+| Registry publisher `mcp-publisher 1.8.1 validate server.json` | PASS; validation only, no publication |
+| Recursive provenance schema focused tests | PASS; 7 tests |
 
 An expanded, non-CI `pyright src tests` invocation reports diagnostics in test files. The documented
 and CI-enforced scope is `pyright src`, which passes; this optional broader result is not presented
@@ -81,13 +98,13 @@ The key was not printed or added to the report. Live data remains revisable and 
 
 ## Release gates
 
-1. Run the Docker image build and updated runtime smoke with a working Docker daemon.
+1. Docker image build and updated runtime smoke passed; no additional Docker gate is pending.
 2. Human review of `LIMITATIONS.md`, release metadata, security boundaries, and the final diff.
-3. Keep publication and registry actions manual; none were performed by this audit.
+3. Keep publication and Registry actions manual; none were performed by this audit.
 
 ## Built artifacts
 
 - `dist/aeso_mcp-0.4.0-py3-none-any.whl` — SHA-256
-  `448766c46145cd0a5c314c67d7290d274f587e4d41949776f6abaf23eecf89c3`
+  `b5f33909efe4c2d2c7005faeaf5a47812595c713ca12142ccc72fca929e64770`
 - `dist/aeso_mcp-0.4.0.tar.gz` — SHA-256
-  `33dce37decd66140a4e8c865c6f675b5bbf647ce82f138aa3d7bff884ba764f2`
+  `19fecbe8d63659e8c7e9952efd5c084f80fe901e18f836948e8cbaac4b186b92`

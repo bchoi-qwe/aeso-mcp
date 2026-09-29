@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Independent MCP conformance gates for legacy `2025-11-25` and frozen modern `2026-07-28`
+  requirements, plus pinned Inspector CLI HTTP discovery and schema-portability smoke checks
+- MCP interoperability/security guide documenting optional feature scope, HTTP auth, TLS
+  termination, Registry metadata validation, and scenario-specific conformance baselines
+
 - Immutable forecast-vintage storage with additive schema-v3 migration, source version/hash,
   issue/publication/retrieval time, stable deduplication, DST-safe target identity, and bounded
   `as_of` selection through the existing `get_forecast` abstraction
@@ -53,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source entries; research summaries preserve unknown finality, missing prices, and partial coverage
 - Annual frequency assets fit bounded download/decompression limits verified against official
   files; large planning-area and frequency parsing runs outside the async event loop
+- Market-event provenance parameters now emit a recursive JSON-value schema instead of an
+  unconstrained `{}` schema, preserving JSON structure in client-visible tool output validation
 
 ## [0.3.0] - 2026-08-26
 

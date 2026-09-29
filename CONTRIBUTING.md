@@ -34,7 +34,13 @@ AESO_API_KEY=... uv run pytest tests/integration -m integration
 ```
 
 The scheduled live canary uses the protected `aeso-live` GitHub environment and its
-`AESO_API_KEY` secret. Pull-request CI remains deterministic and does not contact AESO.
+`AESO_API_KEY` secret. Pull-request CI remains deterministic and does not contact AESO. CI also
+runs the legacy MCP conformance suite, frozen 2026-07-28 server requirements, and pinned Inspector
+CLI discovery checks; see [MCP interoperability](docs/mcp-interoperability.md).
+
+For a networked, non-publishing check of Registry metadata, install the official publisher and run
+`mcp-publisher validate server.json`. This contacts the Registry validation endpoint but does not
+publish or mutate a Registry entry. Do not use `mcp-publisher publish` in CI.
 
 ## Design guidelines
 
@@ -95,4 +101,5 @@ Do **not** publish to PyPI or the MCP Registry until a human has signed off on:
 3. Tool/resource surface matches README (no silent stubs presented as working)
 4. Secret hygiene: no keys in git, logs, or chat history (rotate if exposed)
 5. Publish workflow remains **manual** (`workflow_dispatch` only)
-6. Version/CHANGELOG cut intentionally for the published tag
+6. `mcp-publisher validate server.json` passes; validation is not publication
+7. Version/CHANGELOG cut intentionally for the published tag

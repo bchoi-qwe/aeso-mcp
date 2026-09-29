@@ -58,8 +58,11 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
   The suite now smokes core/APIM data, the CSD archive, wind/solar/combined and Pool Price
   forecasts, and the named adequacy, surplus, FFR, DDS, TMR, and system-event reports.
 - CI does not call live AESO (uses a dummy key for unit/contract/MCP tests).
-- Official MCP conformance is exercised in CI with an **application-server baseline**; many
-  everything-server scenarios are intentionally unsupported.
+- MCP interoperability is checked against the legacy active suite and the frozen 2026-07-28
+  server requirements, plus pinned Inspector CLI modern/legacy HTTP discovery. Check-level
+  exceptions for generic fixture names and unexposed optional features are recorded separately in
+  `conformance-baseline.yml` and `conformance-2026-baseline.yml`; they are not a claim of full
+  everything-server capability.
 - CI rejects any prerelease package in the locked dependency graph. FastMCP is pinned to the
   tested stable 4.0.10 release; the scheduled non-blocking canary probes only compatible 4.0.x
   patches.
@@ -73,6 +76,9 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 - Public-report and fixed-asset clients are credential-free and allow-listed; response streams have
   25 MiB and 384 MiB byte caps respectively before full-response assembly.
 - No arbitrary URL fetch, shell, or SQL tools.
-- Non-loopback HTTP binding requires bearer authentication by default. The explicit insecure
-  override is intended only for isolated deployments that knowingly accept the exposure.
+- Non-loopback HTTP binding requires bearer authentication by default. This is a custom static
+  token, not OAuth; OAuth discovery / Protected Resource Metadata is not implemented. The built-in
+  HTTP listener does not terminate TLS, so external traffic must pass through a trusted TLS-terminating
+  proxy. The explicit insecure override is intended only for isolated deployments that knowingly
+  accept the exposure.
 - Rotate any API key that was ever pasted into chat, tickets, or logs.

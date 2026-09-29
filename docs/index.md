@@ -35,6 +35,6 @@ Alberta Electric System Operator (AESO).
   to ETS or Box.
 
 Start with [Getting started](getting-started.md), copy a maintained
-[client configuration](client-configs.md), inspect the [architecture](architecture.md), browse the
-[generated MCP catalog](generated/mcp-catalog.md), or jump to the [investigation
-gallery](examples.md).
+[client configuration](client-configs.md), inspect the [architecture](architecture.md) and
+[MCP interoperability/security](mcp-interoperability.md), browse the [generated MCP catalog](generated/mcp-catalog.md),
+or jump to the [investigation gallery](examples.md).

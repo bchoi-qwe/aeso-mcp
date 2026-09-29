@@ -14,6 +14,7 @@ nav:
   - Getting started: getting-started.md
   - Client configurations: client-configs.md
   - Architecture: architecture.md
+  - MCP interoperability: mcp-interoperability.md
   - Historical engine: historical-engine.md
   - Research analytics: research-analytics.md
   - Operating reserves: operating-reserves.md
