@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -41,9 +41,7 @@ async def test_parse_pool_prices_from_dataframe() -> None:
     client = MagicMock()
     client.get_pool_price.return_value = df
     provider = _provider_with_client(client)
-    intervals, meta = await provider.get_pool_prices(
-        start, start + pd.Timedelta(days=1).to_pytimedelta()
-    )
+    intervals, meta = await provider.get_pool_prices(start, start + timedelta(days=1))
     assert len(intervals) == 1
     assert intervals[0].pool_price_cad_per_mwh == 42.5
     assert meta["provider"] == "gridstatus"
@@ -120,9 +118,7 @@ async def test_parse_assets_and_empty_frames() -> None:
     assert assets[0].net_to_grid is True
 
     start = datetime(2024, 1, 15, tzinfo=MARKET_TZ)
-    intervals, _ = await provider.get_pool_prices(
-        start, start + pd.Timedelta(days=1).to_pytimedelta()
-    )
+    intervals, _ = await provider.get_pool_prices(start, start + timedelta(days=1))
     assert intervals == []
 
 
@@ -154,15 +150,11 @@ async def test_load_and_smp_parsing() -> None:
     client.get_system_marginal_price.return_value = smp_df
     provider = _provider_with_client(client)
 
-    rows, _ = await provider.get_load(
-        start, start + pd.Timedelta(days=1).to_pytimedelta(), include_forecast=True
-    )
+    rows, _ = await provider.get_load(start, start + timedelta(days=1), include_forecast=True)
     assert rows[0]["load_mw"] == 9100.0
     assert rows[0]["load_forecast_mw"] == 9000.0
 
-    smp, _ = await provider.get_system_marginal_prices(
-        start, start + pd.Timedelta(days=1).to_pytimedelta()
-    )
+    smp, _ = await provider.get_system_marginal_prices(start, start + timedelta(days=1))
     assert smp[0].system_marginal_price_cad_per_mwh == 33.0
 
 
@@ -175,7 +167,7 @@ async def test_error_translation_auth() -> None:
     from aeso_mcp.errors import AuthenticationError
 
     with pytest.raises(AuthenticationError):
-        await provider.get_pool_prices(start, start + pd.Timedelta(days=1).to_pytimedelta())
+        await provider.get_pool_prices(start, start + timedelta(days=1))
 
 
 @pytest.mark.asyncio
@@ -188,7 +180,7 @@ async def test_generation_history_auth_is_not_swallowed() -> None:
     from aeso_mcp.errors import AuthenticationError
 
     with pytest.raises(AuthenticationError):
-        await provider.get_generation_history(start, start + pd.Timedelta(days=1).to_pytimedelta())
+        await provider.get_generation_history(start, start + timedelta(days=1))
 
 
 @pytest.mark.asyncio
@@ -201,7 +193,7 @@ async def test_generation_history_raises_when_all_fuels_fail() -> None:
     from aeso_mcp.errors import UpstreamUnavailableError
 
     with pytest.raises(UpstreamUnavailableError):
-        await provider.get_generation_history(start, start + pd.Timedelta(days=1).to_pytimedelta())
+        await provider.get_generation_history(start, start + timedelta(days=1))
 
 
 @pytest.mark.asyncio
@@ -220,9 +212,7 @@ async def test_generation_history_keeps_partial_fuel_series() -> None:
     client.get_wind_hourly.side_effect = Exception("503 upstream")
     client.get_solar_hourly.return_value = solar_df
     provider = _provider_with_client(client)
-    intervals, _ = await provider.get_generation_history(
-        start, start + pd.Timedelta(days=1).to_pytimedelta()
-    )
+    intervals, _ = await provider.get_generation_history(start, start + timedelta(days=1))
     assert len(intervals) == 1
     assert intervals[0].fuel_type == "Solar"
     assert intervals[0].generation_mw == 120.0
@@ -255,7 +245,7 @@ async def test_parse_outages_dataframe() -> None:
     client = MagicMock()
     client.get_generator_outages_hourly.return_value = df
     provider = _provider_with_client(client)
-    outages, meta = await provider.get_outages(start, start + pd.Timedelta(days=1).to_pytimedelta())
+    outages, meta = await provider.get_outages(start, start + timedelta(days=1))
     assert meta["provider"] == "gridstatus"
     assert len(outages) == 1
     assert outages[0].total_outage_mw == 500.0

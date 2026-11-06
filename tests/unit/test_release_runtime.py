@@ -36,6 +36,8 @@ from aeso_mcp.models.reserves import (
     OperatingReserveForecastRequest,
     OperatingReservePriceInterval,
     OperatingReserveSummaryRequest,
+    ReserveProcurement,
+    ReserveType,
 )
 from aeso_mcp.providers.archive_http import AesoArchiveHttpClient
 from aeso_mcp.services.cache import AsyncTTLCache
@@ -50,8 +52,8 @@ def _settings(**overrides: object) -> Settings:
 
 def _price(
     market_date: date,
-    procurement: str,
-    reserve_type: str,
+    procurement: ReserveProcurement,
+    reserve_type: ReserveType,
     block: str,
     *,
     active: float | None = None,
@@ -460,7 +462,7 @@ async def test_archive_client_gets_text_bytes_and_enforces_size(monkeypatch) -> 
         respx.get("https://aeso.box.com/large").mock(
             return_value=httpx.Response(200, content=b"too-large")
         )
-        with pytest.raises(DataValidationError, match="100 MiB"):
+        with pytest.raises(DataValidationError, match="2 bytes"):
             await client.get_bytes("https://aeso.box.com/large")
     finally:
         await client.aclose()

@@ -74,7 +74,12 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 
 - Requires `AESO_API_KEY`; never log or return the key.
 - Public-report and fixed-asset clients are credential-free and allow-listed; response streams have
-  25 MiB and 384 MiB byte caps respectively before full-response assembly.
+  25 MiB and 384 MiB decoded-byte caps respectively before full-response assembly.
+  CSD archive text and ZIP downloads are likewise streamed with a 100 MiB decoded-byte cap.
+  These bounds limit buffered bodies, not total process memory or ZIP expansion.
+- All three upstream HTTP clients honor valid Retry-After delays of up to 60 seconds.
+  Longer delays return a rate-limit error for the caller to schedule; retries remain bounded
+  by the configured retry count.
 - No arbitrary URL fetch, shell, or SQL tools.
 - Non-loopback HTTP binding requires bearer authentication by default. This is a custom static
   token, not OAuth; OAuth discovery / Protected Resource Metadata is not implemented. The built-in

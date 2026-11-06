@@ -613,13 +613,13 @@ def _annotate_intervals(
     return annotated
 
 
-def _select_as_of_vintages(
-    intervals: Sequence[ForecastInterval],
+def _select_as_of_vintages[VintageT: (ForecastInterval, ForecastVintage)](
+    intervals: Sequence[VintageT],
     as_of: datetime,
-) -> list[ForecastInterval]:
+) -> list[VintageT]:
     """Filter and deterministically select one eligible vintage per target."""
 
-    selected: dict[datetime, ForecastInterval] = {}
+    selected: dict[datetime, VintageT] = {}
     for interval in intervals:
         publication = interval.publication_time
         issue = interval.forecast_issue_time
@@ -637,7 +637,7 @@ def _select_as_of_vintages(
     return sorted(selected.values(), key=lambda item: chronological_instant(item.interval_start))
 
 
-def _vintage_sort_key(interval: ForecastInterval) -> tuple[object, ...]:
+def _vintage_sort_key(interval: ForecastInterval | ForecastVintage) -> tuple[object, ...]:
     known = [
         to_utc(value)
         for value in (interval.publication_time, interval.forecast_issue_time)

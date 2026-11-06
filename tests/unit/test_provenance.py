@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -153,7 +154,7 @@ def test_analysis_manifest_parameters_use_recursive_json_schema() -> None:
             methodology_version="v1",
             generated_at=datetime(2026, 8, 4, tzinfo=UTC),
             sources=[],
-            parameters={"unsupported": object()},
+            parameters=cast(Any, {"unsupported": object()}),
         )
 
 

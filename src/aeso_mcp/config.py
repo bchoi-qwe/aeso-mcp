@@ -202,6 +202,14 @@ class Settings(BaseSettings):
         validation_alias="AESO_MCP_BASE_URL",
     )
 
+    @field_validator("aeso_api_key")
+    @classmethod
+    def _validate_aeso_api_key(cls, value: SecretStr) -> SecretStr:
+        key = value.get_secret_value()
+        if not key or any(character.isspace() for character in key):
+            raise ValueError("AESO_API_KEY must be a non-empty token without whitespace")
+        return value
+
     @field_validator("aeso_base_url")
     @classmethod
     def _validate_aeso_base_url(cls, value: str) -> str:

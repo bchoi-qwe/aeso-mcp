@@ -17,11 +17,16 @@ from tenacity import (
     RetryCallState,
     retry_if_exception,
     stop_after_attempt,
-    wait_exponential_jitter,
 )
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import DataValidationError, RateLimitError, UpstreamUnavailableError
+from aeso_mcp.providers.http_utils import (
+    buffer_response,
+    is_retryable,
+    parse_retry_after,
+    retry_wait,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +40,6 @@ _MAX_PUBLIC_REPORT_BYTES = 25 * 1024 * 1024
 # 2024 uncompressed frequency: 301,000,235 bytes). Keep a finite bound with
 # room for the supported annual files, separate from small ETS report limits.
 _MAX_PUBLIC_ASSET_BYTES = 384 * 1024 * 1024
-
-
-def _is_retryable(exc: BaseException) -> bool:
-    return isinstance(exc, RateLimitError | UpstreamUnavailableError | httpx.TransportError)
 
 
 def _before_sleep(retry_state: RetryCallState) -> None:
@@ -148,8 +149,8 @@ class AesoPublicReportsHttpClient:
     ) -> httpx.Response:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._settings.http_max_retries + 1),
-            wait=wait_exponential_jitter(initial=0.5, max=8.0),
-            retry=retry_if_exception(_is_retryable),
+            wait=retry_wait,
+            retry=retry_if_exception(is_retryable),
             before_sleep=_before_sleep,
             reraise=True,
         ):
@@ -187,11 +188,9 @@ class AesoPublicReportsHttpClient:
                     if status == 404:
                         raise DataValidationError(f"AESO public report not found: {path}")
                     if status == 429:
-                        retry_after = response.headers.get("Retry-After")
-                        retry_s = (
-                            float(retry_after) if retry_after and retry_after.isdigit() else None
+                        raise RateLimitError(
+                            retry_after_s=parse_retry_after(response.headers.get("Retry-After"))
                         )
-                        raise RateLimitError(retry_after_s=retry_s)
                     if status >= 500:
                         raise UpstreamUnavailableError(
                             f"AESO public report returned HTTP {status}."
@@ -201,25 +200,8 @@ class AesoPublicReportsHttpClient:
                             f"AESO public report rejected the request (HTTP {status})."
                         )
 
-                    chunks: list[bytes] = []
-                    total_bytes = 0
-                    async for chunk in response.aiter_bytes():
-                        total_bytes += len(chunk)
-                        if total_bytes > max_body_bytes:
-                            size_limit = (
-                                f"{max_body_bytes // (1024 * 1024)} MiB"
-                                if max_body_bytes % (1024 * 1024) == 0
-                                else f"{max_body_bytes:,} bytes"
-                            )
-                            raise DataValidationError(
-                                f"{body_kind} exceeded the {size_limit} safety limit."
-                            )
-                        chunks.append(chunk)
-                    buffered_response = httpx.Response(
-                        status_code=status,
-                        headers=response.headers,
-                        content=b"".join(chunks),
-                        request=response.request,
+                    buffered_response = await buffer_response(
+                        response, max_bytes=max_body_bytes, body_kind=body_kind
                     )
             except httpx.TimeoutException as exc:
                 raise UpstreamUnavailableError("AESO public report request timed out.") from exc

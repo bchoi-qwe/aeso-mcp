@@ -75,3 +75,9 @@ def test_non_apim_base_url_rejected() -> None:
 def test_noncanonical_apim_base_url_rejected(base_url: str) -> None:
     with pytest.raises(ValidationError):
         Settings.model_validate({"aeso_api_key": "x", "aeso_base_url": base_url})
+
+
+@pytest.mark.parametrize("key", ["", " ", "key with spaces", "key\n"])
+def test_empty_or_whitespace_api_key_rejected(key: str) -> None:
+    with pytest.raises(ValidationError, match="non-empty token"):
+        Settings.model_validate({"aeso_api_key": key})

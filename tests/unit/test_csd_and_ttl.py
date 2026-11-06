@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
+from pydantic import SecretStr
 
 from aeso_mcp.config import Settings
 from aeso_mcp.providers.csd import parse_csd_payload
@@ -23,10 +24,10 @@ from aeso_mcp.timeutil import (
 
 def _settings() -> Settings:
     return Settings(
-        aeso_api_key="test-key",
+        aeso_api_key=SecretStr("test-key"),
         cache_ttl_snapshot_s=30.0,
         cache_ttl_historical_s=86_400.0,
-    )  # type: ignore[arg-type]
+    )
 
 
 def test_ttl_uses_short_for_ranges_overlapping_today() -> None:

@@ -71,7 +71,7 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.12.2,<0.13.0"]
+requires = ["uv_build>=0.12.2,<0.14.0"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -109,6 +109,7 @@ ignore = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
     "integration: live AESO API tests (require AESO_API_KEY)",
     "slow: longer-running tests",

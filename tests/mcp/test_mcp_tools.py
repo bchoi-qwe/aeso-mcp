@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -350,8 +351,9 @@ async def test_prompt_discovery_and_rendering(container: AppContainer, settings:
             "minimum_duration_hours": 2.0,
         }
     )
-    assert rendered.messages[0].content.text.find("250.0") >= 0
-    assert "find_price_events" in rendered.messages[0].content.text
+    rendered_any = cast(Any, rendered)
+    assert rendered_any.messages[0].content.text.find("250.0") >= 0
+    assert "find_price_events" in rendered_any.messages[0].content.text
 
 
 @pytest.mark.asyncio
@@ -370,7 +372,7 @@ async def test_pool_price_structured_output(container: AppContainer, settings: S
             },
         )
         assert result.data is not None or result.structured_content is not None
-        payload = result.structured_content or result.data
+        payload: Any = result.structured_content or result.data
         if hasattr(payload, "model_dump"):
             payload = payload.model_dump()
         assert "intervals" in payload
@@ -426,9 +428,12 @@ async def test_methodology_and_capabilities_resources(
     outages = await mcp.read_resource("aeso://methodology/generator-outages")
     capabilities = await mcp.read_resource("aeso://capabilities")
 
-    assert "Alberta Internal Load" in load.contents[0].content
-    assert "total_outage_mw" in outages.contents[0].content
-    assert "daily_market_brief" in capabilities.contents[0].content
+    def _text(content: str | bytes) -> str:
+        return content if isinstance(content, str) else content.decode()
+
+    assert "Alberta Internal Load" in _text(load.contents[0].content)
+    assert "total_outage_mw" in _text(outages.contents[0].content)
+    assert "daily_market_brief" in _text(capabilities.contents[0].content)
 
 
 @pytest.mark.asyncio
@@ -456,7 +461,8 @@ async def test_progressive_search_returns_schema_and_proxy_preserves_structured_
         discovered = await client.call_tool(
             "search_tools", {"query": "hourly Alberta Pool Price observations in CAD/MWh"}
         )
-        definitions = json.loads(discovered.content[0].text)
+        discovered_content = cast(Any, discovered.content[0])
+        definitions = json.loads(discovered_content.text)
         pool_prices = next(tool for tool in definitions if tool["name"] == "get_pool_prices")
         assert pool_prices["inputSchema"]["properties"]["request"]["required"] == ["start", "end"]
         assert pool_prices["outputSchema"]["properties"]["intervals"]
@@ -474,7 +480,7 @@ async def test_progressive_search_returns_schema_and_proxy_preserves_structured_
             },
         )
         assert not result.is_error
-        payload = result.structured_content or result.data
+        payload: Any = result.structured_content or result.data
         if hasattr(payload, "model_dump"):
             payload = payload.model_dump()
         assert payload["intervals"][0]["pool_price_cad_per_mwh"] == 42.0
@@ -488,7 +494,7 @@ async def test_snapshot_tool(container: AppContainer, settings: Settings) -> Non
     mcp = create_mcp_server(settings, container)
     async with Client(mcp) as client:
         result = await client.call_tool("get_market_snapshot", {})
-        payload = result.structured_content or result.data
+        payload: Any = result.structured_content or result.data
         if hasattr(payload, "model_dump"):
             payload = payload.model_dump()
         assert payload["alberta_internal_load_mw"] == 9000.0

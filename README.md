@@ -163,7 +163,7 @@ uvx --from git+https://github.com/bchoi-qwe/aeso-mcp.git aeso-mcp
 ```bash
 git clone https://github.com/bchoi-qwe/aeso-mcp.git
 cd aeso-mcp
-uv sync --group dev
+uv sync --group dev --extra analytics --extra docs
 cp .env.example .env   # set AESO_API_KEY
 uv run aeso-mcp
 ```
@@ -349,12 +349,15 @@ Prompts: `daily_market_brief`, `investigate_price_event`, and `compare_market_da
 ## Development
 
 ```bash
-uv sync --group dev
+uv sync --group dev --extra analytics --extra docs
 uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
 uv run pyright src
-uv run pytest tests/unit tests/contract tests/mcp tests/evals --cov=aeso_mcp
+uv run pytest tests/unit tests/contract tests/mcp tests/evals tests/packaging --cov=aeso_mcp
 uv run python scripts/generate_catalog.py --check
 uv run mkdocs build --strict
+uv run python tests/packaging/check_release_metadata.py
+uv run python tests/packaging/check_lock_prereleases.py
 uv build
 ```
 

@@ -153,12 +153,15 @@ class ResearchService:
         points: list[PriceDurationPoint] = []
         if values:
             sample_count = min(request.points, len(values))
-            indexes = sorted(
-                {
-                    round(index * (len(values) - 1) / (sample_count - 1))
-                    for index in range(sample_count)
-                }
-            )
+            if sample_count <= 1:
+                indexes = [0]
+            else:
+                indexes = sorted(
+                    {
+                        round(index * (len(values) - 1) / (sample_count - 1))
+                        for index in range(sample_count)
+                    }
+                )
             points = [
                 PriceDurationPoint(
                     exceedance_percent=(index + 1) / len(values) * 100,
@@ -478,7 +481,7 @@ class ResearchService:
         load_values_by_time = {
             chronological_instant(item.interval_start): item.load_mw for item in loads.intervals
         }
-        load_ramps = [right - left for left, right in pairwise(load_values)]
+        load_ramps = _hourly_ramps(load_values_by_time)
         load_forecast_errors = [
             item.load_forecast_mw - item.load_mw
             for item in loads.intervals
@@ -1235,7 +1238,12 @@ class ResearchService:
                 for item in rows
                 if item.maximum_capability_mw is not None and item.maximum_capability_mw > 0
             ]
-            ramps = [right - left for left, right in pairwise(values)]
+            ramps = _hourly_ramps(
+                {
+                    chronological_instant(item.interval_start_utc): item.generation_mw
+                    for item in rows
+                }
+            )
             results.append(
                 AssetDispatchResult(
                     asset_id=asset_id,
@@ -1520,3 +1528,12 @@ def _derived_meta(
         observation_count=count,
         extra=extra or {},
     )
+
+
+def _hourly_ramps(values_by_time: dict[datetime, float]) -> list[float]:
+    """Compare adjacent UTC hours only; gaps are not hourly ramps."""
+    return [
+        values_by_time[right] - values_by_time[left]
+        for left, right in pairwise(sorted(values_by_time))
+        if right - left == timedelta(hours=1)
+    ]

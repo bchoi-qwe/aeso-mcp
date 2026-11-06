@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Bound CSD archive text and binary downloads during streaming, closing oversized responses
+  before consuming the rest of the body.
+- Decode compressed public reports and archive responses exactly once when buffering.
+- Apply the same bounded Retry-After policy to APIM, public reports, and CSD archives,
+  including HTTP-date headers; ignore non-finite delay values.
+- Exclude missing-hour gaps from asset-dispatch and market-event hourly ramp calculations,
+  preserving consecutive elapsed hours across daylight saving transitions.
+- Reject empty or whitespace-containing AESO API keys at configuration time.
+- Handle a single observed price in duration curves without division by zero.
+- Preserve concrete forecast-vintage types during point-in-time selection.
+
+### Changed
+
+- Consolidate response buffering and retry policy into shared provider utilities while retaining
+  separate authenticated and credential-free clients.
+- Expand deterministic coverage for research analytics, history pagination and synchronization,
+  provider failures, compressed downloads, and DST/gap-aware dispatch calculations.
+- Align the build-backend version range with the installed stable tooling and make repository
+  test helpers importable under the pytest entrypoint.
+
 ## [0.4.0] - 2026-09-26
 
 ### Added

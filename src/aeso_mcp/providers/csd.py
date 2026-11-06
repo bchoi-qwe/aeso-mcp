@@ -21,7 +21,7 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
-def parse_csd_payload(data: Any) -> tuple[datetime, dict[str, object]]:
+def parse_csd_payload(data: Any) -> tuple[datetime, dict[str, Any]]:
     """Normalize a raw Current Supply Demand JSON payload into snapshot fields."""
     if not isinstance(data, dict) or not isinstance(data.get("return"), dict):
         raise DataValidationError("Unexpected Current Supply Demand response shape.")

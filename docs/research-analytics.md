@@ -28,6 +28,10 @@ They are deterministic: the same source observations and request produce the sam
 
 ## Interpretation boundaries
 
+Asset-dispatch and market-event load ramps compare observations exactly one elapsed hour apart.
+Missing hours are not bridged. Consecutive UTC hours remain distinct during the repeated
+autumn market hour; if no consecutive pair exists, the ramp result is null.
+
 `analyze_market_event` returns structured evidence for price, AIL and forecast error, ramps,
 generation/capability/outages, renewable share and net load, merit-order position and asset-level
 offer-volume HHI, import/export capability and gross offers, intertie outages, reserve prices,

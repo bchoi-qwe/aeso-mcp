@@ -20,7 +20,7 @@ from aeso_mcp.errors import (
 )
 from aeso_mcp.providers.aeso_apim import AesoApimProvider
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.providers.http import _parse_retry_after as parse_retry_after
+from aeso_mcp.providers.http_utils import parse_retry_after
 from aeso_mcp.timeutil import MARKET_TZ, elapsed_hours
 
 FIXTURES = Path(__file__).parent / "fixtures"

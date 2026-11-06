@@ -9,13 +9,18 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from tenacity import (
     AsyncRetrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
-    wait_exponential_jitter,
 )
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import DataValidationError, RateLimitError, UpstreamUnavailableError
+from aeso_mcp.providers.http_utils import (
+    buffer_response,
+    is_retryable,
+    parse_retry_after,
+    retry_wait,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,16 +58,13 @@ class AesoArchiveHttpClient:
 
     async def get_bytes(self, url: str) -> bytes:
         response = await self._get(url)
-        content = response.content
-        if len(content) > _MAX_ARCHIVE_BYTES:
-            raise DataValidationError("AESO CSD archive exceeded the 100 MiB safety limit.")
-        return content
+        return response.content
 
     async def _get(self, url: str) -> httpx.Response:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._settings.http_max_retries + 1),
-            wait=wait_exponential_jitter(initial=0.5, max=8.0),
-            retry=retry_if_exception_type(UpstreamUnavailableError),
+            wait=retry_wait,
+            retry=retry_if_exception(is_retryable),
             reraise=True,
         ):
             with attempt:
@@ -74,7 +76,34 @@ class AesoArchiveHttpClient:
         for _ in range(_MAX_REDIRECTS + 1):
             self._assert_allowed_url(current)
             try:
-                response = await self._client.get(current)
+                async with self._client.stream("GET", current) as response:
+                    status = response.status_code
+                    logger.info(
+                        "aeso_csd_archive_get host=%s path=%s status=%s",
+                        response.url.host,
+                        response.url.path,
+                        status,
+                    )
+                    if status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("Location")
+                        if not location:
+                            raise DataValidationError("AESO CSD archive redirect omitted Location.")
+                        current = urljoin(str(response.url), location)
+                        continue
+                    if status == 429:
+                        raise RateLimitError(
+                            "AESO CSD archive rate limit exceeded.",
+                            retry_after_s=parse_retry_after(response.headers.get("Retry-After")),
+                        )
+                    if status >= 500:
+                        raise UpstreamUnavailableError(f"AESO CSD archive returned HTTP {status}.")
+                    if status >= 400:
+                        raise DataValidationError(
+                            f"AESO CSD archive rejected the request (HTTP {status})."
+                        )
+                    return await buffer_response(
+                        response, max_bytes=_MAX_ARCHIVE_BYTES, body_kind="AESO CSD archive"
+                    )
             except httpx.TimeoutException as exc:
                 raise UpstreamUnavailableError("AESO CSD archive request timed out.") from exc
             except httpx.TransportError as exc:
@@ -82,29 +111,6 @@ class AesoArchiveHttpClient:
                     "Failed to connect to the AESO CSD archive."
                 ) from exc
 
-            logger.info(
-                "aeso_csd_archive_get host=%s path=%s status=%s",
-                response.url.host,
-                response.url.path,
-                response.status_code,
-            )
-            if response.status_code in {301, 302, 303, 307, 308}:
-                location = response.headers.get("Location")
-                if not location:
-                    raise DataValidationError("AESO CSD archive redirect omitted Location.")
-                current = urljoin(str(response.url), location)
-                continue
-            if response.status_code == 429:
-                raise RateLimitError("AESO CSD archive rate limit exceeded.")
-            if response.status_code >= 500:
-                raise UpstreamUnavailableError(
-                    f"AESO CSD archive returned HTTP {response.status_code}."
-                )
-            if response.status_code >= 400:
-                raise DataValidationError(
-                    f"AESO CSD archive rejected the request (HTTP {response.status_code})."
-                )
-            return response
         raise DataValidationError("AESO CSD archive exceeded the redirect safety limit.")
 
     @staticmethod

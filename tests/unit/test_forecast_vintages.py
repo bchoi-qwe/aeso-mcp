@@ -415,26 +415,30 @@ def test_fallback_vintage_hash_is_stable_when_fetch_range_is_split() -> None:
 
 def test_forecast_models_accept_storage_target_aliases() -> None:
     target = datetime(2025, 1, 1, 18, tzinfo=UTC)
-    interval = ForecastInterval(
-        target_interval_start=target,
-        target_interval_end=target + timedelta(hours=1),
-        issue_time=target - timedelta(hours=4),
-        series="wind",
-        horizon="historical",
-        forecast_value=80.0,
-        unit="MW",
-        source_product="fixture",
+    interval = ForecastInterval.model_validate(
+        {
+            "target_interval_start": target,
+            "target_interval_end": target + timedelta(hours=1),
+            "issue_time": target - timedelta(hours=4),
+            "series": "wind",
+            "horizon": "historical",
+            "forecast_value": 80.0,
+            "unit": "MW",
+            "source_product": "fixture",
+        }
     )
-    vintage = ForecastVintage(
-        target_interval_start=target,
-        target_interval_end=target + timedelta(hours=1),
-        issue_time=target - timedelta(hours=4),
-        source_retrieved_at=target,
-        series="wind",
-        horizon="historical",
-        forecast_value=80.0,
-        unit="MW",
-        source_product="fixture",
+    vintage = ForecastVintage.model_validate(
+        {
+            "target_interval_start": target,
+            "target_interval_end": target + timedelta(hours=1),
+            "issue_time": target - timedelta(hours=4),
+            "source_retrieved_at": target,
+            "series": "wind",
+            "horizon": "historical",
+            "forecast_value": 80.0,
+            "unit": "MW",
+            "source_product": "fixture",
+        }
     )
 
     assert interval.interval_start == target
@@ -679,6 +683,7 @@ def test_existing_v3_store_backfills_only_retained_retrieval_state(tmp_path: Pat
         assert count == 1
         assert rows[0].forecast_value == 80
         assert rows[0].retrieved_at == row.retrieved_at
+        assert row.retrieved_at is not None
         rows, count = reopened.query_forecast(
             "wind",
             start=target,
