@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Pass the dummy API key explicitly to installed-wheel stdio smoke subprocesses and run
+  them in an empty directory so a local `.env` cannot mask missing configuration.
+
 - Bound CSD archive text and binary downloads during streaming, closing oversized responses
   before consuming the rest of the body.
 - Decode compressed public reports and archive responses exactly once when buffering.

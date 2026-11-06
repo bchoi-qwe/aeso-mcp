@@ -9,6 +9,7 @@ import os
 import sys
 from importlib.metadata import version as installed_version
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
@@ -133,20 +134,25 @@ async def _stdio_smoke() -> None:
     if not executable.is_file():
         raise SystemExit(f"Installed wheel console script is missing: {executable}")
 
-    for mode, protocol in (("auto", "2026-07-28"), ("legacy", "2025-11-25")):
-        transport = StdioTransport(
-            command=str(executable),
-            args=["--transport", "stdio"],
-            keep_alive=False,
-        )
-        async with Client(transport, mode=mode) as client:
-            tools = {tool.name for tool in await client.list_tools()}
-            if client.protocol_version != protocol or tools != EXPECTED_TOOLS:
-                raise SystemExit(
-                    "Installed wheel stdio mismatch: "
-                    f"mode={mode}, protocol={client.protocol_version}, "
-                    f"tools={sorted(tools ^ EXPECTED_TOOLS)}"
-                )
+    # Avoid a checkout-local .env masking missing subprocess configuration.
+    with TemporaryDirectory(prefix="aeso-wheel-smoke-") as cwd:
+        for mode, protocol in (("auto", "2026-07-28"), ("legacy", "2025-11-25")):
+            transport = StdioTransport(
+                command=str(executable),
+                args=["--transport", "stdio"],
+                # MCP forwards a restricted environment, not the parent environment.
+                env={"AESO_API_KEY": "wheel-smoke-key"},
+                cwd=cwd,
+                keep_alive=False,
+            )
+            async with Client(transport, mode=mode) as client:
+                tools = {tool.name for tool in await client.list_tools()}
+                if client.protocol_version != protocol or tools != EXPECTED_TOOLS:
+                    raise SystemExit(
+                        "Installed wheel stdio mismatch: "
+                        f"mode={mode}, protocol={client.protocol_version}, "
+                        f"tools={sorted(tools ^ EXPECTED_TOOLS)}"
+                    )
 
 
 async def smoke() -> None:
