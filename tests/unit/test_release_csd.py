@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from aeso_mcp.errors import DataValidationError
@@ -87,3 +89,15 @@ def test_csd_handles_empty_optional_collections_and_missing_load() -> None:
     assert payload["interchange_paths"] == []
     assert payload["net_interchange_mw"] == 0
     assert payload["alberta_internal_load_mw"] is None
+
+
+@pytest.mark.parametrize("timestamp", ["2024-01-15T18:30:00", "2024-01-15T18:30:00Z"])
+def test_csd_utc_field_has_same_instant_with_or_without_suffix(timestamp) -> None:
+    observed, _ = parse_csd_payload({"return": {"effective_datetime_utc": timestamp}})
+    assert observed.astimezone(UTC) == datetime(2024, 1, 15, 18, 30, tzinfo=UTC)
+    assert observed.hour == 11
+
+
+def test_csd_invalid_timestamp_is_domain_error() -> None:
+    with pytest.raises(DataValidationError, match="effective_datetime_utc"):
+        parse_csd_payload({"return": {"effective_datetime_utc": "invalid"}})

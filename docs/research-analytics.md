@@ -28,6 +28,17 @@ They are deterministic: the same source observations and request produce the sam
 
 ## Interpretation boundaries
 
+Net-load analytics use only hours with both load and renewable-generation observations.
+An observed renewable value of zero is valid; a missing observation is not zero. Unmatched
+load hours are excluded with warnings, and the standalone tool reports their count in metadata.
+Market-event methodology version `market-event-v2` incorporates this missing-data handling and
+consecutive-hour ramp calculations. Partial asset coverage can still understate renewable totals;
+consult the source warnings.
+
+Generation-mix average and peak MW describe the sum of observed assets for each fuel in each
+UTC hour, not the average or peak individual asset. Energy is the sum of those hourly totals.
+Averages use observed hours only; missing hours and missing assets are not assumed to be zero.
+
 Asset-dispatch and market-event load ramps compare observations exactly one elapsed hour apart.
 Missing hours are not bridged. Consecutive UTC hours remain distinct during the repeated
 autumn market hour; if no consecutive pair exists, the ramp result is null.

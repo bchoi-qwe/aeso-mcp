@@ -29,7 +29,9 @@ class GridService:
     ) -> None:
         self._provider = provider
         self._settings = settings
-        self._cache = cache or AsyncTTLCache()
+        self._cache = (
+            cache if cache is not None else AsyncTTLCache(max_entries=settings.cache_max_entries)
+        )
 
     async def get_interchange(self) -> InterchangeResponse:
         cached = await self._cache.get_or_set_with_metadata(

@@ -78,7 +78,9 @@ class ResearchDataService:
     ) -> None:
         self._provider = provider
         self._settings = settings
-        self._cache = cache or AsyncTTLCache(max_entries=settings.cache_max_entries)
+        self._cache = (
+            cache if cache is not None else AsyncTTLCache(max_entries=settings.cache_max_entries)
+        )
         self._market = market
         self._operations = operations
         self._assets = assets

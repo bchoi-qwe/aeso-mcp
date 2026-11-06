@@ -3,13 +3,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from aeso_mcp.errors import DataValidationError
 from aeso_mcp.models.generation import FuelMixComponent
 from aeso_mcp.models.grid import InterchangePathFlow
-from aeso_mcp.timeutil import MARKET_TZ, to_market
+from aeso_mcp.timeutil import to_market
 
 
 def _safe_float(value: Any) -> float | None:
@@ -29,9 +29,13 @@ def parse_csd_payload(data: Any) -> tuple[datetime, dict[str, Any]]:
     observed_raw = payload.get("effective_datetime_utc")
     if observed_raw is None:
         raise DataValidationError("CSD response missing effective_datetime_utc.")
-    observed_at = to_market(datetime.fromisoformat(str(observed_raw).replace("Z", "+00:00")))
+    try:
+        observed_at = datetime.fromisoformat(str(observed_raw).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise DataValidationError("CSD response has invalid effective_datetime_utc.") from exc
     if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(tzinfo=MARKET_TZ)
+        observed_at = observed_at.replace(tzinfo=UTC)
+    observed_at = to_market(observed_at)
 
     components: list[FuelMixComponent] = []
     for item in payload.get("generation_data_list") or []:

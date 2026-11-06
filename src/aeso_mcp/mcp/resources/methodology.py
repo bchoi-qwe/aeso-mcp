@@ -207,6 +207,11 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
 
 - **Inputs**: Calculations consume complete internal price, load, CSD generation, outage,
   capability, forecast, or offer series rather than a user-visible page.
+- **Net load**: Match load and renewable observations by UTC hour; exclude unmatched hours
+  with warnings instead of assuming zero renewable output. Observed zero output remains valid.
+  Market-event manifests use methodology version `market-event-v2` for this behavior.
+- **Generation mix**: Sum observed assets by fuel and UTC hour before computing average and
+  peak MW. Hourly totals sum to MWh; averages use observed hours without zero-filling gaps.
 - **Capture price**: Generation-weighted hourly Pool Price; capture rate divides by arithmetic
   mean Pool Price over the requested window.
 - **Forecast error**: Error is forecast minus actual; MAPE excludes zero actual observations.

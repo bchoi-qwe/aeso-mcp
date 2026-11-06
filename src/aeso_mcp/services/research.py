@@ -279,7 +279,7 @@ class ResearchService:
                 "metric caused the observed price outcome."
             ),
             analysis_manifest=build_analysis_manifest(
-                methodology_version="market-event-v1",
+                methodology_version="market-event-v2",
                 sources=focus_sources + baseline_sources,
                 parameters={
                     "focus_start": focus_start.isoformat(),
@@ -494,12 +494,21 @@ class ResearchService:
             fuel = item.fuel_type.upper()
             generation_by_fuel[fuel] += item.generation_mw
             if fuel in {"WIND", "SOLAR", "HYDRO"}:
-                renewable_by_time[item.interval_start_utc] += item.generation_mw
+                renewable_by_time[chronological_instant(item.interval_start_utc)] += (
+                    item.generation_mw
+                )
         total_generation = sum(generation_by_fuel.values())
         net_load_values = [
-            value - renewable_by_time.get(timestamp, 0.0)
+            value - renewable_by_time[timestamp]
             for timestamp, value in load_values_by_time.items()
+            if timestamp in renewable_by_time
         ]
+        missing_net_load = len(load_values_by_time) - len(net_load_values)
+        if missing_net_load:
+            warnings.append(
+                f"Net load excludes {missing_net_load} load hours without renewable observations; "
+                "missing generation is not assumed to be zero."
+            )
 
         available_capability_values: list[float] = []
         if capacity is not None:
@@ -1013,19 +1022,27 @@ class ResearchService:
         )
         renewable_by_time: dict[datetime, float] = defaultdict(float)
         for item in generation.intervals:
-            renewable_by_time[item.interval_start_utc] += item.generation_mw
+            renewable_by_time[chronological_instant(item.interval_start_utc)] += item.generation_mw
         intervals = [
             NetLoadInterval(
                 interval_start=item.interval_start,
                 load_mw=item.load_mw,
-                renewable_generation_mw=renewable_by_time.get(
-                    chronological_instant(item.interval_start), 0.0
-                ),
+                renewable_generation_mw=renewable_by_time[
+                    chronological_instant(item.interval_start)
+                ],
                 net_load_mw=item.load_mw
-                - renewable_by_time.get(chronological_instant(item.interval_start), 0.0),
+                - renewable_by_time[chronological_instant(item.interval_start)],
             )
             for item in loads.intervals
+            if chronological_instant(item.interval_start) in renewable_by_time
         ]
+        missing_count = len(loads.intervals) - len(intervals)
+        warnings = list(loads.warnings + generation.warnings)
+        if missing_count:
+            warnings.append(
+                f"Net load excludes {missing_count} load hours without renewable observations; "
+                "missing generation is not assumed to be zero."
+            )
         values = [item.net_load_mw for item in intervals]
         return NetLoadResponse(
             intervals=intervals,
@@ -1042,9 +1059,14 @@ class ResearchService:
                     "renewable_generation_mw": "MW",
                     "net_load_mw": "MW",
                 },
-                completeness=_completeness(intervals),
+                completeness=(
+                    DataCompleteness.PARTIAL
+                    if intervals and missing_count
+                    else _completeness(intervals)
+                ),
+                extra={"unmatched_load_observations": missing_count},
             ),
-            warnings=list(dict.fromkeys(loads.warnings + generation.warnings)),
+            warnings=list(dict.fromkeys(warnings)),
         )
 
     async def analyze_supply_stack(self, request: SupplyStackRequest) -> SupplyStackResponse:
@@ -1184,9 +1206,11 @@ class ResearchService:
             ),
             paginate=False,
         )
-        groups: dict[str, list[float]] = defaultdict(list)
+        hourly_by_fuel: dict[str, dict[datetime, float]] = defaultdict(lambda: defaultdict(float))
         for item in response.intervals:
-            groups[item.fuel_type].append(item.generation_mw)
+            timestamp = chronological_instant(item.interval_start_utc)
+            hourly_by_fuel[item.fuel_type][timestamp] += item.generation_mw
+        groups = {fuel: list(hourly.values()) for fuel, hourly in hourly_by_fuel.items()}
         totals = {fuel: sum(values) for fuel, values in groups.items()}
         total = sum(totals.values())
         results = [

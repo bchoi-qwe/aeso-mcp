@@ -46,7 +46,8 @@ from aeso_mcp.timeutil import MARKET_TZ
 
 
 @pytest.mark.asyncio
-async def test_market_event_returns_structured_multivariate_evidence() -> None:
+@pytest.mark.parametrize("missing_renewables", [False, True])
+async def test_market_event_returns_structured_multivariate_evidence(missing_renewables) -> None:
     start = datetime(2026, 8, 1, tzinfo=UTC)
     second = start + timedelta(hours=1)
     market = SimpleNamespace(
@@ -200,6 +201,13 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
         Settings(aeso_api_key=SecretStr("research-test-key")),
     )
 
+    if missing_renewables:
+        generation = history.get_historical_generation.return_value
+        generation.intervals = [
+            item
+            for item in generation.intervals
+            if not (item.fuel_type == "WIND" and item.interval_start_utc == second)
+        ]
     response = await service.analyze_market_event(
         MarketEventRequest(
             start=start,
@@ -212,7 +220,14 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
     assert response.evidence.price.average_cad_per_mwh == 100
     assert response.evidence.price.high_price_hours == 1
     assert response.evidence.demand.forecast_mae_mw == 100
-    assert response.evidence.supply.renewable_generation_share == pytest.approx(0.18)
+    assert response.evidence.supply.renewable_generation_share == pytest.approx(
+        1000 / 9200 if missing_renewables else 0.18
+    )
+    assert response.evidence.supply.average_net_load_mw == (8000 if missing_renewables else 8200)
+    assert (
+        any("without renewable observations" in item for item in response.warnings)
+        == missing_renewables
+    )
     assert response.evidence.merit_order.marginal_dispatched_offer_cad_per_mwh == 125
     assert response.evidence.merit_order.offer_volume_hhi == pytest.approx(0.625)
     assert response.evidence.interties.average_offer_to_capability_ratio == 0.9
@@ -223,7 +238,7 @@ async def test_market_event_returns_structured_multivariate_evidence() -> None:
     assert response.evidence.commitment_count == 1
     assert "do not establish" in response.methodology
     assert response.analysis_manifest.analysis_id.startswith("sha256:")
-    assert response.analysis_manifest.methodology_version == "market-event-v1"
+    assert response.analysis_manifest.methodology_version == "market-event-v2"
     assert {source.role for source in response.analysis_manifest.sources} == {
         "focus",
         "baseline",
@@ -689,8 +704,8 @@ async def test_analyze_generation_mix_aggregates_shares_and_peaks() -> None:
     start = datetime(2026, 1, 1, tzinfo=UTC)
     end = datetime(2026, 1, 2, tzinfo=UTC)
     gen_intervals = [
-        SimpleNamespace(fuel_type="GAS", generation_mw=6000.0),
-        SimpleNamespace(fuel_type="WIND", generation_mw=2000.0),
+        SimpleNamespace(fuel_type="GAS", generation_mw=6000.0, interval_start_utc=start),
+        SimpleNamespace(fuel_type="WIND", generation_mw=2000.0, interval_start_utc=start),
     ]
     history.get_historical_generation.return_value = SimpleNamespace(
         intervals=gen_intervals,
@@ -848,3 +863,92 @@ async def test_analyze_forecast_error_metrics() -> None:
     assert resp.mean_absolute_error_mw == 10.0
     assert resp.root_mean_squared_error_mw == 10.0
     assert resp.mean_absolute_percentage_error == 0.1
+
+
+async def test_generation_mix_aggregates_assets_per_utc_hour() -> None:
+    start = datetime(2026, 11, 1, 7, tzinfo=UTC)
+    history = AsyncMock()
+    # Both hours display as 01:00 in Edmonton. GAS totals are 100 and 200 MW.
+    history.get_historical_generation.return_value = SimpleNamespace(
+        intervals=[
+            SimpleNamespace(
+                fuel_type=fuel,
+                generation_mw=value,
+                interval_start_utc=start + timedelta(hours=hour),
+                interval_start=(start + timedelta(hours=hour)).astimezone(MARKET_TZ),
+            )
+            for fuel, hour, value in [
+                ("GAS", 0, 40),
+                ("GAS", 0, 60),
+                ("GAS", 1, 80),
+                ("GAS", 1, 120),
+                ("WIND", 0, 20),
+                ("WIND", 1, 80),
+            ]
+        ],
+        warnings=["fixture warning"],
+    )
+    service = ResearchService(
+        AsyncMock(),
+        history,
+        AsyncMock(),
+        AsyncMock(),
+        AsyncMock(),
+        Settings(aeso_api_key=SecretStr("test-key")),
+    )
+    result = await service.analyze_generation_mix(
+        GenerationAnalysisRequest(
+            start=start,
+            end=start + timedelta(hours=2),
+        )
+    )
+    gas = next(item for item in result.results if item.fuel_type == "GAS")
+    assert gas.generation_mwh == 300
+    assert gas.share == 0.75
+    assert gas.average_generation_mw == 150
+    assert gas.peak_generation_mw == 200
+    assert result.total_generation_mwh == 400
+    assert "fixture warning" in result.warnings
+
+
+@pytest.mark.parametrize("available_hours", [0, 1, 2])
+async def test_net_load_excludes_missing_generation_but_retains_observed_zero(
+    available_hours,
+) -> None:
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    history = AsyncMock()
+    history.get_historical_load.return_value = SimpleNamespace(
+        intervals=[
+            SimpleNamespace(interval_start=start + timedelta(hours=hour), load_mw=9000)
+            for hour in range(2)
+        ],
+        warnings=[],
+    )
+    history.get_historical_generation.return_value = SimpleNamespace(
+        intervals=[
+            SimpleNamespace(interval_start_utc=start + timedelta(hours=hour), generation_mw=0)
+            for hour in range(available_hours)
+        ],
+        warnings=[],
+    )
+    service = ResearchService(
+        AsyncMock(),
+        history,
+        AsyncMock(),
+        AsyncMock(),
+        AsyncMock(),
+        Settings(aeso_api_key=SecretStr("test-key")),
+    )
+    response = await service.analyze_net_load(
+        NetLoadRequest(start=start, end=start + timedelta(hours=2))
+    )
+    assert len(response.intervals) == available_hours
+    assert response.average_net_load_mw == (9000 if available_hours else None)
+    assert (
+        response.metadata.completeness
+        == [DataCompleteness.EMPTY, DataCompleteness.PARTIAL, DataCompleteness.COMPLETE][
+            available_hours
+        ]
+    )
+    assert response.metadata.extra["unmatched_load_observations"] == 2 - available_hours
+    assert bool(response.warnings) == (available_hours < 2)

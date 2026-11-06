@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Exclude unmatched load hours from net-load analytics and market-event evidence instead of
+  fabricating zero renewable output; surface missing coverage and retain observed zeros.
+  Market-event manifests now use methodology version `market-event-v2`.
+
+- Preserve injected empty caches across services and apply configured capacity to fallback
+  caches, restoring application-wide reuse and invalidation.
+- Aggregate asset generation by fuel and UTC hour before computing fuel-average and peak MW;
+  repeated DST hours remain distinct and missing hours are not filled with zero.
+- Interpret timezone-less Current Supply Demand UTC timestamps as UTC and translate malformed
+  timestamps into domain validation errors.
+
 - Pass the dummy API key explicitly to installed-wheel stdio smoke subprocesses and run
   them in an empty directory so a local `.env` cannot mask missing configuration.
 

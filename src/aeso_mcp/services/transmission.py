@@ -34,7 +34,9 @@ class TransmissionService:
         self._approved = approved_provider
         self._long_range = long_range_provider
         self._settings = settings
-        self._cache = cache or AsyncTTLCache(max_entries=settings.cache_max_entries)
+        self._cache = (
+            cache if cache is not None else AsyncTTLCache(max_entries=settings.cache_max_entries)
+        )
 
     async def get_approved_transmission_outages(
         self,

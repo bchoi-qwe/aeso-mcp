@@ -56,7 +56,9 @@ class MarketService:
     ) -> None:
         self._provider = provider
         self._settings = settings
-        self._cache = cache or AsyncTTLCache()
+        self._cache = (
+            cache if cache is not None else AsyncTTLCache(max_entries=settings.cache_max_entries)
+        )
 
     async def get_pool_prices(
         self,

@@ -71,7 +71,9 @@ class ForecastService:
         self._provider = provider
         self._ail_provider = ail_provider
         self._settings = settings
-        self._cache = cache or AsyncTTLCache(max_entries=settings.cache_max_entries)
+        self._cache = (
+            cache if cache is not None else AsyncTTLCache(max_entries=settings.cache_max_entries)
+        )
         self._store = store
 
     async def get_forecast(
