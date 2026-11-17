@@ -363,7 +363,7 @@ class AnalyticsService:
         for interval in load.intervals:
             if interval.load_forecast_mw is None:
                 continue
-            error = interval.load_mw - interval.load_forecast_mw
+            error = interval.load_forecast_mw - interval.load_mw
             abs_error = abs(error)
             abs_pct = abs_error / abs(interval.load_mw) if interval.load_mw != 0 else None
             pairs.append(
@@ -399,6 +399,7 @@ class AnalyticsService:
                     completeness=DataCompleteness.EMPTY,
                     available_series=["actual_load"] if load.intervals else [],
                     missing_series=missing_series or ["load_forecast"],
+                    extra={"error_sign": "forecast minus actual"},
                 ),
                 warnings=warnings,
             )
@@ -433,6 +434,7 @@ class AnalyticsService:
                 ),
                 available_series=["actual_load"] + ([] if missing_series else ["load_forecast"]),
                 missing_series=missing_series,
+                extra={"error_sign": "forecast minus actual"},
             ),
             warnings=warnings,
         )

@@ -152,7 +152,7 @@ class ForecastActualInterval(BaseModel):
     interval_end: datetime | None = None
     actual_load_mw: float
     forecast_load_mw: float
-    error_mw: float
+    error_mw: float = Field(description="Signed forecast minus actual, in MW.")
     abs_error_mw: float
     abs_pct_error: float | None = None
 
@@ -161,7 +161,9 @@ class CompareForecastToActualResponse(WarningMixin):
     """Deterministic forecast accuracy statistics for AIL."""
 
     observation_count: int
-    mean_error_mw: float | None = None
+    mean_error_mw: float | None = Field(
+        default=None, description="Signed mean error, forecast minus actual, in MW."
+    )
     mean_abs_error_mw: float | None = None
     rmse_mw: float | None = None
     mean_abs_pct_error: float | None = None

@@ -97,7 +97,8 @@ def register_analytics_tools(mcp: FastMCP, container: AppContainer) -> None:
         name="compare_forecast_to_actual",
         description=(
             "Compares Alberta Internal Load forecast versus actual over [start, end) in MW. "
-            "Returns mean error, MAE, RMSE, MAPE, and paired intervals. "
+            "Returns signed forecast-minus-actual mean error, MAE, RMSE, MAPE (ratio), "
+            "and paired intervals. "
             "Timestamps are America/Edmonton."
         ),
         annotations={

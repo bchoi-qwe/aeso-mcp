@@ -49,3 +49,31 @@ async def test_compare_forecast_to_actual_metrics() -> None:
     assert result.mean_abs_error_mw == pytest.approx(10.0)
     assert result.rmse_mw == pytest.approx(10.0)
     assert result.max_abs_error_mw == pytest.approx(10.0)
+    assert [item.error_mw for item in result.intervals] == pytest.approx([-10.0, 10.0])
+    assert result.metadata.extra["error_sign"] == "forecast minus actual"
+
+
+@pytest.mark.asyncio
+async def test_forecast_comparison_positive_bias_means_overforecast() -> None:
+    provider = AsyncMock()
+    start = datetime(2026, 10, 12, tzinfo=MARKET_TZ)
+    provider.get_load.return_value = (
+        [
+            {
+                "interval_start": start,
+                "interval_end": start + timedelta(hours=1),
+                "load_mw": 100.0,
+                "load_forecast_mw": 125.0,
+            }
+        ],
+        {"provider": "gridstatus", "source_product": "Load"},
+    )
+    settings = Settings(aeso_api_key="test-key")
+    analytics = AnalyticsService(MarketService(provider, settings), settings)
+    result = await analytics.compare_forecast_to_actual(
+        CompareForecastToActualRequest(start=start, end=start + timedelta(hours=1))
+    )
+    assert result.observation_count == 1
+    assert result.mean_error_mw == pytest.approx(25.0)
+    assert result.intervals[0].error_mw == pytest.approx(25.0)
+    assert result.mean_abs_pct_error == pytest.approx(0.25)
