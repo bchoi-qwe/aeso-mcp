@@ -50,6 +50,7 @@ EXPECTED_TOOLS = {
     "get_secondary_offer_price_limit",
     "compare_market_periods",
     "find_price_events",
+    "search_aeso_tools",
     "explain_market_conditions",
     "compare_forecast_to_actual",
     "calculate_asset_energy_revenue",
@@ -321,6 +322,34 @@ async def test_protocol_negotiates_modern_and_legacy_clients(
         async with Client(mcp, mode=mode) as client:
             assert client.protocol_version == protocol
             assert {tool.name for tool in await client.list_tools()} == EXPECTED_TOOLS
+
+
+@pytest.mark.asyncio
+async def test_search_aeso_tools_ranks_actual_registered_tools(
+    container: AppContainer, settings: Settings
+) -> None:
+    mcp = create_mcp_server(settings, container)
+    async with Client(mcp) as client:
+        response = await client.call_tool(
+            "search_aeso_tools", {"query": "operating reserve prices", "limit": 3}
+        )
+        assert response.is_error is False
+        payload: Any = response.structured_content or response.data
+        if hasattr(payload, "model_dump"):
+            payload = payload.model_dump()
+        assert payload["total_matches"] >= 3
+        assert len(payload["matches"]) == 3
+        assert payload["matches"][0]["name"] == "get_operating_reserve_prices"
+        assert payload["matches"][0]["parameters"] == ["request"]
+
+        absent = await client.call_tool(
+            "search_aeso_tools", {"query": "xyzzy_unlisted_keyword_90210", "limit": 3}
+        )
+        empty_payload: Any = absent.structured_content or absent.data
+        if hasattr(empty_payload, "model_dump"):
+            empty_payload = empty_payload.model_dump()
+        assert empty_payload["total_matches"] == 0
+        assert empty_payload["matches"] == []
 
 
 @pytest.mark.asyncio

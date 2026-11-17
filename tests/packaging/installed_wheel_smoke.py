@@ -36,6 +36,7 @@ EXPECTED_TOOLS = {
     "get_secondary_offer_price_limit",
     "compare_market_periods",
     "find_price_events",
+    "search_aeso_tools",
     "explain_market_conditions",
     "compare_forecast_to_actual",
     "calculate_asset_energy_revenue",

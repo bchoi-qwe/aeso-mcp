@@ -230,6 +230,13 @@ the risk; it is never the default. Also set `AESO_MCP_HTTP_ALLOWED_HOSTS` and
 `AESO_MCP_HTTP_ALLOWED_ORIGINS` for the deployment. `/healthz` and `/readyz` contain no market data
 or secrets. See [.env.example](.env.example) for all bounded runtime settings.
 
+## Tool discovery
+
+With more than 60 typed tools, start with `search_aeso_tools` when you do not know which
+dataset or analytical workflow matches your question. Search is credential-free, uses the
+actual registered tool descriptions, returns bounded ranked results, and never calls AESO.
+All original tools remain directly discoverable; searching is an optional convenience.
+
 ## Example prompts
 
 - What is Alberta's current grid situation?
