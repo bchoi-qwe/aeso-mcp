@@ -53,7 +53,7 @@ def create_mcp_server(
         name="aeso-mcp",
         version=__version__,
         instructions=(
-            "This AESO MCP server supports public-report tools without credentials; " 
+            "This AESO MCP server supports public-report tools without credentials; "
             "authenticated APIM data requires AESO_API_KEY. It provides Alberta electricity "
             "market data and deterministic analytics from official AESO APIs and an internal "
             "source-specific client for allow-listed public reports; that client never sends "
