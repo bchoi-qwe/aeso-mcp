@@ -18,6 +18,7 @@ from aeso_mcp.mcp.prompts import register_prompts
 from aeso_mcp.mcp.resources import register_resources
 from aeso_mcp.mcp.tools import (
     register_analytics_tools,
+    register_discovery_tools,
     register_grid_tools,
     register_history_tools,
     register_market_power_tools,
@@ -66,6 +67,7 @@ def create_mcp_server(
         lifespan=lifespan,
     )
 
+    register_discovery_tools(mcp)
     register_market_tools(mcp, container)
     register_grid_tools(mcp, container)
     register_market_power_tools(mcp, container)

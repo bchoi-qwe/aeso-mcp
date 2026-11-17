@@ -2,7 +2,7 @@
 
 This file is generated from the registered FastMCP surface. Do not edit it by hand.
 
-## Tools (63)
+## Tools (64)
 
 | Tool | Inputs | Description |
 | --- | --- | --- |
@@ -66,6 +66,7 @@ This file is generated from the registered FastMCP surface. Do not edit it by ha
 | `get_tmr_reference_price` | `request` | Returns the official AESO Transmission Must-Run reference price by effective date; the published value is returned without independent recomputation. |
 | `get_uc_settlement_summary` | `request` | Returns the public AESO hourly Unit Commitment settlement amount in CAD and charged volume in MW for an inclusive market-date range. |
 | `get_unit_commitments` | `request` | Returns AESO generating-unit commitment directives for an inclusive date range, paginated and bounded to 31 days. Includes issue, begin, operation-start, and operation-end timestamps in America/Edmonton. |
+| `search_aeso_tools` | `query`, `limit` | Search the registered AESO MCP tool catalog by a natural-language task or market term. Returns ranked tool names, descriptions, and parameter names without querying AESO. Use this to find the right tool before retrieving data. |
 | `summarize_market_history` | `request` | Returns compact hourly, daily, weekly, or monthly Pool Price statistics and optional Alberta Internal Load statistics for [start, end). Use this before requesting raw series for long periods; summaries are capped at 400 buckets. |
 | `summarize_operating_reserve_market` | `request` | Summarizes active prices or standby clearing blended prices and volumes by reserve product; optionally joins standby activations using volume-weighted activation price. |
 | `sync_historical_store` | `request` | Persist selected AESO historical generation, Pool Price, and load observations into the configured local DuckDB/Parquet historical store. Use to save, sync, or backfill a bounded period in the local history store. Incrementally ingests and refreshes preliminary intervals; reports source gaps and duplicate records. Use to sync or backfill a bounded date range. Requires optional analytics dependencies. |

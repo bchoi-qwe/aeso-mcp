@@ -18,6 +18,8 @@ are read through an internal source-specific client; the APIM key is never sent 
 
 ## Tools
 
+- `search_aeso_tools` — find matching registered tools by market terminology without an upstream request.
+
 ### Current and historical market data
 
 - `get_market_snapshot` — current price, load, generation, interchange, and reserves.

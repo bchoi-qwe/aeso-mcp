@@ -2,6 +2,7 @@
 """MCP tool registration package."""
 
 from aeso_mcp.mcp.tools.analytics import register_analytics_tools
+from aeso_mcp.mcp.tools.discovery import register_discovery_tools
 from aeso_mcp.mcp.tools.grid import register_grid_tools
 from aeso_mcp.mcp.tools.history import register_history_tools
 from aeso_mcp.mcp.tools.market import register_market_tools
@@ -13,6 +14,7 @@ from aeso_mcp.mcp.tools.reserves import register_reserve_tools
 
 __all__ = [
     "register_analytics_tools",
+    "register_discovery_tools",
     "register_grid_tools",
     "register_history_tools",
     "register_market_power_tools",
