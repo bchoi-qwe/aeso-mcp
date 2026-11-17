@@ -15,7 +15,7 @@
         "mcp-types"
       ],
       "groupName": "mcp-ecosystem",
-      "dependencyDashboardApproval": true,
+      "automerge": false,
       "ignoreTests": false,
       "minimumReleaseAge": "3 days"
     },
