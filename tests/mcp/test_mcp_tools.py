@@ -323,6 +323,7 @@ async def test_protocol_negotiates_modern_and_legacy_clients(
             assert client.protocol_version == protocol
             assert {tool.name for tool in await client.list_tools()} == EXPECTED_TOOLS
 
+
 @pytest.mark.asyncio
 async def test_search_aeso_tools_ranks_actual_registered_tools(
     container: AppContainer, settings: Settings
