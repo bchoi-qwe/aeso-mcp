@@ -11,6 +11,7 @@ import pytest
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import InvalidDateRangeError, QueryTooLargeError
 from aeso_mcp.models.analytics import FindPriceEventsRequest
+from aeso_mcp.models.common import DataCompleteness
 from aeso_mcp.models.prices import (
     PoolPriceInterval,
     PoolPriceRequest,
@@ -283,3 +284,69 @@ async def test_compare_periods() -> None:
     assert result.period_a.avg_pool_price_cad_per_mwh == 50.0
     assert result.period_b.avg_pool_price_cad_per_mwh == 100.0
     assert result.price_avg_delta_cad_per_mwh == 50.0
+
+
+@pytest.mark.asyncio
+async def test_period_comparison_keeps_load_available_when_warnings_exist() -> None:
+    from aeso_mcp.models.analytics import CompareMarketPeriodsRequest, PeriodStatistics
+
+    start = datetime(2026, 8, 1, tzinfo=MARKET_TZ)
+    first = PeriodStatistics(
+        start=start,
+        end=start + timedelta(hours=1),
+        observation_count=1,
+        avg_pool_price_cad_per_mwh=50.0,
+        avg_load_mw=10000.0,
+    )
+    second = first.model_copy(
+        update={
+            "start": start + timedelta(hours=1),
+            "end": start + timedelta(hours=2),
+            "avg_load_mw": 10010.0,
+        }
+    )
+    analytics = AnalyticsService(AsyncMock(), Settings(aeso_api_key="test-key"))
+    analytics._period_stats = AsyncMock(
+        side_effect=[(first, ["Partial upstream load series."]), (second, [])]
+    )
+    result = await analytics.compare_market_periods(
+        CompareMarketPeriodsRequest(
+            period_a_start=first.start,
+            period_a_end=first.end,
+            period_b_start=second.start,
+            period_b_end=second.end,
+        )
+    )
+    assert result.metadata.available_series == ["pool_price", "load"]
+    assert result.metadata.missing_series == []
+    assert result.metadata.completeness == DataCompleteness.DEGRADED
+
+
+@pytest.mark.asyncio
+async def test_market_conditions_flag_missing_price_without_hiding_load() -> None:
+    from aeso_mcp.models.analytics import ExplainMarketConditionsRequest, PeriodStatistics
+
+    start = datetime(2026, 8, 1, tzinfo=MARKET_TZ)
+    focus = PeriodStatistics(
+        start=start,
+        end=start + timedelta(hours=1),
+        observation_count=0,
+        avg_load_mw=9500.0,
+    )
+    baseline = PeriodStatistics(
+        start=start - timedelta(hours=1),
+        end=start,
+        observation_count=1,
+        avg_pool_price_cad_per_mwh=100.0,
+        avg_load_mw=9400.0,
+    )
+    analytics = AnalyticsService(AsyncMock(), Settings(aeso_api_key="test-key"))
+    analytics._period_stats = AsyncMock(
+        side_effect=[(focus, ["Pool Price publication unavailable."]), (baseline, [])]
+    )
+    result = await analytics.explain_market_conditions(
+        ExplainMarketConditionsRequest(start=focus.start, end=focus.end)
+    )
+    assert result.metadata.available_series == ["pool_price", "load"]
+    assert result.metadata.missing_series == ["pool_price"]
+    assert result.metadata.completeness == DataCompleteness.DEGRADED
