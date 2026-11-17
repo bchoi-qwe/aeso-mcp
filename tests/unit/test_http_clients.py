@@ -21,6 +21,7 @@ from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.providers.http_utils import parse_retry_after
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 
+
 @respx.mock
 async def test_apim_calls_require_a_key_but_public_clients_do_not() -> None:
     settings = Settings(_env_file=None, aeso_api_key=None)
