@@ -164,7 +164,8 @@ async def smoke() -> None:
     actual_version = installed_version("aeso-mcp")
     framework_version = installed_version("fastmcp")
     slim_version = installed_version("fastmcp-slim")
-    if (framework_version, slim_version) != ("4.0.10", "4.0.10"):
+    # The release pins both distributions; keep the smoke aligned with the packaged dependency.
+    if (framework_version, slim_version) != ("4.2.0", "4.2.0"):
         raise SystemExit(
             "Installed wheel FastMCP framework mismatch: "
             f"fastmcp={framework_version}, fastmcp-slim={slim_version}"
