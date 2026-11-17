@@ -37,9 +37,16 @@ MRTR. Its resources and prompts are domain-specific and discoverable through `re
 `prompts/list`. These absences are not claims that the corresponding optional capability is
 implemented.
 
-All 63 tools remain visible by default. The BM25 discovery experiment did not justify hiding the
-catalog: it can reduce catalog text but adds calls and returns suggestions even for no-tool
-questions. See [agent-use evaluation](evals.md#progressive-discovery-prototype).
+All 64 tools remain visible in the default `full` mode. The optional
+`AESO_MCP_TOOL_DISCOVERY_MODE=compact` setting applies FastMCP's tested BM25 transform,
+reducing the initial catalog to three pinned domain tools plus `search_tools` and
+`call_tool`. Search results return full schemas for hidden tools. This mode saves initial
+context but adds discovery calls and can suggest irrelevant tools for no-tool questions,
+so it is opt-in. See [agent-use evaluation](evals.md#progressive-discovery-prototype).
+
+In the modern `2026-07-28` protocol, the server attaches a five-minute, public-scope
+cache hint to shared catalog and static-resource responses; it does not assert that
+live market observations are immutable or publicly cacheable.
 
 ## CI interoperability gates
 

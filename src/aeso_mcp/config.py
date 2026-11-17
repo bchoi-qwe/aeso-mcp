@@ -28,6 +28,14 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
+    tool_discovery_mode: Literal["full", "compact"] = Field(
+        default="full",
+        validation_alias="AESO_MCP_TOOL_DISCOVERY_MODE",
+        description=(
+            "Full MCP catalog by default, or compact BM25 search/call tool surface "
+            "for clients with limited tool-context budgets."
+        ),
+    )
     aeso_api_key: SecretStr | None = Field(
         default=None,
         description="Optional AESO APIM subscription key for authenticated datasets.",

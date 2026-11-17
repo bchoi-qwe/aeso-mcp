@@ -24,7 +24,7 @@ always visible and returns at most five search matches. Run the reproducible mea
 uv run python scripts/evaluate_tool_discovery.py
 ```
 
-On the checked-in catalog, the full listing contains 63 tools and serializes to 356,427 characters
+On the measured pre-discovery catalog, the full listing contains 63 tools and serializes to 356,427 characters
 (about 89,106 tokens at a rough four-characters-per-token estimate). The transformed listing
 contains three pinned tools plus `search_tools` and `call_tool`: 27,723 characters (about 6,930
 rough tokens), a 92.2% smaller initial tool catalog. The recursive JSON-value schema for analysis
@@ -92,3 +92,11 @@ uv run python scripts/evaluate_agent_results.py results.json
 No external model benchmark is claimed by the repository's deterministic CI. The checked-in
 result is the structural catalog score only; agent-answer quality must be measured with an actual
 client run and identified model/version.
+
+## Runtime discovery choice
+
+The measured BM25 transform is now available as an **opt-in** runtime setting,
+`AESO_MCP_TOOL_DISCOVERY_MODE=compact`. The default remains `full`, preserving ordinary
+client discovery and avoiding an extra tool call for straightforward market questions.
+The benchmark above was recorded before the `search_aeso_tools` addition and should be
+rerun for new releases; figures are historical measurements, not live size guarantees.

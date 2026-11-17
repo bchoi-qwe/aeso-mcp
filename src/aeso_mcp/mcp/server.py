@@ -66,6 +66,10 @@ def create_mcp_server(
             "endorsed by AESO."
         ),
         lifespan=lifespan,
+        # The catalog and static domain resources are identical for all clients.
+        # MCP 2026-07-28 clients can reuse them for five minutes.
+        cache_ttl=300,
+        cache_scope="public",
     )
 
     register_discovery_tools(mcp)
@@ -81,4 +85,19 @@ def create_mcp_server(
     register_reserve_tools(mcp, container)
     register_prompts(mcp)
     register_resources(mcp)
+    if container.settings.tool_discovery_mode == "compact":
+        from fastmcp.server.transforms.search import BM25SearchTransform
+
+        # Search returns complete tool schemas and call_tool can invoke a hidden
+        # tool; keep the three most common entry points immediately callable.
+        mcp.add_transform(
+            BM25SearchTransform(
+                max_results=5,
+                always_visible=[
+                    "get_market_snapshot",
+                    "analyze_market_event",
+                    "get_forecast",
+                ],
+            )
+        )
     return mcp
