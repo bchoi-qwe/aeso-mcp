@@ -116,6 +116,7 @@ class AnalyticsService:
             if a.avg_load_mw != 0:
                 load_pct = load_delta / a.avg_load_mw
 
+        coverage, available_series, missing_series = _period_coverage([a, b], warnings)
         return CompareMarketPeriodsResponse(
             period_a=a,
             period_b=b,
@@ -125,9 +126,9 @@ class AnalyticsService:
             load_avg_pct_change=load_pct,
             metadata=_derived_meta(
                 "Market Period Comparison",
-                completeness=(DataCompleteness.DEGRADED if warnings else DataCompleteness.COMPLETE),
-                available_series=["pool_price"] if warnings else ["pool_price", "load"],
-                missing_series=["load"] if warnings else [],
+                completeness=coverage,
+                available_series=available_series,
+                missing_series=missing_series,
             ),
             warnings=warnings,
         )
@@ -314,6 +315,9 @@ class AnalyticsService:
             "observation_count": float(focus.observation_count),
         }
 
+        coverage, available_series, missing_series = _period_coverage(
+            [focus, baseline], [*focus_warnings, *baseline_warnings]
+        )
         return ExplainMarketConditionsResponse(
             focus_start=to_market(focus_start),
             focus_end=to_market(focus_end),
@@ -324,17 +328,9 @@ class AnalyticsService:
             notable_movements=notable,
             metadata=_derived_meta(
                 "Market Condition Evidence",
-                completeness=(
-                    DataCompleteness.DEGRADED
-                    if focus_warnings or baseline_warnings
-                    else DataCompleteness.COMPLETE
-                ),
-                available_series=(
-                    ["pool_price"]
-                    if focus_warnings or baseline_warnings
-                    else ["pool_price", "load"]
-                ),
-                missing_series=["load"] if focus_warnings or baseline_warnings else [],
+                completeness=coverage,
+                available_series=available_series,
+                missing_series=missing_series,
             ),
             warnings=[
                 "Associated changes are correlational evidence only; "
@@ -1278,7 +1274,20 @@ class AnalyticsService:
         price_vals = [i.pool_price_cad_per_mwh for i in prices.intervals]
 
         load_vals: list[float] = []
-        warnings: list[str] = []
+        warnings: list[str] = list(prices.warnings)
+        if not prices.intervals:
+            warnings.append(
+                f"Pool Price context was unavailable for {start_m.isoformat()} to "
+                f"{end_m.isoformat()}."
+            )
+        elif prices.metadata.completeness in {
+            DataCompleteness.PARTIAL,
+            DataCompleteness.DEGRADED,
+        }:
+            warnings.append(
+                f"Pool Price context was partial for {start_m.isoformat()} to "
+                f"{end_m.isoformat()}; statistics use available price observations."
+            )
         try:
             load = await self._get_load(
                 LoadRequest(start=start_m, end=end_m),
@@ -1384,6 +1393,32 @@ def _change(
         pct_change=pct,
         unit=unit,
     )
+
+
+def _period_coverage(
+    periods: list[PeriodStatistics],
+    warnings: list[str],
+) -> tuple[DataCompleteness, list[str], list[str]]:
+    """Describe observed series coverage independently of non-fatal warnings."""
+    price_presence = [period.observation_count > 0 for period in periods]
+    load_presence = [period.avg_load_mw is not None for period in periods]
+    available = [
+        series
+        for series, presence in (("pool_price", price_presence), ("load", load_presence))
+        if any(presence)
+    ]
+    missing = [
+        series
+        for series, presence in (("pool_price", price_presence), ("load", load_presence))
+        if not all(presence)
+    ]
+    if not available:
+        completeness = DataCompleteness.EMPTY
+    elif warnings or missing:
+        completeness = DataCompleteness.DEGRADED
+    else:
+        completeness = DataCompleteness.COMPLETE
+    return completeness, available, missing
 
 
 def _derived_meta(
