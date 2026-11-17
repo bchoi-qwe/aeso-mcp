@@ -496,9 +496,7 @@ def summarize_forecast_error(
     errors = [forecast - actual for actual, forecast in pairs]
     abs_errors = [abs(value) for value in errors]
     mape_errors = [
-        abs(forecast - actual) / abs(actual) * 100.0
-        for actual, forecast in pairs
-        if actual != 0
+        abs(forecast - actual) / abs(actual) * 100.0 for actual, forecast in pairs if actual != 0
     ]
     total_abs_actual = sum(abs(actual) for actual, _forecast in pairs)
     # sMAPE is defined as zero when both the forecast and actual are zero.
@@ -524,9 +522,7 @@ def summarize_forecast_error(
         weighted_absolute_percentage_error=(
             sum(abs_errors) / total_abs_actual * 100.0 if total_abs_actual > 0 else None
         ),
-        symmetric_mean_absolute_percentage_error=(
-            mean(smape_errors) if smape_errors else None
-        ),
+        symmetric_mean_absolute_percentage_error=(mean(smape_errors) if smape_errors else None),
         p50_absolute_error=_percentile(abs_errors, 0.50),
         p90_absolute_error=_percentile(abs_errors, 0.90),
         p95_absolute_error=_percentile(abs_errors, 0.95),

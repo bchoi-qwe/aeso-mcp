@@ -385,4 +385,3 @@ def test_forecast_error_summary_rejects_mixed_units_within_one_series() -> None:
     ]
     with pytest.raises(DataValidationError, match="mixed units"):
         summarize_forecast_error(rows, series="solar")
-

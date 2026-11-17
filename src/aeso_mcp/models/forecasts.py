@@ -226,7 +226,8 @@ class ForecastErrorSummary(BaseModel):
     mean_absolute_error: float | None = None
     rmse: float | None = None
     mape: float | None = Field(
-        default=None, description="Mean absolute percentage error in percent; excludes zero actuals."
+        default=None,
+        description="Mean absolute percentage error in percent; excludes zero actuals.",
     )
     weighted_absolute_percentage_error: float | None = Field(
         default=None,
