@@ -1,8 +1,10 @@
 # MCP client configurations
 
 All clients start the same published stdio command. Install [`uv`](https://docs.astral.sh/uv/),
-set `AESO_API_KEY` in the client environment, and use the analytics extra if you want the local
-DuckDB/Parquet store.
+set `AESO_API_KEY` in the client environment **for authenticated data**, and use the analytics
+extra if you want the local DuckDB/Parquet store. Without the key, public ETS reports and the
+official historical CSD archive can still be queried; authenticated tools report which credential
+is missing rather than blocking startup.
 
 ```bash
 uvx --from 'aeso-mcp[analytics]' aeso-mcp
@@ -106,5 +108,6 @@ current project and global configuration locations.
 5. Keep current observations, operational history, forecasts, and settlement publications
    distinct in downstream answers.
 
-If startup fails, check that the client can find `uvx` and inherits `AESO_API_KEY`. The server
+If startup fails, check that the client can find `uvx`. If only authenticated calls fail,
+verify that the client inherits `AESO_API_KEY`. The server
 never returns or logs the key, and it sends the key only to the allow-listed AESO APIM host.

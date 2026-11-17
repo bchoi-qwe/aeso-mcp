@@ -3,14 +3,14 @@
 ## Requirements
 
 - Python 3.13 or newer
-- An AESO APIM subscription key
+- An AESO APIM subscription key **only** for authenticated market datasets
 - An MCP-capable client
 
 ## Run from PyPI
 
 ```bash
-export AESO_API_KEY=your-key
-uvx aeso-mcp
+uvx aeso-mcp  # works for public reports and CSD archives without a key
+# For complete market coverage, set AESO_API_KEY=your-key before launching.
 ```
 
 The optional historical store uses DuckDB and PyArrow:
@@ -19,7 +19,10 @@ The optional historical store uses DuckDB and PyArrow:
 uvx --from 'aeso-mcp[analytics]' aeso-mcp
 ```
 
-Without that extra, official CSD archive queries still work directly; store sync/status reports
+The API key is optional for ETS public reports, renewables and Pool Price forecast publications,
+and official historical CSD data. Live prices, load, current CSD, and authenticated operational
+reports need a key. Without the analytics extra, official CSD archive queries still work
+directly; store sync/status reports
 that persistence is unavailable.
 
 ## MCP client configuration

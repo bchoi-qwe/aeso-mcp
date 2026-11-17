@@ -90,6 +90,12 @@ class GridStatusProvider:
         self._apim_http = apim_http
 
     def _get_client(self) -> Any:
+        if not self._settings.api_key_value:
+            raise AuthenticationError(
+                "This dataset requires an AESO_API_KEY. Obtain a subscription at "
+                "https://developer-apim.aeso.ca/. Public AESO report tools remain available "
+                "without a key."
+            )
         if self._client is None:
             from gridstatus import AESO
 

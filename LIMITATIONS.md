@@ -72,7 +72,8 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 
 ## Security / trust
 
-- Requires `AESO_API_KEY`; never log or return the key.
+- Public ETS and official archive tools work without `AESO_API_KEY`; authenticated APIM and
+  GridStatus tools return an actionable missing-key error. Never log or return the key.
 - Public-report and fixed-asset clients are credential-free and allow-listed; response streams have
   25 MiB and 384 MiB decoded-byte caps respectively before full-response assembly.
   CSD archive text and ZIP downloads are likewise streamed with a 100 MiB decoded-byte cap.

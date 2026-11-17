@@ -12,16 +12,15 @@ from aeso_mcp.config import Settings, clear_settings_cache, get_settings
 from aeso_mcp.errors import ConfigurationError
 
 
-def test_missing_api_key_raises_actionable_error(
+def test_missing_api_key_allows_public_report_mode(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     monkeypatch.delenv("AESO_API_KEY", raising=False)
-    # Avoid picking up a developer-local .env when asserting missing credentials.
     monkeypatch.chdir(tmp_path)
     clear_settings_cache()
-    with pytest.raises(ConfigurationError, match="AESO_API_KEY"):
-        get_settings()
+    assert get_settings().api_key_value == ""
+    clear_settings_cache()
 
 
 def test_settings_do_not_expose_secret_in_repr() -> None:
