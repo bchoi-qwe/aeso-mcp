@@ -151,6 +151,7 @@ class AnalyticsService:
         missing_series: list[str] = []
         if not values:
             return FindPriceEventsResponse(
+                direction=request.direction,
                 threshold_cad_per_mwh=request.threshold_cad_per_mwh or 0.0,
                 events=[],
                 metadata=_derived_meta(
@@ -165,7 +166,11 @@ class AnalyticsService:
         if request.threshold_cad_per_mwh is not None:
             threshold = request.threshold_cad_per_mwh
         else:
-            percentile = request.percentile if request.percentile is not None else 90.0
+            percentile = (
+                request.percentile
+                if request.percentile is not None
+                else (90.0 if request.direction == "above" else 10.0)
+            )
             threshold = _percentile(values, percentile)
 
         load_by_start: dict = {}
@@ -203,7 +208,12 @@ class AnalyticsService:
         active: list = []
         ordered = sorted(prices.intervals, key=lambda i: chronological_instant(i.interval_start))
         for interval in ordered:
-            if interval.pool_price_cad_per_mwh >= threshold:
+            crosses_threshold = (
+                interval.pool_price_cad_per_mwh >= threshold
+                if request.direction == "above"
+                else interval.pool_price_cad_per_mwh <= threshold
+            )
+            if crosses_threshold:
                 if active and to_utc(active[-1].interval_end) != to_utc(interval.interval_start):
                     event = _close_event(active, load_by_start, request.min_duration_hours)
                     if event:
@@ -221,6 +231,7 @@ class AnalyticsService:
                 events.append(event)
 
         return FindPriceEventsResponse(
+            direction=request.direction,
             threshold_cad_per_mwh=threshold,
             events=events,
             metadata=_derived_meta(
@@ -1343,6 +1354,7 @@ def _close_event(active: list, load_by_start: dict, min_hours: float) -> PriceEv
         end=end,
         duration_hours=duration,
         peak_price_cad_per_mwh=max(prices),
+        minimum_price_cad_per_mwh=min(prices),
         average_price_cad_per_mwh=mean(prices),
         avg_load_mw=mean(loads) if loads else None,
         max_load_mw=max(loads) if loads else None,

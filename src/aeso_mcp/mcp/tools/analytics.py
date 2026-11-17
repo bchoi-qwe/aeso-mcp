@@ -57,9 +57,10 @@ def register_analytics_tools(mcp: FastMCP, container: AppContainer) -> None:
     @mcp.tool(
         name="find_price_events",
         description=(
-            "Detects sustained high Pool Price events in CAD/MWh over [start, end). "
-            "Threshold may be an absolute CAD/MWh value or a percentile (default 90th). "
-            "Returns event boundaries, duration, peak/average price, and load context when available."
+            "Detects sustained high or low Pool Price events (including negative prices) "
+            "in CAD/MWh over [start, end). Use direction=above/below and an absolute threshold "
+            "or percentile (defaults: 90th/10th). Returns event boundaries, duration, "
+            "minimum/peak/average price, and available load context."
         ),
         annotations={
             "readOnlyHint": True,
