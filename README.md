@@ -13,7 +13,7 @@
 ## Features
 
 - Typed MCP tools with Pydantic inputs/outputs and structured results
-- Stable FastMCP 4.0.10 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
+- Stable FastMCP 4.2.0 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
   negotiation for legacy session-based clients
 - Current market snapshot combining price, load, generation, interchange, and reserves
 - Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
