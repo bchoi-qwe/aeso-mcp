@@ -121,7 +121,7 @@ This table is generated from 37 registered retrieval tools and their live descri
 - `daily_market_brief`
 - `investigate_price_event`
 
-## Resources (30)
+## Resources (32)
 
 - `aeso://capabilities`
 - `aeso://datasets`
@@ -153,3 +153,5 @@ This table is generated from 37 registered retrieval tools and their live descri
 - `aeso://methodology/transmission-outages`
 - `aeso://methodology/uc-settlement`
 - `aeso://methodology/unit-commitments`
+- `skill://alberta-market-research/SKILL.md`
+- `skill://alberta-market-research/_manifest`

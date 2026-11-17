@@ -230,6 +230,16 @@ the risk; it is never the default. Also set `AESO_MCP_HTTP_ALLOWED_HOSTS` and
 `AESO_MCP_HTTP_ALLOWED_ORIGINS` for the deployment. `/healthz` and `/readyz` contain no market data
 or secrets. See [.env.example](.env.example) for all bounded runtime settings.
 
+## Guided market research skill
+
+FastMCP 4.2.0 exposes the `alberta-market-research` skill as a normal MCP resource at
+`skill://alberta-market-research/SKILL.md`. Agents can use it to select authoritative AESO
+datasets, interpret timestamps and units, check publication vintages and source completeness,
+and distinguish statistical association from causation. Compatible clients can also discover it
+through the experimental MCP Skills extension; ordinary MCP resource clients can read it without
+that extension. This is a **guide for client workflows**, not an additional API endpoint,
+credential grant, or replacement for the typed data tools.
+
 ## Tool discovery
 
 With more than 60 typed tools, start with `search_aeso_tools` when you do not know which
