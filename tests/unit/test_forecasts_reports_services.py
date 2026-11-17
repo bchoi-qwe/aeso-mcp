@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import UnsupportedDatasetError
+from aeso_mcp.errors import DataValidationError, UnsupportedDatasetError
 from aeso_mcp.models.forecasts import ForecastInterval, OfficialForecastRequest
 from aeso_mcp.models.reports import (
     DdsAvailabilityRecord,
@@ -314,3 +314,75 @@ async def test_reports_service_preserves_each_named_report_contract() -> None:
     assert dds.records[0].available_dds_mw == 25.0
     assert tmr.records[0].reference_price_cad_per_mwh == 42.0
     assert events.records[0].event_type == "supply_surplus"
+
+
+def test_forecast_error_summary_filters_units_by_series_and_handles_zero_actuals() -> None:
+    start = datetime(2026, 1, 5, tzinfo=MARKET_TZ)
+    rows = [
+        ForecastInterval(
+            interval_start=start + timedelta(hours=i),
+            interval_end=start + timedelta(hours=i + 1),
+            series=series,
+            horizon="historical",
+            actual_value=actual,
+            forecast_value=forecast,
+            unit=unit,
+            source_product="Test",
+        )
+        for i, series, actual, forecast, unit in (
+            (0, "solar", 100.0, 120.0, "MW"),
+            (1, "solar", 0.0, 20.0, "MW"),
+            (2, "solar", 0.0, 0.0, "MW"),
+            (3, "pool_price", 5.0, 10.0, "CAD/MWh"),
+        )
+    ]
+
+    summary = summarize_forecast_error(rows, series="solar")
+    assert summary.unit == "MW"
+    assert summary.observation_count == 3
+    assert summary.excluded_mape_zero_actual_count == 2
+    assert summary.mape == pytest.approx(20.0)
+    assert summary.weighted_absolute_percentage_error == pytest.approx(40.0)
+    assert summary.symmetric_mean_absolute_percentage_error == pytest.approx(
+        (200.0 * 20.0 / 220.0 + 200.0 + 0.0) / 3
+    )
+    assert summary.mean_absolute_error == pytest.approx(40.0 / 3)
+
+    price = summarize_forecast_error(rows, series="pool_price")
+    assert price.unit == "CAD/MWh"
+    assert price.observation_count == 1
+
+
+def test_forecast_error_summary_never_reports_invalid_zero_denominator() -> None:
+    start = datetime(2026, 1, 5, tzinfo=MARKET_TZ)
+    row = ForecastInterval(
+        interval_start=start,
+        interval_end=start + timedelta(hours=1),
+        series="wind",
+        actual_value=0.0,
+        forecast_value=0.0,
+        unit="MW",
+        source_product="Test",
+    )
+    summary = summarize_forecast_error([row], series="wind")
+    assert summary.mape is None
+    assert summary.weighted_absolute_percentage_error is None
+    assert summary.symmetric_mean_absolute_percentage_error == 0.0
+
+
+def test_forecast_error_summary_rejects_mixed_units_within_one_series() -> None:
+    start = datetime(2026, 1, 5, tzinfo=MARKET_TZ)
+    rows = [
+        ForecastInterval(
+            interval_start=start + timedelta(hours=i),
+            interval_end=start + timedelta(hours=i + 1),
+            series="solar",
+            actual_value=1.0,
+            forecast_value=2.0,
+            unit=unit,
+            source_product="Test",
+        )
+        for i, unit in enumerate(("MW", "CAD/MWh"))
+    ]
+    with pytest.raises(DataValidationError, match="mixed units"):
+        summarize_forecast_error(rows, series="solar")
