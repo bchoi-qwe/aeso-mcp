@@ -10,8 +10,8 @@ import pytest
 
 from aeso_mcp.config import Settings
 from aeso_mcp.errors import InvalidDateRangeError, QueryTooLargeError
-from aeso_mcp.models.common import DataCompleteness
 from aeso_mcp.models.analytics import FindPriceEventsRequest
+from aeso_mcp.models.common import DataCompleteness
 from aeso_mcp.models.prices import (
     PoolPriceInterval,
     PoolPriceRequest,
