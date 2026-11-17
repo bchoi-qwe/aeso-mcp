@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 CAPABILITIES_MARKDOWN = """# AESO MCP Capabilities
 
-This single server requires `AESO_API_KEY` and provides read-only, bounded access to Alberta
+This server provides credential-free AESO public reports and CSD archives, plus authenticated
+APIM market data when `AESO_API_KEY` is configured. It offers bounded access to Alberta
 electricity market data and deterministic analytics. It does not submit bids, change AESO
 records, or claim causal explanations. Transmission and market-power reports at `ets.aeso.ca`
 are read through an internal source-specific client; the APIM key is never sent to that host.

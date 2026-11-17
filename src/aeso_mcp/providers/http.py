@@ -44,13 +44,12 @@ class AesoHttpClient:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        headers = {"Cache-Control": "no-cache", "Accept": "application/json"}
+        if settings.api_key_value:
+            headers["API-KEY"] = settings.api_key_value
         self._client = httpx.AsyncClient(
             base_url=settings.aeso_base_url.rstrip("/"),
-            headers={
-                "Cache-Control": "no-cache",
-                "API-KEY": settings.api_key_value,
-                "Accept": "application/json",
-            },
+            headers=headers,
             timeout=httpx.Timeout(
                 connect=settings.http_connect_timeout_s,
                 read=settings.http_read_timeout_s,
@@ -69,6 +68,12 @@ class AesoHttpClient:
 
     async def get_json(self, endpoint: str, *, params: dict[str, Any] | None = None) -> Any:
         """GET a relative AESO endpoint and return parsed JSON."""
+        if not self._settings.api_key_value:
+            raise AuthenticationError(
+                "This dataset requires an AESO_API_KEY. Obtain a subscription at "
+                "https://developer-apim.aeso.ca/. Public AESO report tools remain available "
+                "without a key."
+            )
         path = endpoint.lstrip("/")
         self._assert_allowed_path(path)
 

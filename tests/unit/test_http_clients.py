@@ -14,11 +14,35 @@ import respx
 from pydantic import SecretStr
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import DataValidationError, RateLimitError
+from aeso_mcp.errors import AuthenticationError, DataValidationError, RateLimitError
 from aeso_mcp.providers.archive_http import AesoArchiveHttpClient
+from aeso_mcp.providers.gridstatus import GridStatusProvider
 from aeso_mcp.providers.http import AesoHttpClient
 from aeso_mcp.providers.http_utils import parse_retry_after
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
+
+
+@respx.mock
+async def test_apim_calls_require_a_key_but_public_clients_do_not() -> None:
+    settings = Settings(_env_file=None, aeso_api_key=None)
+    apim = AesoHttpClient(settings)
+    public = AesoPublicReportsHttpClient(settings)
+    archive = AesoArchiveHttpClient(settings)
+    try:
+        assert "API-KEY" not in apim._client.headers
+        with pytest.raises(AuthenticationError, match="requires an AESO_API_KEY"):
+            await apim.get_json("poolprice-api/v1.1/price/poolPrice")
+        assert not respx.calls
+        with pytest.raises(AuthenticationError, match="requires an AESO_API_KEY"):
+            GridStatusProvider(settings)._get_client()
+        public_route = respx.get("https://ets.aeso.ca/public-test").respond(200, text="ok")
+        assert await public.get_text("https://ets.aeso.ca/public-test") == "ok"
+        assert "API-KEY" not in public_route.calls[0].request.headers
+    finally:
+        await apim.aclose()
+        await public.aclose()
+        await archive.aclose()
+
 
 CLIENTS = [
     (AesoArchiveHttpClient, "https://aeso.box.com/report"),

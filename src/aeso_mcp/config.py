@@ -28,9 +28,9 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    aeso_api_key: SecretStr = Field(
-        ...,
-        description="AESO APIM subscription key from https://developer-apim.aeso.ca/",
+    aeso_api_key: SecretStr | None = Field(
+        default=None,
+        description="Optional AESO APIM subscription key for authenticated datasets.",
         validation_alias=AliasChoices("AESO_API_KEY", "aeso_api_key"),
     )
     log_level: str = Field(
@@ -204,7 +204,9 @@ class Settings(BaseSettings):
 
     @field_validator("aeso_api_key")
     @classmethod
-    def _validate_aeso_api_key(cls, value: SecretStr) -> SecretStr:
+    def _validate_aeso_api_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
         key = value.get_secret_value()
         if not key or any(character.isspace() for character in key):
             raise ValueError("AESO_API_KEY must be a non-empty token without whitespace")
@@ -334,28 +336,17 @@ class Settings(BaseSettings):
 
     @property
     def api_key_value(self) -> str:
-        """Return the raw API key string (never log this)."""
-        return self.aeso_api_key.get_secret_value()
+        """Return the raw API key or an empty string in public-only mode (never log)."""
+        return self.aeso_api_key.get_secret_value() if self.aeso_api_key is not None else ""
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Load and cache settings. Raises ConfigurationError on missing credentials."""
+    """Load and cache settings. A key is only needed for authenticated APIM calls."""
     try:
         return Settings()  # type: ignore[call-arg]
     except ValidationError as exc:
         errors = exc.errors(include_url=False, include_context=False, include_input=False)
-        missing_api_key = any(
-            error.get("type") == "missing"
-            and any(str(part).lower() == "aeso_api_key" for part in error.get("loc", ()))
-            for error in errors
-        )
-        if missing_api_key:
-            raise ConfigurationError(
-                "AESO_API_KEY is required. Register at "
-                "https://developer-apim.aeso.ca/ and set AESO_API_KEY in the environment "
-                "or a local .env file. See .env.example."
-            ) from None
         details = "; ".join(
             f"{'.'.join(str(part) for part in error.get('loc', ())) or 'settings'}: "
             f"{error.get('msg', 'invalid value')}"

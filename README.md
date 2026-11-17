@@ -38,8 +38,8 @@
 - Deterministic research manifests identify exact input publications, parameters, methodology,
   completeness, and degradation warnings for multi-source market-event analysis
 - Public operating-reserve active/standby prices, seven-day forecasts, activations, and summaries
-- One complete server package and startup path: `AESO_API_KEY` is always required; there is no
-  reduced credential-free server mode
+- One server package with optional `AESO_API_KEY`: public ETS reports and CSD archives work
+  without credentials; authenticated APIM/GridStatus datasets explicitly request a key
 - Query bounds, cache provenance, completeness metadata, upstream `Retry-After` handling, and
   secret-safe machine-readable errors
 - Hardened HTTP transport with Host/Origin validation, bearer authentication required for
@@ -130,6 +130,7 @@ to `apimgw.aeso.ca` and is never sent to the allow-listed ETS or Box hosts.
 
 - Python 3.13+
 - AESO APIM API key from [developer-apim.aeso.ca](https://developer-apim.aeso.ca/)
+  for authenticated market data (optional for public reports)
 - [`uv`](https://docs.astral.sh/uv/) recommended
 
 ## Installation
@@ -139,8 +140,8 @@ See [LIMITATIONS.md](LIMITATIONS.md) for an honest gap inventory.
 ### From PyPI (recommended)
 
 ```bash
-export AESO_API_KEY=your-key
-uvx aeso-mcp
+uvx aeso-mcp  # public reports / historical CSD archive
+# Export AESO_API_KEY=your-key for complete market coverage.
 ```
 
 For incremental DuckDB/Parquet historical storage:
@@ -191,7 +192,8 @@ send bearer credentials over public plaintext HTTP. See [MCP interoperability an
 3. Copy the primary/secondary subscription key
 4. Set `AESO_API_KEY` in your environment (never commit it)
 
-Missing credentials produce an actionable startup error. The key is never returned through MCP tools or logged.
+Without a key the server starts and public-report/archive tools work; authenticated tools return
+an actionable missing-key error. A configured key is never returned through MCP tools or logged.
 
 ## Example MCP client configuration
 
