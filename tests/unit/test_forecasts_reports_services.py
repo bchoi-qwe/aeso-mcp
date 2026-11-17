@@ -315,6 +315,7 @@ async def test_reports_service_preserves_each_named_report_contract() -> None:
     assert tmr.records[0].reference_price_cad_per_mwh == 42.0
     assert events.records[0].event_type == "supply_surplus"
 
+
 def test_forecast_error_summary_filters_units_by_series_and_handles_zero_actuals() -> None:
     start = datetime(2026, 1, 5, tzinfo=MARKET_TZ)
     rows = [
