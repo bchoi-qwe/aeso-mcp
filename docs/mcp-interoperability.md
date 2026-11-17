@@ -26,7 +26,7 @@ for traffic outside a trusted private network, terminate TLS at a trusted revers
 send bearer credentials over public plaintext HTTP. The server does not implement OAuth discovery
 or Protected Resource Metadata. MCP authorization is optional; the [authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)
 requires OAuth-specific behavior when an implementation chooses OAuth. `AESO_API_KEY` is separate:
-it authorizes upstream AESO APIM calls, is required at startup, and is never a client credential.
+it authorizes upstream AESO APIM calls only when configured and is never a client credential; public-report and CSD archive access does not require it.
 
 ## Deliberate feature scope
 
