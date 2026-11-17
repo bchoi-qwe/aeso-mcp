@@ -25,8 +25,9 @@ async def test_market_research_skill_discoverable_without_aeso_credentials() -> 
             )
             skill = await client.read_skill("skill://alberta-market-research/SKILL.md")
             assert skill.name == "alberta-market-research"
-            assert "America/Edmonton" in skill.instructions
-            assert "look-ahead leakage" in skill.instructions
-            assert "CAD/MWh" in skill.instructions
+            content = skill.files["SKILL.md"].decode("utf-8")
+            assert "America/Edmonton" in content
+            assert "look-ahead leakage" in content
+            assert "CAD/MWh" in content
     finally:
         await container.aclose()
