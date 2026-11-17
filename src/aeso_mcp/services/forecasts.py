@@ -472,49 +472,64 @@ def summarize_forecast_error(
     *,
     series: ForecastSeries | None = None,
 ) -> ForecastErrorSummary:
-    """Return denominator-aware forecast error metrics for one series."""
+    """Summarize paired values for one series and one consistent measurement unit."""
     selected = series or (intervals[0].series if intervals else "ail")
-    paired: list[float] = []
+    selected_intervals = [item for item in intervals if item.series == selected]
+    units = {item.unit for item in selected_intervals}
+    if len(units) > 1:
+        raise DataValidationError(
+            f"Forecast error summary for {selected} cannot combine observations with mixed units."
+        )
+    unit = next(iter(units), _unit_for_series(selected))
+
+    pairs: list[tuple[float, float]] = []
     excluded_without_forecast = 0
     excluded_without_actual = 0
-    units = {item.unit for item in intervals}
-    for item in intervals:
-        if item.series != selected:
-            continue
+    for item in selected_intervals:
         if item.forecast_value is None:
             excluded_without_forecast += 1
-            continue
-        if item.actual_value is None:
+        elif item.actual_value is None:
             excluded_without_actual += 1
-            continue
-        paired.append(item.forecast_value - item.actual_value)
+        else:
+            pairs.append((item.actual_value, item.forecast_value))
 
-    percentage_errors: list[float] = []
-    for item in intervals:
-        if item.series != selected:
-            continue
-        forecast = item.forecast_value
-        actual = item.actual_value
-        if forecast is None or actual is None or actual == 0:
-            continue
-        percentage_errors.append(abs(forecast - actual) / abs(actual) * 100.0)
-    errors = paired
-    mape = mean(percentage_errors) if percentage_errors else None
-    unit = next(iter(units), _unit_for_series(selected))
-    if len(units) > 1:
-        unit = "mixed"
+    errors = [forecast - actual for actual, forecast in pairs]
+    abs_errors = [abs(value) for value in errors]
+    mape_errors = [
+        abs(forecast - actual) / abs(actual) * 100.0
+        for actual, forecast in pairs
+        if actual != 0
+    ]
+    total_abs_actual = sum(abs(actual) for actual, _forecast in pairs)
+    # sMAPE is defined as zero when both the forecast and actual are zero.
+    smape_errors = [
+        (
+            0.0
+            if abs(actual) + abs(forecast) == 0
+            else 200.0 * abs(forecast - actual) / (abs(actual) + abs(forecast))
+        )
+        for actual, forecast in pairs
+    ]
+
     return ForecastErrorSummary(
         series=selected,
-        observation_count=len(errors),
+        observation_count=len(pairs),
         excluded_without_forecast=excluded_without_forecast,
         excluded_without_actual=excluded_without_actual,
+        excluded_mape_zero_actual_count=sum(actual == 0 for actual, _ in pairs),
         mean_error=mean(errors) if errors else None,
-        mean_absolute_error=mean(abs(value) for value in errors) if errors else None,
+        mean_absolute_error=mean(abs_errors) if abs_errors else None,
         rmse=sqrt(mean(value * value for value in errors)) if errors else None,
-        mape=mape,
-        p50_absolute_error=_percentile([abs(value) for value in errors], 0.50),
-        p90_absolute_error=_percentile([abs(value) for value in errors], 0.90),
-        p95_absolute_error=_percentile([abs(value) for value in errors], 0.95),
+        mape=mean(mape_errors) if mape_errors else None,
+        weighted_absolute_percentage_error=(
+            sum(abs_errors) / total_abs_actual * 100.0 if total_abs_actual > 0 else None
+        ),
+        symmetric_mean_absolute_percentage_error=(
+            mean(smape_errors) if smape_errors else None
+        ),
+        p50_absolute_error=_percentile(abs_errors, 0.50),
+        p90_absolute_error=_percentile(abs_errors, 0.90),
+        p95_absolute_error=_percentile(abs_errors, 0.95),
         unit=unit,
     )
 

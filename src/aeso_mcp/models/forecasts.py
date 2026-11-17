@@ -225,7 +225,21 @@ class ForecastErrorSummary(BaseModel):
     mean_error: float | None = None
     mean_absolute_error: float | None = None
     rmse: float | None = None
-    mape: float | None = None
+    mape: float | None = Field(
+        default=None, description="Mean absolute percentage error in percent; excludes zero actuals."
+    )
+    weighted_absolute_percentage_error: float | None = Field(
+        default=None,
+        description="100 * sum absolute error / sum absolute actual; null when all actuals are zero.",
+    )
+    symmetric_mean_absolute_percentage_error: float | None = Field(
+        default=None,
+        description="Average of 200 * absolute error / (absolute actual + absolute forecast); "
+        "both-zero pairs contribute zero.",
+    )
+    excluded_mape_zero_actual_count: int = Field(
+        default=0, ge=0, description="Valid paired observations excluded only from MAPE."
+    )
     p50_absolute_error: float | None = None
     p90_absolute_error: float | None = None
     p95_absolute_error: float | None = None

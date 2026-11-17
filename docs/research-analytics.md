@@ -93,3 +93,21 @@ report partial coverage when observed areas have missing hours; absent areas are
 Constrained-volume observations describe only reported constraint hours, so missing rows are not
 zero constraints. Scarcity high-price counts are null when no price observations are available.
 Frequency exposure is an upper-bound interval proxy, not exact time outside a threshold.
+
+## Forecast summary denominator semantics
+
+The source-level `ForecastService.summarize_error` method reports MAE and RMSE in the
+selected dataset's native unit and three complementary percentage metrics:
+
+- **MAPE (%)** averages `100 × |forecast − actual| / |actual|` only for paired
+  intervals with a nonzero actual. `excluded_mape_zero_actual_count` makes this
+  exclusion visible.
+- **WAPE (%)** is `100 × sum(|forecast − actual|) / sum(|actual|)` over all paired
+  intervals; it is null when the total absolute actual is zero.
+- **sMAPE (%)** averages `200 × |forecast − actual| / (|forecast| + |actual|)`.
+  A pair with both values zero contributes zero.
+
+Only selected-series intervals participate in aggregation. Conflicting units
+within that series raise a data-validation error rather than silently combining
+MW and CAD/MWh. These percent-based conventions differ from the ratio-form
+`mean_absolute_percentage_error` in the older `analyze_forecast_error` tool.
