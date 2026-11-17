@@ -52,12 +52,16 @@ class CompareMarketPeriodsResponse(WarningMixin):
 
 
 class FindPriceEventsRequest(DateRangeRequest):
-    """Detect sustained high-price intervals in pool price history."""
+    """Detect sustained high- or low-price intervals in Pool Price history."""
 
+    direction: Literal["above", "below"] = Field(
+        default="above",
+        description="Find consecutive hours at or above the threshold, or at or below it.",
+    )
     threshold_cad_per_mwh: float | None = Field(
         default=None,
-        description="Absolute pool-price threshold in CAD/MWh. Defaults to 90th percentile.",
-        ge=0,
+        description="Absolute Pool Price threshold in CAD/MWh; can be negative. "
+        "Defaults to 90th percentile for above or 10th for below.",
     )
     percentile: float | None = Field(
         default=None,
@@ -69,12 +73,12 @@ class FindPriceEventsRequest(DateRangeRequest):
         default=1.0,
         ge=1.0,
         le=168.0,
-        description="Minimum consecutive hours above threshold to count as an event.",
+        description="Minimum consecutive hours meeting the threshold to count as an event.",
     )
 
 
 class PriceEvent(BaseModel):
-    """One detected high-price event with available evidence."""
+    """One detected high- or low-price event with available evidence."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -82,6 +86,7 @@ class PriceEvent(BaseModel):
     end: datetime
     duration_hours: float
     peak_price_cad_per_mwh: float
+    minimum_price_cad_per_mwh: float
     average_price_cad_per_mwh: float
     avg_load_mw: float | None = None
     max_load_mw: float | None = None
@@ -90,6 +95,7 @@ class PriceEvent(BaseModel):
 class FindPriceEventsResponse(WarningMixin):
     """Detected price events for the requested window."""
 
+    direction: Literal["above", "below"]
     threshold_cad_per_mwh: float
     events: list[PriceEvent]
     metadata: DatasetMetadata

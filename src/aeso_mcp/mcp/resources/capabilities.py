@@ -67,7 +67,7 @@ are read through an internal source-specific client; the APIM key is never sent 
 ### Deterministic analytics
 
 - `compare_market_periods` — aggregate Pool Price and load comparison.
-- `find_price_events` — sustained high-price event detection.
+- `find_price_events` — sustained high- or low-price event detection, including negative-price runs.
 - `explain_market_conditions` — structured evidence against a baseline, without causal claims.
 - `compare_forecast_to_actual` — backward-compatible AIL forecast error metrics.
 - `calculate_asset_energy_revenue` — matched metered MWh times Pool Price gross energy revenue.
