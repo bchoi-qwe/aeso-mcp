@@ -30,8 +30,9 @@ Out of scope / residual risk:
   operation has a fixed typed dataset contract and configured root
 - HTTPS-only authenticated APIM access (`apimgw.aeso.ca`) and an isolated, unauthenticated
   upstream client for public reports (`ets.aeso.ca`) plus a separate fixed-share client for the
-  official AESO CSD Box archive; the server still requires `AESO_API_KEY` at startup, and
-  redirects are re-validated against the corresponding host allow-list
+  official AESO CSD Box archive; these public providers work without an APIM key, while
+  authenticated APIM and GridStatus tools require `AESO_API_KEY`. Redirects are re-validated
+  against the corresponding host allow-list
 - `AESO_API_KEY` is an upstream credential, not MCP client authentication. HTTP clients use a
   separate configured static bearer token on non-loopback binds. That custom authentication is
   not OAuth and does not expose OAuth Protected Resource Metadata; the built-in listener does not
