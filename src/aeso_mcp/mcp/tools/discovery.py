@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import Field
@@ -40,7 +41,7 @@ def _tokens(value: str) -> set[str]:
     return tokens
 
 
-def rank_tools(query: str, entries: list[Any], *, limit: int) -> ToolSearchResponse:
+def rank_tools(query: str, entries: Sequence[Any], *, limit: int) -> ToolSearchResponse:
     """Rank server-registered tools by name and description without network access."""
     words = _tokens(query)
     expanded = set(words)
