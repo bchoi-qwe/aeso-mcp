@@ -242,6 +242,19 @@ credential grant, or replacement for the typed data tools.
 
 ## Tool discovery
 
+The standard mode retains the full tool catalog for clients that can afford its context cost.
+For clients with limited tool budgets, set `AESO_MCP_TOOL_DISCOVERY_MODE=compact` in the
+server environment. Compact mode uses FastMCP's BM25 search transform: it exposes
+`get_market_snapshot`, `analyze_market_event`, `get_forecast`, `search_tools`, and
+`call_tool` initially. `search_tools` returns full schemas for matching hidden tools and
+`call_tool` invokes those tools without exposing the entire catalog up front. This reduces
+initial context substantially but adds a search step and can return irrelevant suggestions;
+it does not replace judgment about whether a tool is appropriate.
+
+The server also sends five-minute public cache hints for its shared tool catalog and static
+MCP resources to compatible MCP 2026-07-28 clients. These are **discovery/resource hints**,
+not caches of changing market observations.
+
 With more than 60 typed tools, start with `search_aeso_tools` when you do not know which
 dataset or analytical workflow matches your question. Search is credential-free, uses the
 actual registered tool descriptions, returns bounded ranked results, and never calls AESO.
