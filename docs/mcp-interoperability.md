@@ -28,6 +28,14 @@ or Protected Resource Metadata. MCP authorization is optional; the [authorizatio
 requires OAuth-specific behavior when an implementation chooses OAuth. `AESO_API_KEY` is separate:
 it authorizes upstream AESO APIM calls only when configured and is never a client credential; public-report and CSD archive access does not require it.
 
+## Research skill interoperability
+
+FastMCP 4.2.0 also exposes an `alberta-market-research` skill as ordinary
+`skill://` resources, with optional discovery via the experimental MCP Skills extension.
+No proprietary agent capability is required to read the skill's `SKILL.md` resource.
+The skill is reference guidance for interpreting AESO evidence, not a server-side
+LLM inference tool or a claim of independent live data validation.
+
 ## Deliberate feature scope
 
 The server does not register sample fixture components just to satisfy generic everything-server

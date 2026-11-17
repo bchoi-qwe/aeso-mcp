@@ -13,7 +13,7 @@
 ## Features
 
 - Typed MCP tools with Pydantic inputs/outputs and structured results
-- Stable FastMCP 4.0.10 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
+- Stable FastMCP 4.2.0 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
   negotiation for legacy session-based clients
 - Current market snapshot combining price, load, generation, interchange, and reserves
 - Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
@@ -229,6 +229,16 @@ trusted ingress before exposing it beyond a trusted private network. An explicit
 the risk; it is never the default. Also set `AESO_MCP_HTTP_ALLOWED_HOSTS` and
 `AESO_MCP_HTTP_ALLOWED_ORIGINS` for the deployment. `/healthz` and `/readyz` contain no market data
 or secrets. See [.env.example](.env.example) for all bounded runtime settings.
+
+## Guided market research skill
+
+FastMCP 4.2.0 exposes the `alberta-market-research` skill as a normal MCP resource at
+`skill://alberta-market-research/SKILL.md`. Agents can use it to select authoritative AESO
+datasets, interpret timestamps and units, check publication vintages and source completeness,
+and distinguish statistical association from causation. Compatible clients can also discover it
+through the experimental MCP Skills extension; ordinary MCP resource clients can read it without
+that extension. This is a **guide for client workflows**, not an additional API endpoint,
+credential grant, or replacement for the typed data tools.
 
 ## Tool discovery
 

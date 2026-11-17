@@ -132,6 +132,8 @@ EXPECTED_RESOURCES = {
     "aeso://methodology/ffr-net-schedule",
     "aeso://methodology/dds-tmr-system-events",
     "aeso://capabilities",
+    "skill://alberta-market-research/SKILL.md",
+    "skill://alberta-market-research/_manifest",
 }
 
 EXPECTED_PROMPTS = {

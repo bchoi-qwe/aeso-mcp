@@ -16,6 +16,7 @@ from aeso_mcp.app import AppContainer, build_container
 from aeso_mcp.config import Settings
 from aeso_mcp.mcp.prompts import register_prompts
 from aeso_mcp.mcp.resources import register_resources
+from aeso_mcp.mcp.skills import register_market_research_skill
 from aeso_mcp.mcp.tools import (
     register_analytics_tools,
     register_discovery_tools,
@@ -85,6 +86,7 @@ def create_mcp_server(
     register_reserve_tools(mcp, container)
     register_prompts(mcp)
     register_resources(mcp)
+    register_market_research_skill(mcp)
     if container.settings.tool_discovery_mode == "compact":
         from fastmcp.server.transforms.search import BM25SearchTransform
 
