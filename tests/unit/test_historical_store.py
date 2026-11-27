@@ -346,3 +346,68 @@ async def test_year_long_load_sync_is_chunked_to_upstream_limits(tmp_path) -> No
     assert result.records_written == 5
     assert result.partitions_rebuilt == 5
     assert result.missing_interval_count == 0
+
+
+def test_generation_batches_preserve_dedup_and_rollback(tmp_path, monkeypatch) -> None:
+    store = HistoricalStore(tmp_path / "history")
+    if not store.dependencies_available():
+        pytest.skip("analytics extra is not installed")
+    monkeypatch.setattr("aeso_mcp.storage.history._GENERATION_WRITE_BATCH_SIZE", 2)
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    record = HistoricalGenerationInterval(
+        interval_start=start,
+        interval_end=start + timedelta(hours=1),
+        interval_start_utc=start,
+        interval_end_utc=start + timedelta(hours=1),
+        resolution="hourly",
+        asset_id="A",
+        fuel_type="WIND",
+        generation_mw=10,
+        source_file_id="batch",
+        source_file_name="CSD - 2026-07.zip",
+        source_retrieved_at=start + timedelta(days=1),
+    )
+    records = [
+        record,
+        record.model_copy(update={"asset_id": "B"}),
+        record.model_copy(update={"asset_id": "C"}),
+        record.model_copy(update={"generation_mw": 40}),
+    ]
+    source = {
+        "source_file_id": "batch",
+        "source_file_name": record.source_file_name,
+        "source_updated_at": None,
+    }
+    assert store.replace_generation_source(records, source_hash="first", **source) == (3, 1)
+
+    def read_values() -> list[float]:
+        rows, total = store.query_generation(
+            start=start,
+            end=start + timedelta(hours=1),
+            resolution="hourly",
+            asset_ids=[],
+            fuel_types=[],
+            offset=0,
+            limit=10,
+        )
+        assert total == 3
+        return [row.generation_mw for row in rows]
+
+    assert read_values() == [40, 10, 10]
+    original = store._insert_arrow_rows
+    calls = 0
+
+    def fail_second_batch(connection, registration, rows, table_name):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("second batch failed")
+        original(connection, registration, rows, table_name)
+
+    monkeypatch.setattr(store, "_insert_arrow_rows", fail_second_batch)
+    revised = [r.model_copy(update={"generation_mw": 99}) for r in records]
+    with pytest.raises(RuntimeError, match="second batch failed"):
+        store.replace_generation_source(revised, source_hash="second", **source)
+    assert calls == 2
+    assert read_values() == [40, 10, 10]
+    assert store.source_is_current(HistoricalDataset.HISTORICAL_GENERATION, "batch", "first")
