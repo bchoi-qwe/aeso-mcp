@@ -16,6 +16,7 @@ import pytest
 from pydantic import SecretStr
 
 from aeso_mcp.config import Settings
+from aeso_mcp.errors import DataValidationError
 from aeso_mcp.models.common import DataCompleteness, FinalityStatus, ObservationType
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.history import (
@@ -378,7 +379,11 @@ def test_generation_batches_preserve_dedup_and_rollback(tmp_path, monkeypatch) -
         "source_file_name": record.source_file_name,
         "source_updated_at": None,
     }
-    assert store.replace_generation_source(records, source_hash="first", **source) == (3, 1)
+    assert store.replace_generation_source_stream(iter(records), source_hash="first", **source) == (
+        4,
+        3,
+        1,
+    )
 
     def read_values() -> list[float]:
         rows, total = store.query_generation(
@@ -411,3 +416,51 @@ def test_generation_batches_preserve_dedup_and_rollback(tmp_path, monkeypatch) -
     assert calls == 2
     assert read_values() == [40, 10, 10]
     assert store.source_is_current(HistoricalDataset.HISTORICAL_GENERATION, "batch", "first")
+
+
+def test_streaming_parse_failure_does_not_erase_previous_source(tmp_path, monkeypatch) -> None:
+    store = HistoricalStore(tmp_path / "history")
+    if not store.dependencies_available():
+        pytest.skip("analytics extra is not installed")
+    monkeypatch.setattr("aeso_mcp.storage.history._GENERATION_WRITE_BATCH_SIZE", 1)
+    start = datetime(2026, 7, 1, tzinfo=UTC)
+    row = HistoricalGenerationInterval(
+        interval_start=start,
+        interval_end=start + timedelta(hours=1),
+        interval_start_utc=start,
+        interval_end_utc=start + timedelta(hours=1),
+        resolution="hourly",
+        asset_id="A",
+        fuel_type="WIND",
+        generation_mw=10,
+        source_file_id="stream",
+        source_file_name="source.zip",
+        source_retrieved_at=start + timedelta(days=1),
+    )
+    source = {
+        "source_file_id": "stream",
+        "source_file_name": "source.zip",
+        "source_updated_at": None,
+    }
+    store.replace_generation_source_stream(iter([row]), source_hash="original", **source)
+
+    def broken_stream():
+        yield row.model_copy(update={"generation_mw": 99})
+        raise ValueError("malformed source row")
+
+    with pytest.raises(ValueError, match="malformed source row"):
+        store.replace_generation_source_stream(broken_stream(), source_hash="broken", **source)
+    with pytest.raises(DataValidationError, match="no records"):
+        store.replace_generation_source_stream(iter([]), source_hash="empty", **source)
+    rows, total = store.query_generation(
+        start=start,
+        end=start + timedelta(hours=1),
+        resolution="hourly",
+        asset_ids=[],
+        fuel_types=[],
+        offset=0,
+        limit=10,
+    )
+    assert total == 1
+    assert rows[0].generation_mw == 10
+    assert store.source_is_current(HistoricalDataset.HISTORICAL_GENERATION, "stream", "original")

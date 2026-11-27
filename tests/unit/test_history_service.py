@@ -516,12 +516,15 @@ async def test_sync_historical_store_generation_and_market_series() -> None:
     )
     generation = AsyncMock()
     generation.list_source_files.return_value = [source]
-    generation.fetch_source_file.return_value = ([_gen_interval(start)], "digest1")
+    publication = MagicMock()
+    publication.digest = "digest1"
+    publication.iter_records.return_value = iter([_gen_interval(start)])
+    generation.download_source.return_value = publication
 
     store = MagicMock()
     store.dependencies_available.return_value = True
     store.source_is_current.return_value = False
-    store.replace_generation_source.return_value = (1, 1)
+    store.replace_generation_source_stream.return_value = (1, 1, 1)
     store.missing_generation_intervals.return_value = 0
     store.missing_market_ranges.return_value = [(start, end)]
     store.upsert_market_series.return_value = (1, 1)

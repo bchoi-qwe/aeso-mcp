@@ -44,23 +44,21 @@ async def benchmark(
         start = start_of_market_day(source.coverage_start)
         end = start_of_market_day(source.coverage_end + timedelta(days=1))
         t0 = perf_counter()
-        rows, digest = await provider.fetch_source_file(
-            source, interval=resolution, start=start, end=end
-        )
-        parse_seconds = perf_counter() - t0
-        peak_after_parse = rss_kib()
-        if not rows:
-            raise RuntimeError("Live CSD archive returned no rows")
+        publication = await provider.download_source(source, interval=resolution)
+        digest = publication.digest
+        download_seconds = perf_counter() - t0
+        peak_after_download = rss_kib()
         store = HistoricalStore(root)
         t0 = perf_counter()
-        written, partitions = store.replace_generation_source(
-            rows,
+        received, written, partitions = await asyncio.to_thread(
+            store.replace_generation_source_stream,
+            publication.iter_records(start=start, end=end),
             source_file_id=source.file_id,
             source_file_name=source.name,
             source_hash=digest,
             source_updated_at=source.content_updated_at,
         )
-        write_seconds = perf_counter() - t0
+        parse_write_seconds = perf_counter() - t0
         peak_after_write = rss_kib()
         t0 = perf_counter()
         page, total = store.query_generation(
@@ -84,13 +82,13 @@ async def benchmark(
             "source_file": source.name,
             "source_sha256": digest,
             "compressed_bytes": (root / "raw" / "objects" / digest[:2] / digest).stat().st_size,
-            "records_read": len(rows),
+            "records_read": received,
             "records_written": written,
             "partitions": partitions,
-            "download_archive_normalize_seconds": parse_seconds,
-            "store_write_seconds": write_seconds,
+            "download_seconds": download_seconds,
+            "stream_parse_write_seconds": parse_write_seconds,
             "query_page_seconds": query_seconds,
-            "peak_after_parse_kib": peak_after_parse,
+            "peak_after_download_kib": peak_after_download,
             "peak_after_write_kib": peak_after_write,
             "peak_rss_kib": rss_kib(),
             "store_bytes": await asyncio.to_thread(store_bytes, root),

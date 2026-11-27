@@ -70,6 +70,38 @@ class HistoricalGenerationSourceFile:
         )
 
 
+@dataclass(frozen=True)
+class DownloadedGeneration:
+    """One bounded compressed object; normalize records lazily in the consumer thread."""
+
+    source: HistoricalGenerationSourceFile
+    interval: Literal["hourly", "5-minute"]
+    archive: bytes
+    retrieved_at: datetime
+    digest: str
+
+    def iter_records(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        asset_ids: set[str] | None = None,
+        fuel_types: set[str] | None = None,
+    ) -> Iterator[HistoricalGenerationInterval]:
+        duration = timedelta(hours=1) if self.interval == "hourly" else timedelta(minutes=5)
+        return _iter_generation_rows(
+            _read_single_csv(self.archive),
+            source=self.source,
+            interval=self.interval,
+            duration=duration,
+            retrieved_at=self.retrieved_at,
+            start_utc=to_utc(start),
+            end_utc=to_utc(end),
+            asset_ids=asset_ids,
+            fuel_types=fuel_types,
+        )
+
+
 class HistoricalGenerationProvider:
     """Fetch and normalize hourly or five-minute individual-asset CSD history."""
 
@@ -127,16 +159,13 @@ class HistoricalGenerationProvider:
         files.sort(key=lambda item: (item.coverage_start, item.file_id))
         return files
 
-    async def fetch_source_file(
+    async def download_source(
         self,
         source: HistoricalGenerationSourceFile,
         *,
         interval: Literal["hourly", "5-minute"],
-        start: datetime,
-        end: datetime,
-        asset_ids: set[str] | None = None,
-        fuel_types: set[str] | None = None,
-    ) -> tuple[list[HistoricalGenerationInterval], str]:
+    ) -> DownloadedGeneration:
+        """Fetch and identify a source without materializing normalized records."""
         url = _DOWNLOAD_URL.format(shared=_SHARED_NAME, file_id=source.file_id)
         archive = await self._http.get_bytes(url)
         retrieved_at = utc_now()
@@ -154,21 +183,30 @@ class HistoricalGenerationProvider:
             digest = observation.sha256
         else:
             digest = await asyncio.to_thread(lambda: hashlib.sha256(archive).hexdigest())
-        duration = timedelta(hours=1) if interval == "hourly" else timedelta(minutes=5)
-        result = await asyncio.to_thread(
-            _parse_generation_rows,
-            _read_single_csv(archive),
-            source=source,
-            interval=interval,
-            duration=duration,
-            retrieved_at=retrieved_at,
-            start_utc=to_utc(start),
-            end_utc=to_utc(end),
-            asset_ids=asset_ids,
-            fuel_types=fuel_types,
-        )
-        result.sort(key=lambda item: (item.interval_start_utc, item.asset_id))
-        return result, digest
+        return DownloadedGeneration(source, interval, archive, retrieved_at, digest)
+
+    async def fetch_source_file(
+        self,
+        source: HistoricalGenerationSourceFile,
+        *,
+        interval: Literal["hourly", "5-minute"],
+        start: datetime,
+        end: datetime,
+        asset_ids: set[str] | None = None,
+        fuel_types: set[str] | None = None,
+    ) -> tuple[list[HistoricalGenerationInterval], str]:
+        downloaded = await self.download_source(source, interval=interval)
+
+        def collect() -> list[HistoricalGenerationInterval]:
+            records = list(
+                downloaded.iter_records(
+                    start=start, end=end, asset_ids=asset_ids, fuel_types=fuel_types
+                )
+            )
+            records.sort(key=lambda item: (item.interval_start_utc, item.asset_id))
+            return records
+
+        return await asyncio.to_thread(collect), downloaded.digest
 
 
 def replay_archived_generation(
@@ -217,16 +255,18 @@ def replay_archived_generation(
     if len(payload) != observation.size_bytes:
         raise DataValidationError("Archived CSD source size mismatch.")
     duration = timedelta(hours=1) if interval == "hourly" else timedelta(minutes=5)
-    result = _parse_generation_rows(
-        _read_single_csv(payload),
-        source=source,
-        interval=interval,
-        duration=duration,
-        retrieved_at=datetime.fromisoformat(observation.retrieved_at),
-        start_utc=to_utc(start),
-        end_utc=to_utc(end),
-        asset_ids=asset_ids,
-        fuel_types=fuel_types,
+    result = list(
+        _iter_generation_rows(
+            _read_single_csv(payload),
+            source=source,
+            interval=interval,
+            duration=duration,
+            retrieved_at=datetime.fromisoformat(observation.retrieved_at),
+            start_utc=to_utc(start),
+            end_utc=to_utc(end),
+            asset_ids=asset_ids,
+            fuel_types=fuel_types,
+        )
     )
     result.sort(key=lambda item: (item.interval_start_utc, item.asset_id))
     return result, observation
@@ -292,7 +332,7 @@ def _read_single_csv(archive: bytes) -> Iterator[dict[str, str]]:
         raise DataValidationError("AESO CSD download was not a valid ZIP archive.") from exc
 
 
-def _parse_generation_rows(
+def _iter_generation_rows(
     rows: Iterator[dict[str, str]],
     *,
     source: HistoricalGenerationSourceFile,
@@ -303,8 +343,7 @@ def _parse_generation_rows(
     end_utc: datetime,
     asset_ids: set[str] | None,
     fuel_types: set[str] | None,
-) -> list[HistoricalGenerationInterval]:
-    result: list[HistoricalGenerationInterval] = []
+) -> Iterator[HistoricalGenerationInterval]:
     for row in rows:
         parsed = _parse_generation_row(
             row,
@@ -319,8 +358,7 @@ def _parse_generation_rows(
             continue
         if fuel_types and parsed.fuel_type.upper() not in fuel_types:
             continue
-        result.append(parsed)
-    return result
+        yield parsed
 
 
 def _parse_generation_row(

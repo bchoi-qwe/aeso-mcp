@@ -475,26 +475,21 @@ class HistoryService:
                 continue
             source_start = start_of_market_day(source.coverage_start)
             source_end = start_of_market_day(source.coverage_end + timedelta(days=1))
-            records, digest = await self._generation.fetch_source_file(
-                source,
-                interval=request.generation_interval,
-                start=source_start,
-                end=source_end,
+            publication = await self._generation.download_source(
+                source, interval=request.generation_interval
             )
             downloaded += 1
-            received += len(records)
-            duplicates += len(records) - len(
-                {(item.interval_start_utc, item.resolution, item.asset_id) for item in records}
-            )
-            count, rebuilt = await self._store_call(
-                self._store.replace_generation_source,
-                records,
+            source_received, count, rebuilt = await self._store_call(
+                self._store.replace_generation_source_stream,
+                publication.iter_records(start=source_start, end=source_end),
                 source_file_id=source.file_id,
                 source_file_name=source.name,
-                source_hash=source.source_hash or digest,
+                source_hash=source.source_hash or publication.digest,
                 source_updated_at=source.content_updated_at,
             )
+            received += source_received
             written += count
+            duplicates += source_received - count
             partitions += rebuilt
         missing = await self._store_call(
             self._store.missing_generation_intervals,
