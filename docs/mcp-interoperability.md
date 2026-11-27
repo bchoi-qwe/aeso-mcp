@@ -30,7 +30,7 @@ it authorizes upstream AESO APIM calls only when configured and is never a clien
 
 ## Research skill interoperability
 
-FastMCP 4.2.0 also exposes an `alberta-market-research` skill as ordinary
+FastMCP 4.2.6 also exposes an `alberta-market-research` skill as ordinary
 `skill://` resources, with optional discovery via the experimental MCP Skills extension.
 No proprietary agent capability is required to read the skill's `SKILL.md` resource.
 The skill is reference guidance for interpreting AESO evidence, not a server-side
