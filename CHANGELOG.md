@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Reliability and distribution
+
+- Prevent an invalidated in-flight cache fetch from repopulating the cache or removing a newer flight.
+- Mark the AESO API key optional in MCP Registry metadata and enforce that contract in release checks.
+- Correct runtime and canary versions in the limitations inventory.
+
 ### Fixed
 
 - Exclude unmatched load hours from net-load analytics and market-event evidence instead of
