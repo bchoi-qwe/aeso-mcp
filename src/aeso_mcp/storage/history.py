@@ -16,6 +16,7 @@ import uuid
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
+from itertools import batched
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -36,6 +37,7 @@ from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc, validate_range
 
 _SCHEMA_VERSION = 3
 _MARKET_SERIES_CADENCE = timedelta(hours=1)
+_GENERATION_WRITE_BATCH_SIZE = 10_000
 
 
 class HistoricalStore:
@@ -239,8 +241,7 @@ class HistoricalStore:
             # revised observations in one response; callers report the
             # duplicate count and a later source replacement remains atomic.
             records_by_key[key] = record
-        unique_records = list(records_by_key.values())
-        rows = [self._plain_row(record.model_dump(mode="python")) for record in unique_records]
+        unique_records = records_by_key.values()
         with self._connect() as connection:
             affected = self._existing_generation_partitions(connection, source_file_id)
             affected.update(
@@ -258,7 +259,8 @@ class HistoricalStore:
                 connection.execute(
                     "DELETE FROM generation WHERE source_file_id = ?", [source_file_id]
                 )
-                if rows:
+                for batch in batched(unique_records, _GENERATION_WRITE_BATCH_SIZE, strict=False):
+                    rows = [self._plain_row(record.model_dump(mode="python")) for record in batch]
                     self._insert_arrow_rows(connection, "incoming_generation", rows, "generation")
                 connection.execute(
                     """
@@ -276,7 +278,7 @@ class HistoricalStore:
                         source_hash,
                         source_updated_at,
                         datetime.now(UTC),
-                        len(rows),
+                        len(records_by_key),
                         min((record.interval_start_utc for record in unique_records), default=None),
                         max((record.interval_end_utc for record in unique_records), default=None),
                         "actual",
@@ -290,7 +292,7 @@ class HistoricalStore:
                 connection.rollback()
                 raise
             rebuilt = self._rebuild_generation_partitions(connection, sorted(affected))
-        return len(rows), rebuilt
+        return len(records_by_key), rebuilt
 
     def upsert_market_series(
         self,

@@ -148,3 +148,13 @@ Only new writes with explicit aware retrieval times populate the append-only obs
 relation. Mutable legacy rows are not seeded because their retrieval history cannot be verified.
 Same-time conflicting revisions are rejected rather than chosen arbitrarily. This is a conservative
 observed-state replay, not a reconstruction of first publication time or full historical coverage.
+
+
+### Bounded generation writes
+
+Generation source replacement deduplicates source rows by UTC interval, resolution and asset,
+then converts normalized records to Arrow in batches of 10,000 inside one DuckDB transaction.
+A failure in any batch rolls back the entire database replacement and preserves the prior
+source manifest. Original normalized models are still resident in memory, and Parquet rebuilding
+occurs after the database commit. The live CSD workload workflow reports end-to-end peak RSS;
+this batching limit is not a process-wide memory ceiling.
