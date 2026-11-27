@@ -259,7 +259,7 @@ class HistoricalStore:
                 connection.execute(
                     "DELETE FROM generation WHERE source_file_id = ?", [source_file_id]
                 )
-                for batch in batched(unique_records, _GENERATION_WRITE_BATCH_SIZE):
+                for batch in batched(unique_records, _GENERATION_WRITE_BATCH_SIZE, strict=False):
                     rows = [self._plain_row(record.model_dump(mode="python")) for record in batch]
                     self._insert_arrow_rows(connection, "incoming_generation", rows, "generation")
                 connection.execute(
