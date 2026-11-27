@@ -201,3 +201,12 @@ def test_report_schema_timestamp_and_duplicate_failures(
 ) -> None:
     with pytest.raises(DataValidationError, match=message):
         parser(payload)
+
+
+def test_surplus_missing_status_does_not_invent_event_end() -> None:
+    payload = _fixture("supply_surplus.html").replace(b"<td>2</td>", b"<td>-</td>")
+    rows = _parse_supply_surplus_html(payload)
+    assert rows[-1].status_code is None
+    assert rows[-1].status == "unknown"
+    assert rows[-1].completeness.value == "partial"
+    assert _supply_surplus_events(rows)[0].end is None

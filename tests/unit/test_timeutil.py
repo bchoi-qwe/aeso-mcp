@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from aeso_mcp.errors import InvalidDateRangeError
+from aeso_mcp.errors import ConfigurationError, InvalidDateRangeError
 from aeso_mcp.timeutil import (
     MARKET_TZ,
     add_elapsed,
@@ -22,6 +23,7 @@ from aeso_mcp.timeutil import (
     start_of_market_day,
     to_market,
     to_utc,
+    validate_market_timezone,
     validate_range,
 )
 
@@ -169,3 +171,20 @@ def test_add_elapsed_normalizes_dst_boundaries() -> None:
     assert fall_end.hour == 1
     assert fall_end.fold == 1
     assert elapsed_hours(fall_start, fall_end) == 1.0
+
+
+def test_alberta_permanent_utc_minus_six_after_november_2026() -> None:
+    for day in (date(2026, 11, 1), date(2027, 1, 15), date(2027, 3, 14)):
+        assert market_day_hours(day) == 24
+        assert start_of_market_day(day).utcoffset() == timedelta(hours=-6)
+    start, end = parse_aeso_hour_ending("11/01/2026 02")
+    assert to_utc(start) == datetime(2026, 11, 1, 7, tzinfo=UTC)
+    assert to_utc(end) == datetime(2026, 11, 1, 8, tzinfo=UTC)
+    with pytest.raises(ValueError, match="fall-back day"):
+        parse_aeso_hour_ending("11/01/2026 02*")
+
+
+def test_timezone_guard_rejects_old_mountain_rules() -> None:
+    validate_market_timezone()
+    with pytest.raises(ConfigurationError, match="Outdated Alberta timezone rules"):
+        validate_market_timezone(ZoneInfo("America/Denver"))

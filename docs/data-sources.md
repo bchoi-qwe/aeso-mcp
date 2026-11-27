@@ -119,3 +119,13 @@ coverage, and access policy with observed source fixtures. Store revised market-
 under distinct source identities and never splice legacy and REM economic values without
 an explicit, validated comparison methodology. The target cutover date is not a schema switch.
 Existing analysis identifiers may change because source manifests now include market contract.
+
+
+### Alberta Time transition
+
+AESO [announced](https://aeso.ca/market/market-updates/2026/action-required-review-ets-submissions-for-alberta-time/)
+permanent UTC-6 effective November 1, 2026. Historical CSD files can carry fixed MST (UTC-7)
+or fixed MDT (UTC-6) timestamps; the latest October 2026 hourly file was observed with the
+MDT header during credential-free CI. Historical DST behavior must remain intact. A dash in
+the Supply Surplus status column means the status is unavailable to this parser, not a zero-price
+forecast; retain the interval as unknown and do not infer event endings from missing statuses.

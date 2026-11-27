@@ -80,6 +80,7 @@ class SupplyAdequacyResponse(WarningMixin):
 
 
 SupplySurplusStatus = Literal[
+    "unknown",
     "all_forecast_prices_positive",
     "some_zero_forecast_prices",
     "all_zero_forecast_prices",
@@ -97,7 +98,7 @@ class SupplySurplusInterval(BaseModel):
 
     interval_start: datetime
     interval_end: datetime
-    status_code: int
+    status_code: int | None
     status: SupplySurplusStatus
     publication_time: datetime | None = None
     observation_type: ObservationType = ObservationType.FORECAST

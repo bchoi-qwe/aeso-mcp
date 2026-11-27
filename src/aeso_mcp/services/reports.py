@@ -119,9 +119,15 @@ class ReportsService:
         rows, publication_time, provenance = cached.value
         values = _filter_time_rows(rows, start, end)
         page_values, page = _paginate(values, request.offset, request.limit, paginate)
+        missing_count = sum(row.status_code is None for row in values)
         return SupplySurplusResponse(
             intervals=page_values,
             page=page,
+            warnings=(
+                [f"{missing_count} published hours have unknown Supply Surplus status."]
+                if missing_count
+                else []
+            ),
             metadata=_report_metadata(
                 dataset="AESO Supply Surplus",
                 provenance=provenance,
@@ -135,7 +141,15 @@ class ReportsService:
                 start=start,
                 end=end,
                 publication_time=publication_time,
-                available_series=["supply_surplus"] if values else [],
+                available_series=["supply_surplus"] if missing_count < len(values) else [],
+            ).model_copy(
+                update={
+                    "completeness": DataCompleteness.PARTIAL,
+                    "missing_observations": missing_count,
+                    "missing_observation_count": missing_count,
+                }
+                if missing_count
+                else {}
             ),
         )
 
@@ -167,7 +181,9 @@ class ReportsService:
                 "completeness": (DataCompleteness.COMPLETE if events else DataCompleteness.EMPTY),
             }
         )
-        return SupplySurplusEventsResponse(events=values, page=page, metadata=metadata)
+        return SupplySurplusEventsResponse(
+            events=values, page=page, metadata=metadata, warnings=response.warnings
+        )
 
     async def get_ffr_net_schedule(
         self,
@@ -368,7 +384,17 @@ def _supply_surplus_events(rows: Sequence[SupplySurplusInterval]) -> list[Supply
         is_surplus = row.status_code in {0, 1}
         if not is_surplus:
             if current is not None:
-                events.append(_event(current, current_end or row.interval_start))
+                events.append(
+                    _event(
+                        current,
+                        current_end
+                        if row.status_code == 2
+                        and current_end is not None
+                        and chronological_instant(row.interval_start)
+                        == chronological_instant(current_end)
+                        else None,
+                    )
+                )
                 current = None
                 current_end = None
             continue
@@ -390,6 +416,7 @@ def _supply_surplus_events(rows: Sequence[SupplySurplusInterval]) -> list[Supply
 
 
 def _event(row: SupplySurplusInterval, end: datetime | None) -> SupplySurplusEvent:
+    assert row.status_code is not None
     return SupplySurplusEvent(
         start=row.interval_start,
         end=end,

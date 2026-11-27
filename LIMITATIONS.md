@@ -8,7 +8,7 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
   available for users who intentionally want the current repository version.
 - `server.json` declares the same PyPI artifact for MCP Registry discovery; the Registry stores
   server metadata rather than hosting package artifacts.
-- FastMCP 4 is stable and pinned to the tested `4.2.0` patch. The server targets MCP protocol
+- FastMCP 4 is stable and pinned to the tested `4.2.6` patch. The server targets MCP protocol
   generation `2026-07-28`; FastMCP 4 negotiates the modern protocol with compatible clients while
   retaining support for legacy session-based clients. The FastMCP 4 line continues to evolve, so
   framework behavior remains covered by locked deterministic tests, conformance, and a non-blocking
@@ -64,7 +64,7 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
   `conformance-baseline.yml` and `conformance-2026-baseline.yml`; they are not a claim of full
   everything-server capability.
 - CI rejects any prerelease package in the locked dependency graph. FastMCP is pinned to the
-  tested stable 4.2.0 release; the scheduled non-blocking canary probes only compatible 4.2.x
+  tested stable 4.2.6 release; the scheduled non-blocking canary probes only compatible 4.2.x
   patches.
 - In-process TTL cache is bounded (`AESO_MCP_CACHE_MAX_ENTRIES`, default 512).
 - HTTP rate limits, concurrency limits, and cache state are per process; horizontally scaled
@@ -77,10 +77,10 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 - Public-report and fixed-asset clients are credential-free and allow-listed; response streams have
   25 MiB and 384 MiB decoded-byte caps respectively before full-response assembly.
   CSD archive text and ZIP downloads are likewise streamed with a 100 MiB decoded-byte cap.
-  These bounds limit buffered bodies, not total process memory or ZIP expansion.
+  Direct APIM streams are capped at 64 MiB. These bounds limit buffered bodies, not total process memory or ZIP expansion.
 - All three upstream HTTP clients honor valid Retry-After delays of up to 60 seconds.
   Longer delays return a rate-limit error for the caller to schedule; retries remain bounded
-  by the configured retry count.
+  by the configured retry count and the per-request total deadline (default 300 seconds).
 - No arbitrary URL fetch, shell, or SQL tools.
 - Non-loopback HTTP binding requires bearer authentication by default. This is a custom static
   token, not OAuth; OAuth discovery / Protected Resource Metadata is not implemented. The built-in
@@ -88,3 +88,14 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
   proxy. The explicit insecure override is intended only for isolated deployments that knowingly
   accept the exposure.
 - Rotate any API key that was ever pasted into chat, tickets, or logs.
+
+
+## Market timezone
+
+Alberta adopted permanent UTC-6 on November 1, 2026; historical DST still applies before
+the transition. The locked Python timezone database is at least 2026.3. The application
+checks the active America/Edmonton rules before constructing its providers. Python normally
+prefers the operating system's timezone database; on a stale system, update it or launch
+with `PYTHONTZPATH=""` to use the installed tzdata package. Separate data engines and external
+consumers should validate their own timezone data. CSD fixed-MST and fixed-MDT columns
+are interpreted by their explicit offsets, never by the download date.

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Modernization
+
+- Upgrade FastMCP to 4.2.6 and remediate the dependency graph; add blocking lock audits, SBOM generation and future release attestations.
+- Bound direct upstream responses, upload deadlines and total request duration; record native usage metrics without user identifiers.
+- Improve evaluation precision, exact routing, abstention and result coverage; add a repeatable discovery runtime benchmark.
+- Add opt-in immutable CSD source archives, offline replay and a separate bounded ingestion CLI.
+- Preserve reviewed market-contract identity in dataset metadata and analysis provenance.
+- Adapt the CSD parser to the observed fixed-MDT header and preserve unknown Supply Surplus statuses without fabricating event boundaries; validate Alberta's permanent UTC-6 timezone rules.
+- Add an independent credential-free public live canary.
+
 ### Reliability and distribution
 
 - Prevent an invalidated in-flight cache fetch from repopulating the cache or removing a newer flight.
