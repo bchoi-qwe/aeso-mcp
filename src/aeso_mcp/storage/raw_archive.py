@@ -30,6 +30,7 @@ class RawSourceObservation:
     retrieved_at: str
     source_updated_at: str | None
     schema_version: int = 1
+    source_variant: str | None = None
 
 
 def _utc_text(value: datetime) -> str:
@@ -91,6 +92,7 @@ class RawSourceArchive:
         source_name: str,
         retrieved_at: datetime,
         source_updated_at: datetime | None = None,
+        source_variant: str | None = None,
     ) -> RawSourceObservation:
         digest = hashlib.sha256(payload).hexdigest()
         observation = RawSourceObservation(
@@ -101,6 +103,7 @@ class RawSourceArchive:
             size_bytes=len(payload),
             retrieved_at=_utc_text(retrieved_at),
             source_updated_at=_utc_text(source_updated_at) if source_updated_at else None,
+            source_variant=source_variant,
         )
         manifest = json.dumps(asdict(observation), sort_keys=True, separators=(",", ":")).encode()
         manifest_digest = hashlib.sha256(manifest).hexdigest()
@@ -109,6 +112,59 @@ class RawSourceArchive:
             self.root / "observations" / f"{manifest_digest}.json", manifest, manifest_digest
         )
         return observation
+
+    def select_as_of(
+        self,
+        *,
+        dataset: str,
+        source_id: str,
+        as_of: datetime,
+        source_variant: str | None = None,
+    ) -> RawSourceObservation | None:
+        """Select the latest explicitly observed revision, without network access.
+
+        A source update timestamp is not an information-time substitute. Old manifests
+        without a variant cannot satisfy a variant-specific request.
+        """
+        cutoff = datetime.fromisoformat(_utc_text(as_of))
+        best: RawSourceObservation | None = None
+        best_time: datetime | None = None
+        ambiguous = False
+        for path in (self.root / "observations").glob("*.json"):
+            payload = path.read_bytes()
+            if hashlib.sha256(payload).hexdigest() != path.stem:
+                raise DataValidationError("Raw source manifest integrity check failed.")
+            try:
+                observation = RawSourceObservation(**json.loads(payload))
+                retrieved = datetime.fromisoformat(observation.retrieved_at)
+                _utc_text(retrieved)
+                updated = (
+                    datetime.fromisoformat(observation.source_updated_at)
+                    if observation.source_updated_at is not None
+                    else None
+                )
+                if updated is not None:
+                    _utc_text(updated)
+                if observation.schema_version != 1:
+                    raise ValueError("Unsupported manifest schema")
+            except (ValueError, TypeError) as exc:
+                raise DataValidationError("Invalid raw source observation manifest.") from exc
+            if (
+                observation.dataset != dataset
+                or observation.source_id != source_id
+                or observation.source_variant != source_variant
+                or retrieved > cutoff
+                or (updated is not None and updated > cutoff)
+            ):
+                continue
+            if best_time is None or retrieved > best_time:
+                best, best_time = observation, retrieved
+                ambiguous = False
+            elif retrieved == best_time and observation != best:
+                ambiguous = True
+        if ambiguous:
+            raise DataValidationError("Ambiguous raw source revisions at the same retrieval time.")
+        return best
 
     def read(self, digest: str) -> bytes:
         """Read exactly one content-addressed object and verify its bytes."""
