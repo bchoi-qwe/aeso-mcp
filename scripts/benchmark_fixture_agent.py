@@ -106,7 +106,7 @@ def numeric_match(answer: dict[str, Any] | None, case: dict[str, Any]) -> bool:
 
 def fixture(python: Path, command: dict[str, Any]) -> dict[str, Any]:
     process = subprocess.run(  # noqa: S603
-        [str(python.resolve()), "-m", "scripts.fixture_agent_tools"],
+        [str(python.absolute()), "-m", "scripts.fixture_agent_tools"],
         input=json.dumps(command),
         capture_output=True,
         text=True,
@@ -126,7 +126,10 @@ def run(python: Path) -> dict[str, Any]:
     torch.set_num_threads(2)
     tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=REVISION, trust_remote_code=False)
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL, revision=REVISION, trust_remote_code=False, use_safetensors=True,
+        MODEL,
+        revision=REVISION,
+        trust_remote_code=False,
+        use_safetensors=True,
         dtype=torch.bfloat16,
     ).to("cpu")
     model.eval()
@@ -145,7 +148,9 @@ def run(python: Path) -> dict[str, Any]:
         started = perf_counter()
         with torch.inference_mode():
             output = model.generate(
-                **inputs, do_sample=False, max_new_tokens=192,
+                **inputs,
+                do_sample=False,
+                max_new_tokens=192,
                 pad_token_id=tokenizer.eos_token_id,
             )
         elapsed = perf_counter() - started
@@ -168,14 +173,19 @@ def run(python: Path) -> dict[str, Any]:
         )
         call = parse_object(selection["text"])
         valid = (
-            call is not None and set(call) == {"tool", "arguments"}
+            call is not None
+            and set(call) == {"tool", "arguments"}
             and (call["tool"] is None or isinstance(call["tool"], str))
             and isinstance(call["arguments"], dict)
         )
         route_ok = bool(valid and call is not None and call["tool"] == case["tool"])
         trace = {
-            "id": case["id"], "selection": selection, "route_correct": route_ok,
-            "arguments_correct": False, "tool_executed": False, "numeric_correct": False,
+            "id": case["id"],
+            "selection": selection,
+            "route_correct": route_ok,
+            "arguments_correct": False,
+            "tool_executed": False,
+            "numeric_correct": False,
             "end_to_end_correct": False,
         }
         if case["tool"] is None:
@@ -186,7 +196,8 @@ def run(python: Path) -> dict[str, Any]:
             trace["arguments_correct"] = arguments_match(call["arguments"], case)
             try:
                 data = fixture(
-                    python, {"operation": "call", "name": call["tool"], "arguments": call["arguments"]}
+                    python,
+                    {"operation": "call", "name": call["tool"], "arguments": call["arguments"]},
                 )["result"]
             except (ValueError, subprocess.SubprocessError, KeyError) as exc:
                 trace["tool_error"] = type(exc).__name__
@@ -211,8 +222,11 @@ def run(python: Path) -> dict[str, Any]:
         **{
             key: sum(bool(row[key]) for row in traces)
             for key in (
-                "route_correct", "arguments_correct", "tool_executed",
-                "numeric_correct", "end_to_end_correct",
+                "route_correct",
+                "arguments_correct",
+                "tool_executed",
+                "numeric_correct",
+                "end_to_end_correct",
             )
         },
     }
