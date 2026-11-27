@@ -27,7 +27,9 @@ def validate_market_timezone(zone: ZoneInfo = MARKET_TZ) -> None:
     """Fail before ingestion if the installed timezone database predates Alberta Time."""
     winter = datetime(2027, 1, 15, 12, tzinfo=zone)
     previous_winter = datetime(2025, 1, 15, 12, tzinfo=zone)
-    if winter.utcoffset() != timedelta(hours=-6) or previous_winter.utcoffset() != timedelta(hours=-7):
+    if winter.utcoffset() != timedelta(hours=-6) or previous_winter.utcoffset() != timedelta(
+        hours=-7
+    ):
         raise ConfigurationError(
             "Outdated Alberta timezone rules. Update the OS timezone database or set "
             'PYTHONTZPATH="" before launching to use the installed tzdata package (>=2026.3).'
