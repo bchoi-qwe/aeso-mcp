@@ -98,8 +98,14 @@ reported update time (which is not necessarily the first publication time). Diff
 of identical bytes share a single object; a revised file has a new SHA-256 object. The Python
 `RawSourceArchive.read(digest)` method verifies the bytes before returning them.
 
-The archive captures new downloads only, does not backfill historical vintages and does not
-expose a point-in-time query for all market data. It is opt-in because the original ZIP files can
+The archive captures new downloads only and does not backfill historical vintages. The Python
+`replay_archived_generation(archive, source_id=..., interval=..., start=..., end=..., as_of=...)`
+function in `aeso_mcp.providers.historical_generation` replays one specific CSD file offline,
+selecting only revisions actually retrieved by the timezone-aware cutoff. It returns normalized
+rows and the selected immutable observation (or empty rows and None when unobserved). New
+manifests retain resolution; old manifests without resolution cannot satisfy a typed replay.
+Replay rejects actual intervals beyond the cutoff, conflicting latest retrievals, and corrupt
+manifests. This is not an all-dataset point-in-time query or a full coverage guarantee. It is opt-in because the original ZIP files can
 be large and disk retention is operator-managed. Use a local filesystem supporting atomic hard
 links; a failed manifest write can leave an unreferenced object. Never substitute the archive
 retrieval timestamp for an independently verified publication date.
