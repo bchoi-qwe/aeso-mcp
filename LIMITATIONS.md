@@ -8,11 +8,11 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
   available for users who intentionally want the current repository version.
 - `server.json` declares the same PyPI artifact for MCP Registry discovery; the Registry stores
   server metadata rather than hosting package artifacts.
-- FastMCP 4 is stable and pinned to the tested `4.0.10` patch. The server targets MCP protocol
+- FastMCP 4 is stable and pinned to the tested `4.2.0` patch. The server targets MCP protocol
   generation `2026-07-28`; FastMCP 4 negotiates the modern protocol with compatible clients while
-  retaining support for legacy session-based clients. The FastMCP 4 line is still young, so
+  retaining support for legacy session-based clients. The FastMCP 4 line continues to evolve, so
   framework behavior remains covered by locked deterministic tests, conformance, and a non-blocking
-  4.0.x dependency canary.
+  4.2.x dependency canary.
 
 ## Data coverage
 
@@ -53,7 +53,7 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 
 ## Operations / CI
 
-- Live AESO integration tests require a real `AESO_API_KEY`; they are opt-in locally and run in a
+- Authenticated live AESO integration tests require a real `AESO_API_KEY`; they are opt-in locally and run in a
   scheduled protected GitHub environment when that secret is configured.
   The suite now smokes core/APIM data, the CSD archive, wind/solar/combined and Pool Price
   forecasts, and the named adequacy, surplus, FFR, DDS, TMR, and system-event reports.
@@ -64,7 +64,7 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
   `conformance-baseline.yml` and `conformance-2026-baseline.yml`; they are not a claim of full
   everything-server capability.
 - CI rejects any prerelease package in the locked dependency graph. FastMCP is pinned to the
-  tested stable 4.0.10 release; the scheduled non-blocking canary probes only compatible 4.0.x
+  tested stable 4.2.0 release; the scheduled non-blocking canary probes only compatible 4.2.x
   patches.
 - In-process TTL cache is bounded (`AESO_MCP_CACHE_MAX_ENTRIES`, default 512).
 - HTTP rate limits, concurrency limits, and cache state are per process; horizontally scaled
