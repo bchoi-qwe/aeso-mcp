@@ -116,3 +116,21 @@ model identifier, repeated trial count and scoring rules in both discovery modes
 traces, timestamps, actual input/output token counts when provided by the client, wall-clock
 latency and human-reviewed correctness. Report incomplete trials rather than imputing successes.
 Do not use the canonical questions as both a tuning and independent holdout set.
+
+
+## Credential-free routing holdout and workload evidence
+
+The Research benchmarks workflow freezes actual MCP descriptions and BM25(question) candidates
+on 12 separate routing cases, then compares a pinned Qwen2.5-0.5B-Instruct CPU checkpoint with
+greedy decoding. Full mode receives all tool names/descriptions; compact receives the three pinned
+tools plus BM25 matches. Neither receives the full JSON schemas, and compact discovery is performed
+by the harness, not selected by the model. This measures route choice, not actual tool execution,
+argument correctness, grounded numeric answers or deployed client behavior. Invalid or invented
+names are failures, not successful abstentions. The manifest, raw outputs, exact checkpoint,
+package versions, token counts and timing are retained as workflow artifacts.
+
+A separate workflow job downloads the latest public monthly hourly CSD ZIP, normalizes it, writes
+it to an ephemeral DuckDB/Parquet store and queries a bounded page. It records source SHA-256,
+row counts, bytes, wall times and cumulative Linux process peak RSS. It never writes to a user's
+production historical store. Public network availability and runner hardware influence these
+measurements; do not confuse them with repeatable fixture-only results.
