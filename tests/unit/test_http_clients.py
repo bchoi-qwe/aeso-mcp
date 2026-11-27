@@ -138,3 +138,32 @@ def test_retry_after_http_date() -> None:
     future = datetime.now(UTC) + timedelta(seconds=30)
     delay = parse_retry_after(format_datetime(future, usegmt=True))
     assert delay is not None and 28 <= delay <= 30
+
+
+@respx.mock
+async def test_apim_oversize_stream_stops_and_closes(monkeypatch) -> None:
+    monkeypatch.setattr("aeso_mcp.providers.http._MAX_APIM_BYTES", 4)
+    stream = BodyStream([b"1234", b"5", b"must-not-be-read"])
+    respx.get("https://apimgw.aeso.ca/public/report").respond(200, stream=stream)
+    client = AesoHttpClient(Settings(aeso_api_key=SecretStr("test-key")))
+    try:
+        with pytest.raises(DataValidationError, match="4 bytes"):
+            await client.get_json("report")
+        assert stream.consumed == 2
+        assert stream.closed
+    finally:
+        await client.aclose()
+
+
+@respx.mock
+async def test_apim_compressed_json_decoded_once() -> None:
+    stream = BodyStream([gzip.compress(b'{"ok": true}')])
+    respx.get("https://apimgw.aeso.ca/public/report").respond(
+        200, headers={"Content-Encoding": "gzip"}, stream=stream
+    )
+    client = AesoHttpClient(Settings(aeso_api_key=SecretStr("test-key")))
+    try:
+        assert await client.get_json("report") == {"ok": True}
+        assert stream.closed
+    finally:
+        await client.aclose()
