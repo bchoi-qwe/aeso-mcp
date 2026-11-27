@@ -161,6 +161,7 @@ async def test_live_outages_recent_day(live_settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.public_live
 async def test_live_transmission_public_reports(public_settings: Settings) -> None:
     from aeso_mcp.models.market_power import MarketPowerMitigationRequest
     from aeso_mcp.models.transmission import (
@@ -241,6 +242,7 @@ async def test_live_authenticated_operational_reports(live_settings: Settings) -
 
 
 @pytest.mark.asyncio
+@pytest.mark.public_live
 async def test_live_historical_csd_archive(public_settings: Settings) -> None:
     """Smoke the official archive catalog, download route, ZIP schema, and timestamp parse."""
     container = build_container(public_settings)
@@ -265,6 +267,7 @@ async def test_live_historical_csd_archive(public_settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.public_live
 async def test_live_operating_reserve_and_uc_public_reports(
     public_settings: Settings,
 ) -> None:
@@ -313,6 +316,7 @@ async def test_live_operating_reserve_and_uc_public_reports(
 
 
 @pytest.mark.asyncio
+@pytest.mark.public_live
 async def test_live_official_forecasts_and_named_operational_reports(
     public_settings: Settings,
 ) -> None:

@@ -109,9 +109,11 @@ ignore = [
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
 pythonpath = ["."]
 markers = [
-    "integration: live AESO API tests (require AESO_API_KEY)",
+    "integration: opt-in live AESO tests",
+    "public_live: credential-free public AESO integration tests",
     "slow: longer-running tests",
 ]
 filterwarnings = [
