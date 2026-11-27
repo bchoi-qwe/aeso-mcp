@@ -1,0 +1,82 @@
+[
+  {
+    "id": "h01",
+    "question": "Give me the hourly distribution quantiles of historical Alberta pool prices, not the individual hourly observations.",
+    "expected_tools": [
+      "get_price_statistics"
+    ]
+  },
+  {
+    "id": "h02",
+    "question": "I need a sorted price-duration curve from the hourly pool price history.",
+    "expected_tools": [
+      "get_price_duration_curve"
+    ]
+  },
+  {
+    "id": "h03",
+    "question": "Retrieve the operational current supply and demand archive for an individual generating asset at five-minute resolution.",
+    "expected_tools": [
+      "get_historical_generation"
+    ]
+  },
+  {
+    "id": "h04",
+    "question": "For a wind asset, compute its gross energy revenue at the pool price using its historical generation.",
+    "expected_tools": [
+      "calculate_asset_energy_revenue"
+    ]
+  },
+  {
+    "id": "h05",
+    "question": "Show the approved transmission outages, excluding tentative long-range outages.",
+    "expected_tools": [
+      "get_approved_transmission_outages"
+    ]
+  },
+  {
+    "id": "h06",
+    "question": "Retrieve the currently published hourly forecasts of wind generation and the latest archived forecast vintage as of an earlier timestamp.",
+    "expected_tools": [
+      "get_forecast"
+    ]
+  },
+  {
+    "id": "h07",
+    "question": "Return actual operating reserve activation history, not reserve offer prices or procurement forecasts.",
+    "expected_tools": [
+      "get_operating_reserve_activations"
+    ]
+  },
+  {
+    "id": "h08",
+    "question": "Separately retrieve hourly historical pool prices and historical Alberta internal load for the same week; do not summarize either series.",
+    "expected_tools": [
+      "get_pool_prices",
+      "get_load"
+    ]
+  },
+  {
+    "id": "h09",
+    "question": "Separately retrieve the current asset registry and the official delayed energy merit order, including offered blocks.",
+    "expected_tools": [
+      "get_assets",
+      "get_energy_merit_order"
+    ]
+  },
+  {
+    "id": "h10",
+    "question": "Execute SQL supplied by me against the historical database.",
+    "expected_tools": []
+  },
+  {
+    "id": "h11",
+    "question": "Can a historical CSD generation observation be assumed to be final settlement-metered energy? Explain the distinction without retrieving any market observations.",
+    "expected_tools": []
+  },
+  {
+    "id": "h12",
+    "question": "Give me the guaranteed pool price for tomorrow. Do not give me a forecast or historical comparison.",
+    "expected_tools": []
+  }
+]
