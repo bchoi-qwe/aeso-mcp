@@ -155,9 +155,9 @@ def test_archive_select_rejects_ambiguous_latest_and_corrupted_manifest(tmp_path
         source_name="file.zip",
         retrieved_at=now + timedelta(hours=1),
     )
-    assert archive.select_as_of(
-        dataset="csd", source_id="1", as_of=now + timedelta(hours=1)
-    ) == latest
+    assert (
+        archive.select_as_of(dataset="csd", source_id="1", as_of=now + timedelta(hours=1)) == latest
+    )
     next((tmp_path / "observations").glob("*.json")).write_bytes(b"{}")
     with pytest.raises(DataValidationError, match="manifest integrity"):
         archive.select_as_of(dataset="csd", source_id="1", as_of=now)
