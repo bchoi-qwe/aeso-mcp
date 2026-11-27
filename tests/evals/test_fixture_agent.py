@@ -10,9 +10,7 @@ from scripts.fixture_agent_tools import execute, validate_call
 async def test_fixture_actual_tools_return_fixed_values() -> None:
     schemas = await execute({"operation": "schemas"})
     assert {tool["name"] for tool in schemas["tools"]} == {"get_load", "get_pool_prices"}
-    arguments = {
-        "request": {"start": "2025-01-15T08:00:00Z", "end": "2025-01-15T09:00:00Z"}
-    }
+    arguments = {"request": {"start": "2025-01-15T08:00:00Z", "end": "2025-01-15T09:00:00Z"}}
     result = await execute({"operation": "call", "name": "get_pool_prices", "arguments": arguments})
     assert result["result"]["intervals"][0]["pool_price_cad_per_mwh"] == 0
     assert len(result["result"]["intervals"]) == 1

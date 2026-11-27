@@ -167,7 +167,7 @@ def run(python: Path) -> dict[str, Any]:
         selection = infer(
             "Choose a tool using the schemas, or abstain if neither can answer. "
             'Return only JSON with keys "tool" and "arguments". The tool is its exact name '
-            'and arguments must conform to its input schema. If unsupported, return '
+            "and arguments must conform to its input schema. If unsupported, return "
             '{"tool":null,"arguments":{}}. Use the explicit UTC timestamps in the question.\n'
             f"Tools: {json.dumps(tools)}\nQuestion: {case['question']}"
         )
