@@ -36,10 +36,15 @@ def _box_html() -> str:
     return f"<script>Box.postStreamData = {json.dumps(payload)};</script>"
 
 
-def _generation_zip() -> bytes:
+def _generation_zip(*, mdt: bool = False) -> bytes:
     csv_body = """Date (MST),Date (MPT),Asset Short Name,Asset Name,Asset Grouping,Volume,Maximum Capability,System Capability,Fuel Type,Sub Fuel Type,Planning Area,Region
 2024-11-03 01:00:00,2024-11-03 01:00:00,TEST1,Test Asset,Gas,100.5,120,115,GAS,COMBINED CYCLE,1,SOUTH
 """
+    if mdt:
+        csv_body = csv_body.replace("Date (MST)", "Date (MDT)").replace(
+            "2024-11-03 01:00:00,2024-11-03 01:00:00",
+            "2024-11-03 02:00:00,2024-11-03 01:00:00",
+        )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as bundle:
         bundle.writestr("generation.csv", csv_body)
@@ -47,10 +52,13 @@ def _generation_zip() -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_historical_generation_catalog_zip_and_dst_instant(tmp_path: Path) -> None:
+@pytest.mark.parametrize("mdt", [False, True])
+async def test_historical_generation_catalog_zip_and_dst_instant(
+    tmp_path: Path, mdt: bool
+) -> None:
     http = AsyncMock()
     http.get_text.return_value = _box_html()
-    http.get_bytes.return_value = _generation_zip()
+    http.get_bytes.return_value = _generation_zip(mdt=mdt)
     archive = RawSourceArchive(tmp_path)
     provider = HistoricalGenerationProvider(http, archive)
 

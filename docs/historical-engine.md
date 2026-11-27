@@ -15,8 +15,10 @@ settlement-metered generation. Values are average MW for each interval.
 
 ## Timestamp handling
 
-The archive publishes `Date (MST)` and `Date (MPT)`. The adapter treats `Date (MST)` as a fixed
-UTC-7 instant, converts it to UTC, and then presents `America/Edmonton` market time. This avoids
+The historical archive publishes `Date (MST)` (fixed UTC-7), while the observed October 2026
+file uses `Date (MDT)` (fixed UTC-6); both also have a `Date (MPT)` display column. The adapter
+requires exactly one supported fixed-offset column, converts it to UTC, and presents
+`America/Edmonton` market time. The source header, not the retrieval date, determines the offset. This avoids
 inventing or collapsing an instant during the repeated fall-back hour.
 
 Every interval includes local and UTC boundaries, resolution, asset/fuel fields, capability

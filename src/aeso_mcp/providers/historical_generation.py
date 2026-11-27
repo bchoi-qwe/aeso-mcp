@@ -32,7 +32,6 @@ _STREAM_RE = re.compile(r"Box\.postStreamData\s*=\s*(\{.*?\});", re.DOTALL)
 _MONTH_RANGE_RE = re.compile(r"-\s*(\d{4})-(\d{2})(?:\s+to\s+(\d{4})-(\d{2}))?\.zip$")
 _REQUIRED_COLUMNS = frozenset(
     {
-        "Date (MST)",
         "Asset Short Name",
         "Asset Name",
         "Asset Grouping",
@@ -45,7 +44,10 @@ _REQUIRED_COLUMNS = frozenset(
         "Region",
     }
 )
-_MST = timezone(timedelta(hours=-7), name="MST")
+_FIXED_TIMESTAMP_COLUMNS = {
+    "Date (MST)": timezone(timedelta(hours=-7), name="MST"),
+    "Date (MDT)": timezone(timedelta(hours=-6), name="MDT"),
+}
 _MAX_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 
 
@@ -272,12 +274,19 @@ def _read_single_csv(archive: bytes) -> Iterator[dict[str, str]]:
                 text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
                 reader = csv.DictReader(text)
                 fields = {field.strip() for field in (reader.fieldnames or [])}
+                timestamp_columns = fields & _FIXED_TIMESTAMP_COLUMNS.keys()
+                if len(timestamp_columns) != 1:
+                    raise DataValidationError(
+                        "AESO CSD CSV must contain exactly one fixed timestamp column "
+                        "(Date (MST) or Date (MDT))."
+                    )
                 missing = sorted(_REQUIRED_COLUMNS - fields)
                 if missing:
                     raise DataValidationError(
                         f"AESO CSD CSV omitted required columns: {', '.join(missing)}. "
                         f"Observed columns: {', '.join(sorted(fields))[:1000]}."
                     )
+                reader.fieldnames = [field.strip() for field in (reader.fieldnames or [])]
                 yield from reader
     except zipfile.BadZipFile as exc:
         raise DataValidationError("AESO CSD download was not a valid ZIP archive.") from exc
@@ -323,13 +332,14 @@ def _parse_generation_row(
     retrieved_at: datetime,
 ) -> HistoricalGenerationInterval:
     try:
-        fixed_mst = datetime.strptime(row["Date (MST)"].strip(), "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=_MST
+        column = next(name for name in _FIXED_TIMESTAMP_COLUMNS if name in row)
+        fixed_time = datetime.strptime(row[column].strip(), "%Y-%m-%d %H:%M:%S").replace(
+            tzinfo=_FIXED_TIMESTAMP_COLUMNS[column]
         )
-        start_utc = fixed_mst.astimezone(UTC)
+        start_utc = fixed_time.astimezone(UTC)
         local_start = start_utc.astimezone(MARKET_TZ)
         generation = float(row["Volume"])
-    except (KeyError, TypeError, ValueError) as exc:
+    except (KeyError, TypeError, ValueError, StopIteration) as exc:
         raise DataValidationError("AESO CSD row contained an invalid timestamp or volume.") from exc
     return HistoricalGenerationInterval(
         interval_start=local_start,

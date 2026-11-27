@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 """Timezone-aware market time helpers.
 
-AESO market time is Mountain Time. We expose ``America/Edmonton`` as the
-canonical zone. ``US/Mountain`` (used by GridStatus) is equivalent for Alberta.
+AESO uses ``America/Edmonton``: historical Mountain Time and permanent UTC-6
+(Alberta Time) from November 1, 2026. US/Mountain is no longer equivalent.
 """
 
 from __future__ import annotations
