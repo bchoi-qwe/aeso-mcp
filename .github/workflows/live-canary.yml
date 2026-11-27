@@ -1,6 +1,11 @@
 name: AESO live canary
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/live-canary.yml'
+      - 'tests/integration/test_live_aeso.py'
   schedule:
     - cron: "17 12 * * 0"
   workflow_dispatch:
@@ -33,4 +38,9 @@ jobs:
       - name: Run bounded AESO live canary
         env:
           AESO_API_KEY: ${{ secrets.AESO_API_KEY }}
-        run: uv run pytest tests/integration -m 'integration and not public_live' -q --tb=short
+        run: |
+          if [ -z "$AESO_API_KEY" ]; then
+            echo '::error::The protected aeso-live environment needs AESO_API_KEY.'
+            exit 1
+          fi
+          uv run pytest tests/integration -m 'integration and not public_live' -q --tb=short --show-capture=no
