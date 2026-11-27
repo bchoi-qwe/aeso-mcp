@@ -13,7 +13,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from aeso_mcp.errors import DataValidationError, InvalidDateRangeError
-from aeso_mcp.models.common import ProviderName
+from aeso_mcp.models.common import DataCompleteness, ProviderName
 from aeso_mcp.models.reports import (
     DdsAvailabilityRecord,
     FfrNetScheduleInterval,
@@ -211,8 +211,8 @@ def _parse_supply_surplus_html(raw: bytes) -> list[SupplySurplusInterval]:
         if len(cells) != 2:
             raise DataValidationError("Supply Surplus report row has an unexpected column count.")
         start, _ = _parse_report_hour(cells[0], "Supply Surplus")
-        code = _integer(cells[1], "Supply Surplus status")
-        if code not in _SURPLUS_STATUS:
+        code = None if cells[1] == "-" else _integer(cells[1], "Supply Surplus status")
+        if code is not None and code not in _SURPLUS_STATUS:
             raise DataValidationError(f"Supply Surplus report has unknown status code {code}.")
         key = chronological_instant(start)
         if key in seen:
@@ -223,7 +223,10 @@ def _parse_supply_surplus_html(raw: bytes) -> list[SupplySurplusInterval]:
                 interval_start=start,
                 interval_end=add_elapsed(start, _ONE_HOUR),
                 status_code=code,
-                status=_SURPLUS_STATUS[code],
+                status=_SURPLUS_STATUS[code] if code is not None else "unknown",
+                completeness=(
+                    DataCompleteness.PARTIAL if code is None else DataCompleteness.COMPLETE
+                ),
             )
         )
     if not intervals:

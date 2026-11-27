@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Literal
 
-from aeso_mcp.errors import DataValidationError
+from aeso_mcp.errors import DataValidationError, InvalidDateRangeError
 from aeso_mcp.models.history import HistoricalGenerationInterval
 from aeso_mcp.providers.archive_http import AesoArchiveHttpClient
-from aeso_mcp.storage.raw_archive import RawSourceArchive
-from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc, utc_now
+from aeso_mcp.storage.raw_archive import RawSourceArchive, RawSourceObservation
+from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc, utc_now, validate_range
 
 _SHARED_NAME = "qofgn9axnnw6uq3ip1goiq2ngb11txe5"
 _FOLDERS: dict[str, str] = {"hourly": "196178549071", "5-minute": "196706124680"}
@@ -147,6 +147,7 @@ class HistoricalGenerationProvider:
                 source_name=source.name,
                 retrieved_at=retrieved_at,
                 source_updated_at=source.content_updated_at,
+                source_variant=interval,
             )
             digest = observation.sha256
         else:
@@ -166,6 +167,67 @@ class HistoricalGenerationProvider:
         )
         result.sort(key=lambda item: (item.interval_start_utc, item.asset_id))
         return result, digest
+
+
+def replay_archived_generation(
+    archive: RawSourceArchive,
+    *,
+    source_id: str,
+    interval: Literal["hourly", "5-minute"],
+    start: datetime,
+    end: datetime,
+    as_of: datetime,
+    asset_ids: set[str] | None = None,
+    fuel_types: set[str] | None = None,
+) -> tuple[list[HistoricalGenerationInterval], RawSourceObservation | None]:
+    """Offline, single-file replay of the latest revision actually observed by a cutoff."""
+    if any(value.utcoffset() is None for value in (start, end, as_of)):
+        raise InvalidDateRangeError("Replay requires timezone-aware start, end, and as_of.")
+    start, end = validate_range(start, end, max_days=366 if interval == "hourly" else 7)
+    if to_utc(end) > to_utc(as_of):
+        raise InvalidDateRangeError("Replay of actual generation cannot extend beyond as_of.")
+    observation = archive.select_as_of(
+        dataset="historical_generation",
+        source_id=source_id,
+        source_variant=interval,
+        as_of=as_of,
+    )
+    if observation is None:
+        return [], None
+    coverage = _coverage_from_name(observation.source_name)
+    if coverage is None:
+        raise DataValidationError("Archived CSD source has an unrecognized coverage name.")
+    updated_at = (
+        datetime.fromisoformat(observation.source_updated_at)
+        if observation.source_updated_at is not None
+        else None
+    )
+    source = HistoricalGenerationSourceFile(
+        file_id=observation.source_id,
+        name=observation.source_name,
+        size_bytes=observation.size_bytes,
+        content_updated_at=updated_at,
+        source_hash=observation.sha256,
+        coverage_start=coverage[0],
+        coverage_end=coverage[1],
+    )
+    payload = archive.read(observation.sha256)
+    if len(payload) != observation.size_bytes:
+        raise DataValidationError("Archived CSD source size mismatch.")
+    duration = timedelta(hours=1) if interval == "hourly" else timedelta(minutes=5)
+    result = _parse_generation_rows(
+        _read_single_csv(payload),
+        source=source,
+        interval=interval,
+        duration=duration,
+        retrieved_at=datetime.fromisoformat(observation.retrieved_at),
+        start_utc=to_utc(start),
+        end_utc=to_utc(end),
+        asset_ids=asset_ids,
+        fuel_types=fuel_types,
+    )
+    result.sort(key=lambda item: (item.interval_start_utc, item.asset_id))
+    return result, observation
 
 
 def _parse_box_stream(html: str) -> dict[str, object]:
@@ -213,7 +275,8 @@ def _read_single_csv(archive: bytes) -> Iterator[dict[str, str]]:
                 missing = sorted(_REQUIRED_COLUMNS - fields)
                 if missing:
                     raise DataValidationError(
-                        f"AESO CSD CSV omitted required columns: {', '.join(missing)}."
+                        f"AESO CSD CSV omitted required columns: {', '.join(missing)}. "
+                        f"Observed columns: {', '.join(sorted(fields))[:1000]}."
                     )
                 yield from reader
     except zipfile.BadZipFile as exc:

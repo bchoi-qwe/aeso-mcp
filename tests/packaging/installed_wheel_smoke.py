@@ -7,12 +7,14 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+from importlib.metadata import requires
 from importlib.metadata import version as installed_version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+from packaging.requirements import Requirement
 from pydantic import SecretStr
 
 import aeso_mcp
@@ -166,8 +168,17 @@ async def smoke() -> None:
     actual_version = installed_version("aeso-mcp")
     framework_version = installed_version("fastmcp")
     slim_version = installed_version("fastmcp-slim")
-    # The release pins both distributions; keep the smoke aligned with the packaged dependency.
-    if (framework_version, slim_version) != ("4.2.0", "4.2.0"):
+    # Validate the installed wheel against its own exact dependency declaration.
+    framework_requirements = [
+        requirement
+        for raw in requires("aeso-mcp") or []
+        if (requirement := Requirement(raw)).name == "fastmcp"
+    ]
+    if (
+        len(framework_requirements) != 1
+        or str(framework_requirements[0].specifier) != f"=={framework_version}"
+        or slim_version != framework_version
+    ):
         raise SystemExit(
             "Installed wheel FastMCP framework mismatch: "
             f"fastmcp={framework_version}, fastmcp-slim={slim_version}"

@@ -57,6 +57,13 @@ class Settings(BaseSettings):
         ge=5.0,
         le=300.0,
     )
+    http_total_timeout_s: float = Field(
+        default=300.0,
+        validation_alias="AESO_MCP_HTTP_TOTAL_TIMEOUT_S",
+        ge=1.0,
+        le=1800.0,
+        description="Total wall-clock budget per direct upstream request including retries.",
+    )
     http_max_retries: int = Field(
         default=3,
         validation_alias="AESO_MCP_HTTP_MAX_RETRIES",

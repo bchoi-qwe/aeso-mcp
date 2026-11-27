@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - ".github/workflows/public-live-canary.yml"
+      - "src/aeso_mcp/providers/historical_generation.py"
+      - "src/aeso_mcp/providers/reports.py"
+      - "tests/integration/test_live_aeso.py"
   schedule:
     - cron: "23 12 * * 3"
   workflow_dispatch:
