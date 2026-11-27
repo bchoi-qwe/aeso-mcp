@@ -133,3 +133,18 @@ nonzero status for domain errors. A scheduler can call it with an explicit slidi
 and a persistent local volume. Use one writer per history root; this is not a multi-process
 warehouse or an always-on scheduler. GitHub-hosted runners are ephemeral and are suitable
 for fixture tests, not durable historical storage.
+
+
+## Observed actual-series replay (Python)
+
+`HistoricalStore.replay_market_actuals(start=..., end=..., as_of=...)` returns an hourly UTC
+outer grid for Pool Price and AIL (maximum 366 days, hour-aligned aware bounds). Each non-null
+cell retains its observed source metadata and finality. Missing cells stay null; a true zero
+remains zero. The cutoff requires both the actual interval's end and its recorded retrieval
+(and any reported source update) to be no later than as_of. Embedded forecast values are
+excluded: use the independently timestamped forecast-vintage API for forecasts.
+
+Only new writes with explicit aware retrieval times populate the append-only observation
+relation. Mutable legacy rows are not seeded because their retrieval history cannot be verified.
+Same-time conflicting revisions are rejected rather than chosen arbitrarily. This is a conservative
+observed-state replay, not a reconstruction of first publication time or full historical coverage.
