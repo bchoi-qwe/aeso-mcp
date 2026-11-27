@@ -9,7 +9,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastmcp import FastMCP, settings as fastmcp_settings
+from fastmcp import FastMCP
+from fastmcp import settings as fastmcp_settings
 from fastmcp.server.middleware.usage import UsageMiddleware
 
 from aeso_mcp import __version__
