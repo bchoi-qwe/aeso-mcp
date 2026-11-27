@@ -28,9 +28,9 @@ from aeso_mcp.models.history import (
     HistoricalMarketSeries,
     HistoricalMarketSeriesCoverage,
     HistoricalMarketSeriesInterval,
-    MarketSeriesSelection,
-    MarketReplayRow,
     MarketReplayResponse,
+    MarketReplayRow,
+    MarketSeriesSelection,
 )
 from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc, validate_range
 
@@ -714,7 +714,8 @@ class HistoricalStore:
             raise DataValidationError("Actual replay cannot include intervals after as_of.")
         self.initialize()
         with self._connect() as connection:
-            records = connection.execute("""
+            records = connection.execute(
+                """
                 WITH eligible AS (
                     SELECT *,
                            dense_rank() OVER (
@@ -735,7 +736,9 @@ class HistoricalStore:
                        completeness, schema_version
                 FROM eligible WHERE revision_rank = 1
                 ORDER BY interval_start_utc, series
-            """, [start_utc, end_utc, cutoff, cutoff, cutoff]).fetchall()
+                """,
+                [start_utc, end_utc, cutoff, cutoff, cutoff],
+            ).fetchall()
         observed: dict[tuple[datetime, str], HistoricalMarketSeriesInterval] = {}
         for record in records:
             series = str(record[2])
@@ -748,11 +751,13 @@ class HistoricalStore:
         rows: list[MarketReplayRow] = []
         current = start_utc
         while current < end_utc:
-            rows.append(MarketReplayRow(
-                interval_start_utc=current,
-                pool_price=observed.get((current, "pool_price")),
-                ail=observed.get((current, "ail")),
-            ))
+            rows.append(
+                MarketReplayRow(
+                    interval_start_utc=current,
+                    pool_price=observed.get((current, "pool_price")),
+                    ail=observed.get((current, "ail")),
+                )
+            )
             current += timedelta(hours=1)
         return MarketReplayResponse(
             start=start_utc,
