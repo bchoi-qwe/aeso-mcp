@@ -22,6 +22,17 @@ def score(cases: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[st
     """Score explicit routing, argument, dataset, caveat, relationship, and prose contracts."""
     cases_by_id = {str(item["id"]): item for item in cases}
     results_by_id = {str(item["id"]): item for item in results}
+    if len(cases_by_id) != len(cases) or len(results_by_id) != len(results):
+        raise ValueError("Duplicate evaluation case or result ID")
+    unknown_ids = results_by_id.keys() - cases_by_id.keys()
+    if unknown_ids:
+        raise ValueError(f"Unknown result IDs: {sorted(unknown_ids)}")
+
+    selected_count = 0
+    exact_routes = 0
+    no_tool_count = 0
+    correct_abstentions = 0
+    answered_count = 0
     hits = {
         "route": 0,
         "argument": 0,
@@ -34,12 +45,19 @@ def score(cases: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[st
     totals = {name: 0 for name in hits}
 
     for identifier, case in cases_by_id.items():
+        present = identifier in results_by_id
         result = results_by_id.get(identifier, {})
         selected = set(result.get("selected_tools", []))
-        answer = str(result.get("answer", "")).casefold()
+        answer = str(result.get("answer", "")).strip().casefold()
+        answered_count += bool(answer)
         expected = set(case.get("expected_tools", []))
         hits["route"] += len(selected & expected)
         totals["route"] += len(expected)
+        selected_count += len(selected)
+        exact_routes += present and selected == expected
+        if not expected:
+            no_tool_count += 1
+            correct_abstentions += present and bool(answer) and not selected
 
         tool_arguments = result.get("tool_arguments", {})
         provided_fields = {
@@ -74,12 +92,18 @@ def score(cases: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[st
             hits["required"] += str(concept).casefold() in answer
         for claim in case.get("prohibited_interpretations", []):
             totals["prohibited"] += 1
-            hits["prohibited"] += str(claim).casefold() not in answer
+            hits["prohibited"] += bool(answer) and str(claim).casefold() not in answer
 
     return {
         "case_count": len(cases_by_id),
         "result_count": len(results_by_id),
+        "result_coverage": _ratio(len(results_by_id), len(cases_by_id)),
+        "answer_coverage": _ratio(answered_count, len(cases_by_id)),
         "tool_route_recall": _ratio(hits["route"], totals["route"]),
+        "tool_route_precision": hits["route"] / selected_count if selected_count else 0.0,
+        "exact_route_accuracy": _ratio(exact_routes, len(cases_by_id)),
+        "no_tool_case_count": no_tool_count,
+        "no_tool_abstention_accuracy": _ratio(correct_abstentions, no_tool_count),
         "argument_field_recall": _ratio(hits["argument"], totals["argument"]),
         "dataset_selection_recall": _ratio(hits["dataset"], totals["dataset"]),
         "required_caveat_recall": _ratio(hits["caveat"], totals["caveat"]),
