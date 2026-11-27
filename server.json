@@ -19,8 +19,8 @@
       "environmentVariables": [
         {
           "name": "AESO_API_KEY",
-          "description": "AESO APIM subscription key",
-          "isRequired": true,
+          "description": "Optional AESO APIM subscription key; required only for authenticated datasets.",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         }

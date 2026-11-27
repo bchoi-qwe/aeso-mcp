@@ -52,6 +52,12 @@ def main() -> None:
         details = ", ".join(f"{path}={version}" for path, version in versions.items())
         raise SystemExit(f"Release version mismatch: {details}")
 
+    for package in registry.get("packages", []):
+        if package.get("identifier") == pyproject["project"]["name"]:
+            for variable in package.get("environmentVariables", []):
+                if variable.get("name") == "AESO_API_KEY" and variable.get("isRequired"):
+                    raise SystemExit("Registry must not require AESO_API_KEY for public tools")
+
     sys.stdout.write(f"Release metadata version: {package_version}\n")
 
 

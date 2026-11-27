@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Cache ownership, shared reuse, and configured bounds at service boundaries."""
 
+import asyncio
 from unittest.mock import AsyncMock
 
 from pydantic import SecretStr
@@ -57,3 +58,30 @@ async def test_default_service_cache_respects_configured_capacity() -> None:
         await service.get_assets(AssetsRequest(asset_id=str(index)))
     await service.get_assets(AssetsRequest(asset_id="0"))
     assert provider.get_assets.await_count == 18
+
+
+async def test_clear_detaches_inflight_and_prevents_stale_repopulation() -> None:
+    cache = AsyncTTLCache()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def old_factory() -> int:
+        started.set()
+        await release.wait()
+        return 1
+
+    async def new_factory() -> int:
+        return 2
+
+    old = asyncio.create_task(cache.get_or_set("key", old_factory, ttl_s=60))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        cache.clear()
+        fresh = await asyncio.wait_for(cache.get_or_set("key", new_factory, ttl_s=60), timeout=2)
+        assert fresh == 2
+    finally:
+        release.set()
+        assert await old == 1
+    result = await cache.get_or_set_with_metadata("key", old_factory, ttl_s=60)
+    assert result.value == 2
+    assert result.info.cache_hit
