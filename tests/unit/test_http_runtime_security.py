@@ -211,3 +211,13 @@ async def _empty_receive() -> Message:
 
 async def _empty_send(_message: Message) -> None:
     return None
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_bearer_is_rejected_without_server_error() -> None:
+    transport = _http_app(_settings(http_bearer_token=SecretStr("remote-token")))
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/echo", headers=[(b"authorization", b"Bearer \xff")], content=b"ok"
+        )
+    assert response.status_code == 401
