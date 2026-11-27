@@ -14,9 +14,13 @@ permissions:
 
 jobs:
   csd-workload:
-    name: Full live CSD workload
+    name: Full CSD workload (${{ matrix.resolution }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        resolution: ["hourly", "5-minute"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
@@ -25,11 +29,13 @@ jobs:
       - name: Install locked analytics environment
         run: uv sync --locked --group dev --extra analytics
       - name: Benchmark complete archive
+        env:
+          RESOLUTION: ${{ matrix.resolution }}
         run: |
           set -o pipefail
-          uv run python scripts/benchmark_csd_workload.py | tee csd-workload.json
+          uv run python scripts/benchmark_csd_workload.py --resolution "$RESOLUTION" | tee csd-workload.json
       - name: Upload evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: csd-workload
+          name: csd-workload-${{ matrix.resolution }}
           path: csd-workload.json
