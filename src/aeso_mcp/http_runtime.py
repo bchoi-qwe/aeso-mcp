@@ -114,7 +114,11 @@ class RequestObservabilityMiddleware:
             logger.info(
                 "http_request request_id=%s method=%s path=%s status=%s duration_ms=%.1f",
                 request_id,
-                scope.get("method") if scope.get("method") in {"GET", "POST", "DELETE", "OPTIONS"} else "OTHER",
+                (
+                    scope.get("method")
+                    if scope.get("method") in {"GET", "POST", "DELETE", "OPTIONS"}
+                    else "OTHER"
+                ),
                 scope.get("path") if scope.get("path") in {"/mcp", *_PROBE_PATHS} else "other",
                 status,
                 (time.monotonic() - started) * 1000,
@@ -242,9 +246,11 @@ class RequestBodyLimitMiddleware:
         app: ASGIApp,
         max_bytes: int,
         exempt_paths: Iterable[str] = _PROBE_PATHS,
+        timeout_s: float = 10.0,
     ) -> None:
         self.app = app
         self._max_bytes = max_bytes
+        self._timeout_s = timeout_s
         self._exempt_paths = frozenset(exempt_paths)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -270,19 +276,24 @@ class RequestBodyLimitMiddleware:
                 return
 
         body = bytearray()
-        while True:
-            message = await receive()
-            if message["type"] != "http.request":
-                await self.app(scope, self._replay_receive(message, receive), send)
-                return
-            chunk = message.get("body", b"")
-            if len(body) + len(chunk) > self._max_bytes:
-                response = _json_error(413, "Request body exceeds the configured limit.")
-                await response(scope, receive, send)
-                return
-            body.extend(chunk)
-            if not message.get("more_body", False):
-                break
+        try:
+            async with asyncio.timeout(self._timeout_s):
+                while True:
+                    message = await receive()
+                    if message["type"] != "http.request":
+                        return
+                    chunk = message.get("body", b"")
+                    if len(body) + len(chunk) > self._max_bytes:
+                        response = _json_error(413, "Request body exceeds the configured limit.")
+                        await response(scope, receive, send)
+                        return
+                    body.extend(chunk)
+                    if not message.get("more_body", False):
+                        break
+        except TimeoutError:
+            response = _json_error(408, "Request body deadline exceeded.")
+            await response(scope, receive, send)
+            return
 
         await self.app(scope, self._replay_receive(bytes(body), receive), send)
 
