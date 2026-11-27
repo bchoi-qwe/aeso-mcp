@@ -33,8 +33,10 @@ def parse_request(argv: list[str] | None = None) -> HistoricalStoreSyncRequest:
     parser.add_argument("--start", type=_aware_datetime, required=True)
     parser.add_argument("--end", type=_aware_datetime, required=True)
     parser.add_argument(
-        "--dataset", choices=[item.value for item in HistoricalDataset],
-        action="append", required=True,
+        "--dataset",
+        choices=[item.value for item in HistoricalDataset],
+        action="append",
+        required=True,
     )
     parser.add_argument("--generation-interval", choices=["hourly", "5-minute"], default="hourly")
     parser.add_argument("--refresh", action="store_true")
