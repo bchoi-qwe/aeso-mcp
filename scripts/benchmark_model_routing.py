@@ -6,13 +6,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
-REVISION = "7ae557604adf67be50417f59c2c2f167def9a775"
+MODELS = {
+    "0.5b": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae557604adf67be50417f59c2c2f167def9a775"),
+    "1.5b": ("Qwen/Qwen2.5-1.5B-Instruct", "775b11afaf83e0dc75bd5abaf90133e47b3ec082"),
+    "3b": ("Qwen/Qwen2.5-3B-Instruct", "aa8e72537993ba99e69dfaafa59ed015b17504d1"),
+}
 
 
 def parse_selection(output: str, available: set[str]) -> list[str] | None:
@@ -26,6 +30,15 @@ def parse_selection(output: str, available: set[str]) -> list[str] | None:
     if len(value) != len(set(value)) or not set(value) <= available:
         return None
     return sorted(value)
+
+
+def parse_fenced_selection(output: str, available: set[str]) -> list[str] | None:
+    """Secondary diagnostic: accept one exact JSON fence, never surrounding prose."""
+    strict = parse_selection(output, available)
+    if strict is not None:
+        return strict
+    match = re.fullmatch(r"```(?:json)?\s*([\s\S]+?)\s*```", output.strip(), flags=re.IGNORECASE)
+    return parse_selection(match.group(1), available) if match else None
 
 
 def summarize(rows: list[dict[str, Any]]) -> dict[str, float | int]:
@@ -47,16 +60,21 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, float | int]:
     }
 
 
-def run(manifest: dict[str, Any], *, threads: int) -> dict[str, Any]:
+def run(manifest: dict[str, Any], *, threads: int, model_size: str = "0.5b") -> dict[str, Any]:
     # Kept in a separate benchmark environment, never a runtime MCP dependency.
     import torch
     import transformers
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     torch.set_num_threads(threads)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=REVISION, trust_remote_code=False)
+    model_id, revision = MODELS[model_size]
+    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, trust_remote_code=False)
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL, revision=REVISION, trust_remote_code=False, use_safetensors=True
+        model_id,
+        revision=revision,
+        trust_remote_code=False,
+        use_safetensors=True,
+        dtype=torch.bfloat16 if model_size != "0.5b" else torch.float32,
     ).to("cpu")
     model.eval()
     descriptions = manifest["descriptions"]
@@ -99,6 +117,7 @@ def run(manifest: dict[str, Any], *, threads: int) -> dict[str, Any]:
                     "expected": sorted(case["expected_tools"]),
                     "available": names,
                     "selected": parse_selection(answer, set(names)),
+                    "fenced_selection": parse_fenced_selection(answer, set(names)),
                     "raw_output": answer,
                     "input_tokens": int(count),
                     "output_tokens": len(generated),
@@ -107,13 +126,18 @@ def run(manifest: dict[str, Any], *, threads: int) -> dict[str, Any]:
             )
     return {
         "scope": "Description-only routing; compact receives BM25(question) plus pinned tools",
-        "model": MODEL,
-        "revision": REVISION,
+        "model": model_id,
+        "revision": revision,
+        "dtype": str(model.dtype),
         "torch": torch.__version__,
         "transformers": transformers.__version__,
         "case_sha256": manifest["case_sha256"],
         "generation": {"do_sample": False, "max_new_tokens": 96, "cpu_threads": threads},
         "summary": {mode: summarize(rows) for mode, rows in traces.items()},
+        "fenced_summary": {
+            mode: summarize([{**row, "selected": row["fenced_selection"]} for row in rows])
+            for mode, rows in traces.items()
+        },
         "traces": traces,
     }
 
@@ -122,11 +146,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--threads", type=int, default=2, choices=[1, 2, 4])
+    parser.add_argument("--model-size", choices=sorted(MODELS), default="0.5b")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = run(json.loads(args.manifest.read_text(encoding="utf-8")), threads=args.threads)
+    result = run(
+        json.loads(args.manifest.read_text(encoding="utf-8")),
+        threads=args.threads,
+        model_size=args.model_size,
+    )
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    sys.stdout.write(json.dumps(result["summary"], indent=2) + "\n")
+    sys.stdout.write(
+        json.dumps({"strict": result["summary"], "fenced": result["fenced_summary"]}, indent=2)
+        + "\n"
+    )
 
 
 if __name__ == "__main__":

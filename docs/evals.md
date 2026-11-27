@@ -134,3 +134,8 @@ it to an ephemeral DuckDB/Parquet store and queries a bounded page. It records s
 row counts, bytes, wall times and cumulative Linux process peak RSS. It never writes to a user's
 production historical store. Public network availability and runner hardware influence these
 measurements; do not confuse them with repeatable fixture-only results.
+
+
+### Larger checkpoint comparison
+
+The Stronger CPU model routing workflow compares pinned Qwen2.5 1.5B and 3B checkpoints using BF16 CPU inference. Strict JSON remains the primary metric; a separately reported diagnostic accepts exactly one enclosing JSON Markdown fence, but no other prose, duplicate or unknown tool names. This isolates format failures without retroactively changing the baseline. Compare full and compact within a model/dtype, not latency across models or runner hardware. The 12 routing cases are reused, not a fresh independent holdout for prompt tuning.
