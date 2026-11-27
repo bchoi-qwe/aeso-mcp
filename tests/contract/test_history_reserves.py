@@ -53,9 +53,7 @@ def _generation_zip(*, mdt: bool = False) -> bytes:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mdt", [False, True])
-async def test_historical_generation_catalog_zip_and_dst_instant(
-    tmp_path: Path, mdt: bool
-) -> None:
+async def test_historical_generation_catalog_zip_and_dst_instant(tmp_path: Path, mdt: bool) -> None:
     http = AsyncMock()
     http.get_text.return_value = _box_html()
     http.get_bytes.return_value = _generation_zip(mdt=mdt)

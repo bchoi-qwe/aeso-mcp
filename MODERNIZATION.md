@@ -1,6 +1,6 @@
 # Modernization roadmap
 
-Status: initial reliability changes in progress. Baseline: main at 93e6b614a2a009c09eabc5d59ca10f95fdee716f. Research date: 2026-11-27.
+Status: baseline implementation merged across all five phases; several acceptance gates remain open. Baseline: main at 93e6b614a2a009c09eabc5d59ca10f95fdee716f. Research date: 2026-11-27.
 
 ## Principles
 
@@ -13,10 +13,10 @@ Status: initial reliability changes in progress. Baseline: main at 93e6b614a2a00
 ## Evidence and current baseline
 
 - [MCP 2026-07-28](https://blog.modelcontextprotocol.io/posts/2026-07-28/) is the current published protocol. The repository already implements its modern path and has conformance gates. [The new roadmap](https://blog.modelcontextprotocol.io/posts/mcp-roadmap/) identifies discovery/context overhead as a priority; [release cadence](https://blog.modelcontextprotocol.io/posts/mcp-release-cycle/) is six-monthly. Do not target draft revisions as production standards.
-- [FastMCP 4.2.6](https://pypi.org/project/fastmcp/4.2.6/) is the latest verified stable release on the research date; current pin is 4.2.0. Upgrade only with an actually regenerated lockfile, contract and conformance tests, and reviewed upstream changes.
+- [FastMCP 4.2.6](https://pypi.org/project/fastmcp/4.2.6/) is the latest verified stable release on the research date; upgraded from 4.2.0 in PR #11 with a CI-resolved and audited lockfile.
 - [uv lock discipline](https://docs.astral.sh/uv/concepts/projects/sync/) and [Dependabot uv support](https://docs.astral.sh/uv/guides/integration/dependabot/) support reviewable dependency and lockfile upgrades.
 - [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/http/) inform transport and upstream metrics and traces; avoid high-cardinality raw arguments or credentials.
-- [AESO transition](https://www.aeso.ca/transition/) and [REM ISO Rules](https://www.aeso.ca/rules-standards-and-tariff/rem-iso-rules/) require market-regime-aware source contracts. Mid-2027 implementation is a target, not a verified API launch date.
+- [AESO transition](https://www.aeso.ca/transition/) and [REM ISO Rules](https://www.aeso.ca/rules-standards-and-tariff/rem-iso-rules/) require market-regime-aware source contracts. The current IT roadmap targets Q3 2027 system trials and Q2 2028 market cutover; neither is a verified API launch date.
 - [PyPI project](https://pypi.org/project/aeso-mcp/) listed 0.3.0 in retrieved public metadata; source/registry declare 0.4.0. Verify live package state again before release.
 
 Current system has 64 tools, typed models, separate providers/services, bounded HTTP, forecast-vintage history, deterministic provenance manifests and full/compact tool discovery. Existing evals are not real-model benchmarks. Existing storage is single-process/local, not an immutable all-dataset warehouse.
@@ -67,3 +67,29 @@ Acceptance: repeatable offline retrieval of archived inputs; identical replay at
 ## Work order
 
 Phase 1 first, then 2 and 3 in parallel only on separate reviewed changes. Phase 4 requires source-contract evidence; Phase 5 requires official REM information. Large storage migrations, OAuth and new analytics are not justified as blind one-shot edits. Record actual CI and canary results for each change. 
+
+
+## Implementation evidence (2026-11-27)
+
+- #10: reliability and metadata fixes merged; 354 tests passed.
+- #11: FastMCP 4.2.6, audited dependency lock, HTTP limits/deadlines, native usage telemetry,
+  SBOM and future release provenance, runtime discovery benchmark merged; 370 tests passed.
+  The audit of the revised lock reported no known vulnerabilities in 119 packages at the time.
+- #16: evaluation integrity improvements merged; 357 tests passed. No real-model benchmark
+  has been run; no change to the default discovery mode is justified yet.
+- #22: content-addressed opt-in CSD archive, streaming normalization and ingestion CLI merged;
+  363 tests passed.
+- #23: explicit reviewed market-contract identity and REM safeguards merged; 359 tests passed.
+- #24: offline single-source CSD replay with retrieval cutoff and integrity checks merged;
+  367 tests passed.
+- Combined main (f0454b8a92415391841114ab3942b168ed281f0a): 372 tests, 84.16% coverage,
+  locked dependency audit, Docker, conformance and installed wheel checks passed.
+- #25: public live canary exposed the October 2026 CSD fixed-MDT header and unpublished
+  Supply Surplus statuses. The corrected candidate passed all four credential-free integration
+  groups; authenticated APIM and the broader publication timing/coverage audit remain unverified.
+
+Remaining acceptance work: actual agent/held-out benchmark with an identified model/client,
+authenticated upstream canary, all-dataset source chronology and multi-series replay, memory
+measurement under actual large-data workloads, and verified REM production source contracts.
+Do not interpret the implementation of a phase's first increment as satisfying all of its
+acceptance gates. Do not publish a release from this record alone.

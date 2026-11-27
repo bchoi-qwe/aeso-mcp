@@ -32,6 +32,7 @@ from aeso_mcp.services.reserves import OperatingReserveService
 from aeso_mcp.services.transmission import TransmissionService
 from aeso_mcp.storage.history import HistoricalStore
 from aeso_mcp.storage.raw_archive import RawSourceArchive
+from aeso_mcp.timeutil import validate_market_timezone
 
 
 @dataclass
@@ -69,6 +70,7 @@ class AppContainer:
 
 def build_container(settings: Settings) -> AppContainer:
     """Construct the default production dependency graph."""
+    validate_market_timezone()
     cache = AsyncTTLCache(max_entries=settings.cache_max_entries)
     apim_http = AesoHttpClient(settings)
     provider = GridStatusProvider(settings, apim_http=apim_http)

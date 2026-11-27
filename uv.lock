@@ -56,7 +56,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11.0,<3" },
     { name = "pydantic-settings", specifier = ">=2.8.0,<3" },
     { name = "tenacity", specifier = ">=9.0.0,<10" },
-    { name = "tzdata", specifier = ">=2025.1" },
+    { name = "tzdata", specifier = ">=2026.3" },
 ]
 provides-extras = ["analytics", "docs"]
 
