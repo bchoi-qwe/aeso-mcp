@@ -107,3 +107,21 @@ retrieval timestamp for an independently verified publication date.
 CSV rows are streamed from the ZIP during parsing instead of materializing a second, entire
 uncompressed list of dictionaries. Selected normalized records and the compressed input still
 occupy memory, so full-file ingestion remains subject to workload-specific benchmarking.
+
+
+## Separate ingestion process
+
+The same bounded synchronization service can run without an MCP server or an AI client:
+
+```bash
+uv run --extra analytics python -m aeso_mcp.ingest \
+  --dataset pool_price --dataset load \
+  --start 2026-01-01T00:00:00Z --end 2026-01-02T00:00:00Z
+```
+
+Add `--dataset historical_generation` for CSD ingestion, and `--refresh` to request
+re-fetching existing coverage. The command emits a structured JSON summary and returns a
+nonzero status for domain errors. A scheduler can call it with an explicit sliding window
+and a persistent local volume. Use one writer per history root; this is not a multi-process
+warehouse or an always-on scheduler. GitHub-hosted runners are ephemeral and are suitable
+for fixture tests, not durable historical storage.

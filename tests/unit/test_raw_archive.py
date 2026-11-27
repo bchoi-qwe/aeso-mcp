@@ -60,5 +60,5 @@ def test_archive_requires_aware_retrieval_time(tmp_path: Path) -> None:
             dataset="csd",
             source_id="1",
             source_name="file.zip",
-            retrieved_at=datetime(2026, 11, 27),  # noqa: DTZ001
+            retrieved_at=datetime(2026, 11, 27),
         )
