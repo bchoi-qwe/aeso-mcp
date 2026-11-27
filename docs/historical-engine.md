@@ -158,3 +158,14 @@ A failure in any batch rolls back the entire database replacement and preserves 
 source manifest. Original normalized models are still resident in memory, and Parquet rebuilding
 occurs after the database commit. The live CSD workload workflow reports end-to-end peak RSS;
 this batching limit is not a process-wide memory ceiling.
+
+
+### Five-minute full-source stress validation
+
+The live CSD workload matrix independently downloads and writes the latest complete hourly and
+five-minute source objects, including all intervals in the catalog's file coverage, then checks
+the unique stored count and a bounded query page. The five-minute job intentionally tests a full
+source object rather than a seven-day read window: ingestion replaces an entire source. Reports
+include resolution, source digest, coverage, process peak RSS and wall times. Jobs use an ephemeral
+store and a bounded runner timeout. A failure, including an out-of-memory termination, is evidence
+of a workload limitation, not a successful stress test.
