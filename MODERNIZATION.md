@@ -1,0 +1,69 @@
+# Modernization roadmap
+
+Status: initial reliability changes in progress. Baseline: main at 93e6b614a2a009c09eabc5d59ca10f95fdee716f. Research date: 2026-11-27.
+
+## Principles
+
+- Treat the MCP as a typed, deterministic interface to authoritative Alberta market evidence, not as an LLM or a generic API wrapper.
+- Preserve source-specific publication times, units, UTC interval identity, retrieval history, missingness and finality. Never infer finality from age, fill missing observations with zero or use future information in historical research.
+- Keep model training/forecasting and bulk compute outside MCP. Do not introduce arbitrary SQL, shell, URL or code-execution tools.
+- Compatibility is not a requirement for redesigned contracts; nevertheless retain supported transports when there is no measurable cost to removing them.
+- Use stable released dependencies, reproducible locked builds, small reviewable pull requests and measured acceptance criteria. No automatic publication or production deployment.
+
+## Evidence and current baseline
+
+- [MCP 2026-07-28](https://blog.modelcontextprotocol.io/posts/2026-07-28/) is the current published protocol. The repository already implements its modern path and has conformance gates. [The new roadmap](https://blog.modelcontextprotocol.io/posts/mcp-roadmap/) identifies discovery/context overhead as a priority; [release cadence](https://blog.modelcontextprotocol.io/posts/mcp-release-cycle/) is six-monthly. Do not target draft revisions as production standards.
+- [FastMCP 4.2.6](https://pypi.org/project/fastmcp/4.2.6/) is the latest verified stable release on the research date; current pin is 4.2.0. Upgrade only with an actually regenerated lockfile, contract and conformance tests, and reviewed upstream changes.
+- [uv lock discipline](https://docs.astral.sh/uv/concepts/projects/sync/) and [Dependabot uv support](https://docs.astral.sh/uv/guides/integration/dependabot/) support reviewable dependency and lockfile upgrades.
+- [OpenTelemetry conventions](https://opentelemetry.io/docs/specs/semconv/http/) inform transport and upstream metrics and traces; avoid high-cardinality raw arguments or credentials.
+- [AESO transition](https://www.aeso.ca/transition/) and [REM ISO Rules](https://www.aeso.ca/rules-standards-and-tariff/rem-iso-rules/) require market-regime-aware source contracts. Mid-2027 implementation is a target, not a verified API launch date.
+- [PyPI project](https://pypi.org/project/aeso-mcp/) listed 0.3.0 in retrieved public metadata; source/registry declare 0.4.0. Verify live package state again before release.
+
+Current system has 64 tools, typed models, separate providers/services, bounded HTTP, forecast-vintage history, deterministic provenance manifests and full/compact tool discovery. Existing evals are not real-model benchmarks. Existing storage is single-process/local, not an immutable all-dataset warehouse.
+
+## Phase 1 — reliability and release foundation (first PR)
+
+- Fix cache invalidation during in-flight requests: old callers may complete, but invalidated data must not be reinserted or joined by new callers. Regression test concurrent clear/refresh.
+- Correct optional APIM key in Registry and check the contract at release.
+- Correct stale dependency-version documentation; enable reviewable uv and Actions dependency updates.
+- Run public live tests without an APIM credential and fail authenticated CI live tests explicitly if the protected secret is missing. Check price finiteness rather than an unsupported timeless nonnegative-price invariant.
+- Review PR diff and require existing locked CI, independent conformance, strict docs, installed wheel and Docker checks before merge. Do not label live integration verified unless a live run actually executes.
+
+## Phase 2 — runtime, security and supply chain
+
+1. Update FastMCP to current stable patch; regenerate uv.lock, rerun all gates. Update exact version references and canary constraints, and review generated catalog differences.
+2. Inventory dependencies and workflows; add lockfile vulnerability audit, immutable action SHA pinning, dependency review, SBOM and provenance for release artifacts. Pin and validate the selected tooling before adding required gates.
+3. Threat model HTTP and upstream clients: test Host/Origin spoofing, request bodies, cancellation, limits, redirect and decompression/ZIP expansion, log redaction, token forwarding, and expensive parallel calls. Add deadline and byte/memory budgets with load tests. Keep static auth private-only; implement standards-compliant OAuth resource metadata/token validation if public multi-user HTTP is a goal.
+4. Instrument tool, provider and store duration/error/freshness metrics using bounded labels; preserve protocol stdio stdout. Measure p50/p95 latency, peak RSS, response bytes, cache-hit and upstream request count against representative workloads.
+5. Verify authenticated canary execution and public endpoint coverage; audit actual observed timestamps, source schema changes and publication delays. Distinguish unavailable/skipped/failed from healthy.
+
+Acceptance: locked deterministic suite and independent modern conformance pass; no secret leakage; explicit tested resource budgets; documented measured latency and peak RSS; real canary evidence with timestamp and scope.
+
+## Phase 3 — agent-facing contracts
+
+1. Benchmark full catalog and compact discovery on the current canonical cases, extending with ambiguous, multi-tool, no-tool and incomplete-data prompts. Use real identified client/model versions, fixed fixtures, repeated trials and independent scoring. Measure correct tool and argument selection, grounded numeric answers, caveat/abstention accuracy, tokens, calls and latency.
+2. Experiment with fewer consolidated typed tool families, compact summaries, bounded pagination, selective schema disclosure and deterministic domain synonyms/semantic ranking. Do not expose arbitrary execution to reduce tool calls.
+3. Make discovery mode/default and removals evidence-based; assess success on held-out questions rather than only training examples. Preserve clear dataset semantics and annotations for read-only vs local writes.
+4. Publish reproducible benchmark runs and traces with sensitive values removed.
+
+Acceptance: report baseline and treatment on held-out cases, with no loss in numerical correctness or necessary caveats; select a default only after measured improvement. No invented model scores.
+
+## Phase 4 — data platform
+
+1. Catalog each verified upstream report: identifier, market regime, source URL/product version, cadence, publication delay, revision/finality, availability bounds, units, license/access and schema.
+2. Keep immutable source objects by SHA-256 and record observed retrieval/publication time separately. Use source-specific versioned schemas and normalized UTC keys; retain source timezone and units. Verify revisions and gap recovery with fixtures and real observations. Unknown chronology is ineligible for point-in-time reads.
+3. Separate bounded ingestion CLI/worker from MCP runtime. Use a single writer, atomic checkpoints and restart-safe idempotency; document local storage locking and retention. Introduce a shared database only when deployment requires it.
+4. Expand incremental ingestion beyond existing CSD, Pool Price and AIL plus forecast vintages only after source contracts and publication schedules are verified. Provide a Python/Parquet data access interface for bulk research and aesoTIME; MCP remains compact.
+5. Add typed aligned multi-series/replay queries, with explicit join policy, coverage, provenance and no leakage. Test missingness, DST, late arrival, corrections, duplicate IDs and crash recovery.
+
+Acceptance: repeatable offline retrieval of archived inputs; identical replay at a fixed information cutoff; no late observation leakage; bounded memory/latency; explicit data-quality and source-version metadata.
+
+## Phase 5 — REM and release
+
+- Track approved and effective ISO rules separately; add a market-regime dimension and source/version/effective-date registry before REM ingestion. Do not reinterpret legacy Pool Price or settlement concepts as REM products. Wait for authoritative API schema/publication documentation and observed samples before enabling new datasets.
+- Add advanced analytics only when underlying datasets and methods are defensible (e.g., residual demand, conditional historical comparisons); label descriptive association rather than causation.
+- Conduct a release audit of actual package, lock, Registry metadata, documentation, conformance, security, live test evidence and benchmark results. Version breaking contracts explicitly. Publish only as a separate authorized release operation.
+
+## Work order
+
+Phase 1 first, then 2 and 3 in parallel only on separate reviewed changes. Phase 4 requires source-contract evidence; Phase 5 requires official REM information. Large storage migrations, OAuth and new analytics are not justified as blind one-shot edits. Record actual CI and canary results for each change. 
