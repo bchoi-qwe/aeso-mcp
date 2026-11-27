@@ -23,7 +23,10 @@ def test_manifest_retains_market_contract() -> None:
         )
 
     source = analysis_source_from_response(
-        Response(), role="focus", dataset="Pool Price Report",
-        requested_start=None, requested_end=None,
+        Response(),
+        role="focus",
+        dataset="Pool Price Report",
+        requested_start=None,
+        requested_end=None,
     )
     assert source.market_contract == MarketContract.LEGACY_POOL
