@@ -19,6 +19,7 @@ from aeso_mcp.models.common import (
     FinalityStatus,
     ObservationType,
     ProviderName,
+    source_market_contract,
 )
 from aeso_mcp.models.generation import LoadInterval, LoadRequest, LoadResponse
 from aeso_mcp.models.history import (
@@ -1058,6 +1059,7 @@ def _history_meta(
     source_product = source_product_value if isinstance(source_product_value, str) else None
     return DatasetMetadata(
         dataset=dataset,
+        market_contract=source_market_contract(dataset),
         source_product=(
             "Historical CSD Generation Data"
             if provider == ProviderName.AESO_CSD_ARCHIVE

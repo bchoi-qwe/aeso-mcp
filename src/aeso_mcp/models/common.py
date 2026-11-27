@@ -62,6 +62,42 @@ class ProviderName(StrEnum):
     DERIVED = "derived"
 
 
+class MarketContract(StrEnum):
+    """Market design of the source contract, not an inferred effective date."""
+
+    LEGACY_POOL = "legacy_pool"
+    REM = "rem"
+    UNKNOWN = "unknown"
+
+
+_LEGACY_MARKET_DATASETS = frozenset(
+    {
+        "Pool Price Report",
+        "System Marginal Price Report",
+        "Market Snapshot",
+        "Monthly Cumulative Settlement Interval Net Revenue",
+        "Secondary Offer Price Limit",
+        "Energy Merit Order Report",
+        "Unit Commitment Data",
+        "Unit Commitment Settlement Summary",
+        "Operating Reserve Offer Control Report",
+        "Operating Reserve Prices",
+        "Operating Reserve Volume Forecast",
+        "Operating Reserve Activations",
+        "Operating Reserve Market Summary",
+        "Market History Summary",
+        "AESO pool_price Forecast",
+    }
+)
+
+
+def source_market_contract(dataset: str) -> MarketContract:
+    """Classify only explicitly reviewed source contracts, never calendar dates."""
+    if dataset in _LEGACY_MARKET_DATASETS:
+        return MarketContract.LEGACY_POOL
+    return MarketContract.UNKNOWN
+
+
 class DatasetMetadata(BaseModel):
     """Provenance and semantic metadata attached to dataset responses."""
 
@@ -79,6 +115,10 @@ class DatasetMetadata(BaseModel):
         description="Age of the cached provider result in seconds when served.",
     )
     market_timezone: str = "America/Edmonton"
+    market_contract: MarketContract = Field(
+        default=MarketContract.UNKNOWN,
+        description="Market design of the source contract, not an inferred effective date.",
+    )
     status: DataStatus = DataStatus.ACTUAL
     observation_type: ObservationType = ObservationType.ACTUAL
     finality: FinalityStatus = FinalityStatus.UNKNOWN

@@ -17,6 +17,7 @@ from aeso_mcp.models.common import (
     FinalityStatus,
     ObservationType,
     ProviderName,
+    source_market_contract,
 )
 from aeso_mcp.models.operations import PageInfo
 from aeso_mcp.models.reserves import (
@@ -324,6 +325,7 @@ def _metadata(
     served = cache_info.served_at if cache_info else utc_now()
     return DatasetMetadata(
         dataset=dataset,
+        market_contract=source_market_contract(dataset),
         source_product=provenance.get("source_product"),
         retrieved_at=retrieved,
         served_at=served,
