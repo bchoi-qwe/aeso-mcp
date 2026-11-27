@@ -35,9 +35,7 @@ async def export(cases: list[dict[str, Any]]) -> dict[str, Any]:
         async with Client(create_mcp_server(compact_settings, compact_container)) as client:
             for case in cases:
                 result = await client.call_tool("search_tools", {"query": case["question"]})
-                payload = "".join(
-                    item.text for item in result.content if hasattr(item, "text")
-                )
+                payload = "".join(item.text for item in result.content if hasattr(item, "text"))
                 discovered = {str(tool["name"]) for tool in json.loads(payload)}
                 names = PINNED | discovered
                 case["compact_candidates"] = sorted(names & descriptions.keys())

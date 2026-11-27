@@ -73,8 +73,11 @@ def run(manifest: dict[str, Any], *, threads: int) -> dict[str, Any]:
             )
             messages = [{"role": "user", "content": prompt}]
             inputs = tokenizer.apply_chat_template(
-                messages, tokenize=True, add_generation_prompt=True,
-                return_dict=True, return_tensors="pt",
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_dict=True,
+                return_tensors="pt",
             )
             count = inputs["input_ids"].shape[-1]
             if count + 96 > model.config.max_position_embeddings:
@@ -82,22 +85,26 @@ def run(manifest: dict[str, Any], *, threads: int) -> dict[str, Any]:
             started = perf_counter()
             with torch.inference_mode():
                 output = model.generate(
-                    **inputs, do_sample=False, max_new_tokens=96,
+                    **inputs,
+                    do_sample=False,
+                    max_new_tokens=96,
                     pad_token_id=tokenizer.eos_token_id,
                 )
             seconds = perf_counter() - started
             generated = output[0, count:]
             answer = tokenizer.decode(generated, skip_special_tokens=True)
-            traces[mode].append({
-                "id": case["id"],
-                "expected": sorted(case["expected_tools"]),
-                "available": names,
-                "selected": parse_selection(answer, set(names)),
-                "raw_output": answer,
-                "input_tokens": int(count),
-                "output_tokens": int(len(generated)),
-                "wall_seconds": seconds,
-            })
+            traces[mode].append(
+                {
+                    "id": case["id"],
+                    "expected": sorted(case["expected_tools"]),
+                    "available": names,
+                    "selected": parse_selection(answer, set(names)),
+                    "raw_output": answer,
+                    "input_tokens": int(count),
+                    "output_tokens": len(generated),
+                    "wall_seconds": seconds,
+                }
+            )
     return {
         "scope": "Description-only routing; compact receives BM25(question) plus pinned tools",
         "model": MODEL,

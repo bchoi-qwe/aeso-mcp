@@ -26,6 +26,10 @@ def rss_kib() -> int:
     return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
 
 
+def store_bytes(root: Path) -> int:
+    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+
+
 async def benchmark(root: Path) -> dict[str, object]:
     container = build_container(Settings(history_store_path=root))
     try:
@@ -56,8 +60,13 @@ async def benchmark(root: Path) -> dict[str, object]:
         peak_after_write = rss_kib()
         t0 = perf_counter()
         page, total = store.query_generation(
-            start=start, end=end, resolution="hourly",
-            asset_ids=[], fuel_types=[], offset=0, limit=500,
+            start=start,
+            end=end,
+            resolution="hourly",
+            asset_ids=[],
+            fuel_types=[],
+            offset=0,
+            limit=500,
         )
         query_seconds = perf_counter() - t0
         if total != written or len(page) != min(500, total):
@@ -77,7 +86,7 @@ async def benchmark(root: Path) -> dict[str, object]:
             "peak_after_parse_kib": peak_after_parse,
             "peak_after_write_kib": peak_after_write,
             "peak_rss_kib": rss_kib(),
-            "store_bytes": sum(p.stat().st_size for p in root.rglob("*") if p.is_file()),
+            "store_bytes": await asyncio.to_thread(store_bytes, root),
         }
     finally:
         await container.aclose()
