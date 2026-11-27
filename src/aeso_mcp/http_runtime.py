@@ -82,7 +82,7 @@ class BearerAuthMiddleware:
         scheme, separator, credentials = authorization.partition(" ")
         if scheme.lower() != "bearer" or not separator or not credentials:
             return False
-        return hmac.compare_digest(credentials, self._token)
+        return hmac.compare_digest(credentials.encode("utf-8"), self._token.encode("utf-8"))
 
 
 class RequestObservabilityMiddleware:
@@ -114,8 +114,8 @@ class RequestObservabilityMiddleware:
             logger.info(
                 "http_request request_id=%s method=%s path=%s status=%s duration_ms=%.1f",
                 request_id,
-                scope.get("method", ""),
-                scope.get("path", ""),
+                scope.get("method") if scope.get("method") in {"GET", "POST", "DELETE", "OPTIONS"} else "OTHER",
+                scope.get("path") if scope.get("path") in {"/mcp", *_PROBE_PATHS} else "other",
                 status,
                 (time.monotonic() - started) * 1000,
             )
