@@ -174,3 +174,16 @@ of a workload limitation, not a successful stress test.
 ### Streaming full-source ingestion
 
 Full-source synchronization downloads and optionally archives the bounded ZIP, then lazily normalizes its CSV rows in the historical-store worker. The database writer keeps only one 10,000-row batch and its per-batch deduplication map in Python. Its primary key resolves revisions across batches. One transaction covers the deletion, inserts and source manifest; malformed rows or an empty full source roll back rather than replacing the last good data. Parquet rebuilding still occurs after the database transaction. The direct paginated archive path and single-source replay still materialize selected models; this change is for ingestion. The workload benchmark separates download from combined streaming parse/write time and records peak RSS, digest and row count.
+
+
+### Verified public catalog coverage (November 27, 2026)
+
+The live metadata audit of the fixed public Box folders found 27 recognized hourly ZIPs with
+filename coverage from 2015-01-01 through 2026-10-31, and 98 recognized five-minute ZIPs from
+2015-01-01 through 2023-02-28. There were no date gaps implied by those filenames, no unrecognized
+five-minute entries and one skipped hourly subfolder named Archive. The audit walked all
+advertised pages (two hourly, five five-minute). Filename coverage is not proof of complete
+individual asset or interval observations, and the audit does not inspect the nested Archive
+folder or other sources. Do not assume five-minute CSD is available after February 2023 simply
+because hourly files are updated more recently. Source catalogs may change; re-run the Public CSD
+catalog audit workflow to verify current coverage.
