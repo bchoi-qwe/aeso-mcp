@@ -132,3 +132,32 @@ async def test_eval_tool_routes_exist_on_registered_surface() -> None:
         "analyze_system_frequency",
     }
     assert roadmap <= expected
+
+
+def test_missing_results_do_not_receive_safety_or_abstention_credit() -> None:
+    cases = [
+        {"id": "no-tool", "expected_tools": [], "prohibited_interpretations": ["false"]},
+        {"id": "tool", "expected_tools": ["expected"]},
+    ]
+    summary = score(cases, [])
+    assert summary["result_coverage"] == 0
+    assert summary["answer_coverage"] == 0
+    assert summary["no_tool_abstention_accuracy"] == 0
+    assert summary["prohibited_interpretation_literal_avoidance"] == 0
+    assert summary["exact_route_accuracy"] == 0
+
+
+def test_extra_tool_calls_reduce_route_precision() -> None:
+    cases = [{"id": "one", "expected_tools": ["expected"]}]
+    summary = score(cases, [{"id": "one", "selected_tools": ["expected", "extra"]}])
+    assert summary["tool_route_recall"] == 1
+    assert summary["tool_route_precision"] == 0.5
+    assert summary["exact_route_accuracy"] == 0
+
+
+def test_duplicate_or_unknown_results_are_rejected() -> None:
+    cases = [{"id": "one"}]
+    with pytest.raises(ValueError, match="Duplicate"):
+        score(cases, [{"id": "one"}, {"id": "one"}])
+    with pytest.raises(ValueError, match="Unknown"):
+        score(cases, [{"id": "other"}])
