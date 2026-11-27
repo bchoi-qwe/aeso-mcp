@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from aeso_mcp.models.common import DataCompleteness, FinalityStatus
+from aeso_mcp.models.common import DataCompleteness, FinalityStatus, MarketContract
 from aeso_mcp.models.provenance import (
     AnalysisManifest,
     AnalysisSource,
@@ -47,6 +47,7 @@ def analysis_source_from_response(
         dataset=str(getattr(metadata, "dataset", dataset)),
         source_product=_optional_text(getattr(metadata, "source_product", None)),
         provider=provider,
+        market_contract=_coerce_market_contract(getattr(metadata, "market_contract", None)),
         source_version=_first_text(
             getattr(metadata, "api_version", None),
             extra.get("source_version"),
@@ -153,6 +154,13 @@ def _first_text(*values: object) -> str | None:
         if value is not None:
             return str(value)
     return None
+
+
+def _coerce_market_contract(value: object) -> MarketContract:
+    try:
+        return MarketContract(_enum_value(value))
+    except ValueError:
+        return MarketContract.UNKNOWN
 
 
 def _coerce_finality(value: Any) -> FinalityStatus:

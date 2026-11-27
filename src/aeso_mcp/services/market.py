@@ -17,6 +17,7 @@ from aeso_mcp.models.common import (
     FinalityStatus,
     ObservationType,
     ProviderName,
+    source_market_contract,
 )
 from aeso_mcp.models.generation import (
     FuelMixComponent,
@@ -559,6 +560,7 @@ def _meta(
     }
     return DatasetMetadata(
         dataset=dataset,
+        market_contract=source_market_contract(dataset),
         source_product=_provider_text(prov, "source_product"),
         api_version=_provider_text(prov, "api_version"),
         retrieved_at=actual_retrieved_at,

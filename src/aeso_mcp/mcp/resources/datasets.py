@@ -92,6 +92,14 @@ All market timestamps are normalized to **America/Edmonton**. DST spring-forward
 Server-enforced limits protect against oversized responses (for example SMP max 7 days).
 Prefer analytics tools for long-period statistical questions.
 
+## Market design transition
+The current market-sensitive source contracts describe the legacy Alberta pool. The metadata
+field `market_contract` identifies reviewed contract semantics; unknown is not REM and no date
+alone determines an effective regime. AESO's published IT roadmap targets Q2 2028 for market
+cutover, after soft launch and system trials. No REM production source is implemented.
+See https://www.aeso.ca/transition/it-systems/ and the effective REM ISO rules before comparing
+prices, settlement, reserve procurement or offer blocks across regimes.
+
 ## Limitations
 See the repository `LIMITATIONS.md` and `docs/data-sources.md` for coverage gaps
 and the APIM-first vs public-report resolution order.

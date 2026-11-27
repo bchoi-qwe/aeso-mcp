@@ -55,8 +55,7 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
 - **Fields**: Records can include owner, element, scheduled activity, interval, publication time,
   comments, and interconnection. Empty fields mean the source did not publish a value.
 - **Source**: AESO public reports at `ets.aeso.ca`, read by an internal source-specific
-  public-reports HTTP client rather than the authenticated APIM client. The single MCP server
-  still requires `AESO_API_KEY`; the key is never sent to `ets.aeso.ca`.
+  public-reports HTTP client rather than the authenticated APIM client. Public report access does not require `AESO_API_KEY`; the key is never sent to `ets.aeso.ca`.
 - **Caveat**: A planned or tentative outage is not evidence of a realized physical outage or a
   causal price effect. Use approval status and publication time in any interpretation.
 """,
@@ -69,8 +68,7 @@ METHODOLOGY_MARKDOWN: dict[str, str] = {
   price limit is in effect and the CAD/MWh limit when one is published. A null limit is not a zero
   price; it means no numeric limit was posted in that record.
 - **Source**: AESO public reports at `ets.aeso.ca`, read by the internal source-specific
-  public-reports HTTP client; the single MCP server still requires `AESO_API_KEY`, which is not
-  sent to this host.
+  public-reports HTTP client; public report access does not require `AESO_API_KEY`, which is not sent to this host.
 - **Interpretation**: These are public operational/mitigation publications. They do not by
   themselves establish participant conduct, market power, or the cause of a price event.
 """,

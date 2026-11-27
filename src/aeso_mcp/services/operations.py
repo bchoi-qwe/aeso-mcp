@@ -18,6 +18,7 @@ from aeso_mcp.models.common import (
     FinalityStatus,
     ObservationType,
     ProviderName,
+    source_market_contract,
 )
 from aeso_mcp.models.generation import LoadRequest
 from aeso_mcp.models.operations import (
@@ -563,6 +564,7 @@ class OperationsService:
             buckets=buckets,
             metadata=DatasetMetadata(
                 dataset="Market History Summary",
+                market_contract=source_market_contract("Market History Summary"),
                 source_product="Derived from Pool Price and Alberta Internal Load",
                 retrieved_at=utc_now(),
                 served_at=utc_now(),
@@ -811,6 +813,7 @@ def _metadata(
     )
     return DatasetMetadata(
         dataset=dataset,
+        market_contract=source_market_contract(dataset),
         source_product=_optional_text(prov.get("source_product")),
         api_version=_optional_text(prov.get("api_version")),
         retrieved_at=cache.retrieved_at,

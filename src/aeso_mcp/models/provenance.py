@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from aeso_mcp.models.common import DataCompleteness, FinalityStatus
+from aeso_mcp.models.common import DataCompleteness, FinalityStatus, MarketContract
 
 AnalysisSourceRole = Literal["focus", "baseline", "context"]
 
@@ -27,6 +27,7 @@ class AnalysisSource(BaseModel):
     dataset: str
     source_product: str | None = None
     provider: str
+    market_contract: MarketContract = MarketContract.UNKNOWN
     source_version: str | None = None
     source_file_id: str | None = None
     source_file_name: str | None = None

@@ -64,8 +64,8 @@ Never scrape ETS copies of datasets that already exist on APIM.
 | Operating Reserve activations | `get_operating_reserve_activations` | ETS public CSV | none | No | direct | implemented |
 
 \*Public-report tools contact `ets.aeso.ca` without sending the APIM key. This is an internal
-source-specific client, not a separate runtime mode: the complete MCP server always requires
-`AESO_API_KEY` and registers one unified tool surface.
+source-specific client, not a separate runtime mode: public tools operate without an
+`AESO_API_KEY`; authenticated tools require a subscribed key. One unified tool surface is registered.
 
 ## Semantic notes
 
@@ -99,3 +99,23 @@ source-specific client, not a separate runtime mode: the complete MCP server alw
 - Raw system-frequency observations are not exposed through MCP. Threshold exposure is a count of
   flagged ten-second intervals expressed as an upper-bound proxy, not exact duration outside a
   threshold.
+
+
+## Market contract versioning and REM readiness
+
+As of November 27, 2026, the [AESO IT roadmap](https://www.aeso.ca/transition/it-systems/)
+targets soft launch in January 2027, system trials in Q3 2027 and market cutover in Q2 2028.
+The [REM ISO rules](https://aeso.ca/rules-standards-and-tariff/rem-iso-rules/) were approved
+March 12, 2026; effective dates differ by rule and are not equivalent to market go-live.
+
+Reviewed legacy market source products carry `metadata.market_contract=legacy_pool`.
+Unclassified products carry `unknown` rather than being assigned by observation date.
+Research source manifests preserve the contract identity. The `rem` enum is reserved for
+verified production contracts; this release does not consume REM trial or production endpoints.
+
+Before adding a REM dataset, verify the official product/API version, units, interval/cadence,
+effective market rule, publication timing, correction and finality behavior, historical
+coverage, and access policy with observed source fixtures. Store revised market-specific products
+under distinct source identities and never splice legacy and REM economic values without
+an explicit, validated comparison methodology. The target cutover date is not a schema switch.
+Existing analysis identifiers may change because source manifests now include market contract.
