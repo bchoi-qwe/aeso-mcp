@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -38,6 +39,20 @@ jobs:
 
       - name: Build
         run: uv build
+
+      - name: Export runtime SBOM
+        run: uv export --locked --all-extras --no-dev --format cyclonedx1.5 --output-file sbom.json
+
+      - name: Attest build provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: 'dist/*'
+
+      - name: Attest runtime SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: 'dist/*'
+          sbom-path: sbom.json
 
       - name: Publish
         # Configure a PyPI Trusted Publisher for this workflow and the "pypi"

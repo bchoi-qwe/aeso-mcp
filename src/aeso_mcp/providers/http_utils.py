@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from math import isfinite
@@ -14,6 +17,16 @@ from aeso_mcp.errors import DataValidationError, RateLimitError, UpstreamUnavail
 
 _MAX_AUTOMATIC_RETRY_AFTER_S = 60.0
 _FALLBACK_RETRY_WAIT = wait_exponential_jitter(initial=0.5, max=8.0)
+
+
+@asynccontextmanager
+async def upstream_deadline(timeout_s: float) -> AsyncIterator[None]:
+    """Bound the complete upstream exchange, including retry sleeps and redirects."""
+    try:
+        async with asyncio.timeout(timeout_s):
+            yield
+    except TimeoutError as exc:
+        raise UpstreamUnavailableError("AESO upstream request deadline exceeded.") from exc
 
 
 def is_retryable(exc: BaseException) -> bool:

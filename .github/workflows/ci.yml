@@ -76,6 +76,15 @@ jobs:
       - name: Build package
         run: uv build --clear
 
+      - name: Export runtime SBOM
+        run: uv export --locked --all-extras --no-dev --format cyclonedx1.5 --output-file sbom.json
+
+      - name: Upload runtime SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runtime-sbom
+          path: sbom.json
+
       - name: Installed-wheel smoke
         run: |
           wheel_path="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"

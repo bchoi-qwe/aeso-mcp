@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
+from fastmcp.server.middleware.usage import UsageMiddleware
 
 from aeso_mcp import __version__
 from aeso_mcp.app import AppContainer, build_container
@@ -73,6 +74,9 @@ def create_mcp_server(
         cache_scope="public",
     )
 
+    # FastMCP exports nothing without a configured OpenTelemetry provider.
+    # Avoid collecting user identifiers even when a provider is configured.
+    mcp.add_middleware(UsageMiddleware(user_id="omit"))
     register_discovery_tools(mcp)
     register_market_tools(mcp, container)
     register_grid_tools(mcp, container)

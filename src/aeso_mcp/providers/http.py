@@ -28,6 +28,7 @@ from aeso_mcp.providers.http_utils import (
     is_retryable,
     parse_retry_after,
     retry_wait,
+    upstream_deadline,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,16 +85,17 @@ class AesoHttpClient:
         path = endpoint.lstrip("/")
         self._assert_allowed_path(path)
 
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(self._settings.http_max_retries + 1),
-            wait=retry_wait,
-            retry=retry_if_exception(is_retryable),
-            before_sleep=_before_sleep,
-            reraise=True,
-        ):
-            with attempt:
-                return await self._get_once(path, params=params)
-        raise UpstreamUnavailableError("AESO request failed after retries.")
+        async with upstream_deadline(self._settings.http_total_timeout_s):
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(self._settings.http_max_retries + 1),
+                wait=retry_wait,
+                retry=retry_if_exception(is_retryable),
+                before_sleep=_before_sleep,
+                reraise=True,
+            ):
+                with attempt:
+                    return await self._get_once(path, params=params)
+            raise UpstreamUnavailableError("AESO request failed after retries.")
 
     async def _get_once(self, path: str, *, params: dict[str, Any] | None) -> Any:
         current_path = path

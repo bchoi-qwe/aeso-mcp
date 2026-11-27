@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
@@ -14,11 +15,16 @@ import respx
 from pydantic import SecretStr
 
 from aeso_mcp.config import Settings
-from aeso_mcp.errors import AuthenticationError, DataValidationError, RateLimitError
+from aeso_mcp.errors import (
+    AuthenticationError,
+    DataValidationError,
+    RateLimitError,
+    UpstreamUnavailableError,
+)
 from aeso_mcp.providers.archive_http import AesoArchiveHttpClient
 from aeso_mcp.providers.gridstatus import GridStatusProvider
 from aeso_mcp.providers.http import AesoHttpClient
-from aeso_mcp.providers.http_utils import parse_retry_after
+from aeso_mcp.providers.http_utils import parse_retry_after, upstream_deadline
 from aeso_mcp.providers.public_reports_http import AesoPublicReportsHttpClient
 
 
@@ -167,3 +173,10 @@ async def test_apim_compressed_json_decoded_once() -> None:
         assert stream.closed
     finally:
         await client.aclose()
+
+
+async def test_upstream_deadline_cancels_stalled_work() -> None:
+    stalled = asyncio.Event()
+    with pytest.raises(UpstreamUnavailableError, match="deadline exceeded"):
+        async with upstream_deadline(0.01):
+            await stalled.wait()
