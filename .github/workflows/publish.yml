@@ -35,6 +35,7 @@ jobs:
           uv sync --locked --group dev --extra analytics --extra docs
           uv run python tests/packaging/check_release_metadata.py
           uv run python tests/packaging/check_lock_prereleases.py
+          uv audit --frozen
           uv run pytest tests/unit tests/contract tests/mcp tests/evals tests/packaging -q
 
       - name: Build

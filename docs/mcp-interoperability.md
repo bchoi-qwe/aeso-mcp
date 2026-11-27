@@ -86,3 +86,21 @@ mcp-publisher validate server.json
 ```
 
 Registry validation is distinct from publication. Do not run `mcp-publisher publish` as part of CI.
+
+
+## Runtime observability and resource budgets
+
+FastMCP's native OpenTelemetry spans are complemented by its usage histogram
+(`mcp.server.operation.duration`) with user identifiers omitted. No exporter or SDK is
+configured by this package, so telemetry is not sent to a remote service by default.
+Operators can configure an OpenTelemetry provider in their host process. Never export tool
+arguments, source credentials or authorization headers.
+
+The static catalog deliberately disables the optional 2026-07-28 subscriptions/listen
+capability; there is no runtime catalog mutation. This is configured through FastMCP's
+supported setting at construction rather than baselining notification failures.
+
+Direct APIM responses are bounded to 64 MiB of decoded bytes; all three direct upstream
+clients enforce a 300-second total request deadline including retries and redirects
+(`AESO_MCP_HTTP_TOTAL_TIMEOUT_S`). HTTP request-body receipt has a separate ten-second
+deadline. These are per-request limits, not a whole-process memory ceiling.

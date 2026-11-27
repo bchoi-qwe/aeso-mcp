@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastmcp import FastMCP
+from fastmcp import FastMCP, settings as fastmcp_settings
 from fastmcp.server.middleware.usage import UsageMiddleware
 
 from aeso_mcp import __version__
@@ -52,27 +52,34 @@ def create_mcp_server(
         finally:
             await container.aclose()
 
-    mcp = FastMCP(
-        name="aeso-mcp",
-        version=__version__,
-        instructions=(
-            "This AESO MCP server supports public-report tools without credentials; "
-            "authenticated APIM data requires AESO_API_KEY. It provides Alberta electricity "
-            "market data and deterministic analytics from official AESO APIs and an internal "
-            "source-specific client for allow-listed public reports; that client never sends "
-            "AESO_API_KEY to ets.aeso.ca. Prefer "
-            "get_market_snapshot for current conditions, get_pool_prices for hourly CAD/MWh "
-            "history, transmission outage tools for planned grid work, and market-power tools "
-            "for MCSINR / secondary offer cap status. All market timestamps use "
-            "America/Edmonton. This project is independent and not affiliated with or "
-            "endorsed by AESO."
-        ),
-        lifespan=lifespan,
-        # The catalog and static domain resources are identical for all clients.
-        # MCP 2026-07-28 clients can reuse them for five minutes.
-        cache_ttl=300,
-        cache_scope="public",
-    )
+    # This server's catalog is fixed for its lifetime. Do not advertise
+    # optional live catalog subscriptions or allow idle long-lived streams.
+    previous = fastmcp_settings.enable_subscriptions_listen
+    fastmcp_settings.enable_subscriptions_listen = False
+    try:
+        mcp = FastMCP(
+            name="aeso-mcp",
+            version=__version__,
+            instructions=(
+                "This AESO MCP server supports public-report tools without credentials; "
+                "authenticated APIM data requires AESO_API_KEY. It provides Alberta electricity "
+                "market data and deterministic analytics from official AESO APIs and an internal "
+                "source-specific client for allow-listed public reports; that client never sends "
+                "AESO_API_KEY to ets.aeso.ca. Prefer "
+                "get_market_snapshot for current conditions, get_pool_prices for hourly CAD/MWh "
+                "history, transmission outage tools for planned grid work, and market-power tools "
+                "for MCSINR / secondary offer cap status. All market timestamps use "
+                "America/Edmonton. This project is independent and not affiliated with or "
+                "endorsed by AESO."
+            ),
+            lifespan=lifespan,
+            # The catalog and static domain resources are identical for all clients.
+            # MCP 2026-07-28 clients can reuse them for five minutes.
+            cache_ttl=300,
+            cache_scope="public",
+        )
+    finally:
+        fastmcp_settings.enable_subscriptions_listen = previous
 
     # FastMCP exports nothing without a configured OpenTelemetry provider.
     # Avoid collecting user identifiers even when a provider is configured.
