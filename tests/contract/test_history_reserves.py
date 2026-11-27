@@ -7,12 +7,14 @@ import io
 import json
 import zipfile
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 
 from aeso_mcp.providers.historical_generation import HistoricalGenerationProvider
 from aeso_mcp.providers.public_reports import AesoPublicReportsProvider
+from aeso_mcp.storage.raw_archive import RawSourceArchive
 
 
 def _box_html() -> str:
@@ -45,11 +47,12 @@ def _generation_zip() -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_historical_generation_catalog_zip_and_dst_instant() -> None:
+async def test_historical_generation_catalog_zip_and_dst_instant(tmp_path: Path) -> None:
     http = AsyncMock()
     http.get_text.return_value = _box_html()
     http.get_bytes.return_value = _generation_zip()
-    provider = HistoricalGenerationProvider(http)
+    archive = RawSourceArchive(tmp_path)
+    provider = HistoricalGenerationProvider(http, archive)
 
     sources = await provider.list_source_files("hourly")
     assert len(sources) == 1
@@ -66,6 +69,7 @@ async def test_historical_generation_catalog_zip_and_dst_instant() -> None:
     assert records[0].interval_start.fold == 1
     assert records[0].generation_mw == pytest.approx(100.5)
     assert len(digest) == 64
+    assert archive.read(digest) == http.get_bytes.return_value
 
 
 @pytest.mark.asyncio
