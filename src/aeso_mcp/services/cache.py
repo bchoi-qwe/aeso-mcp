@@ -59,7 +59,10 @@ class AsyncTTLCache:
         self._lock = asyncio.Lock()
 
     def clear(self) -> None:
+        # Detach existing flights: their current callers can finish, but new
+        # callers must not join invalidated data or let it repopulate the cache.
         self._store.clear()
+        self._inflight.clear()
 
     def __len__(self) -> int:
         return len(self._store)
@@ -185,12 +188,13 @@ class AsyncTTLCache:
             retrieved_at = utc_now()
             async with self._lock:
                 now = time.monotonic()
-                self._evict_if_needed(now)
-                self._store[key] = _CacheEntry(
-                    value=value,
-                    expires_at=now + ttl_s,
-                    retrieved_at=retrieved_at,
-                )
+                if self._inflight.get(key) is inflight:
+                    self._evict_if_needed(now)
+                    self._store[key] = _CacheEntry(
+                        value=value,
+                        expires_at=now + ttl_s,
+                        retrieved_at=retrieved_at,
+                    )
             served_at = utc_now()
             result = CacheResult(
                 value=value,
@@ -217,4 +221,5 @@ class AsyncTTLCache:
             raise
         finally:
             async with self._lock:
-                self._inflight.pop(key, None)
+                if self._inflight.get(key) is inflight:
+                    self._inflight.pop(key, None)
