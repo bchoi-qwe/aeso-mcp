@@ -77,9 +77,7 @@ async def test_clear_detaches_inflight_and_prevents_stale_repopulation() -> None
     try:
         await asyncio.wait_for(started.wait(), timeout=2)
         cache.clear()
-        fresh = await asyncio.wait_for(
-            cache.get_or_set("key", new_factory, ttl_s=60), timeout=2
-        )
+        fresh = await asyncio.wait_for(cache.get_or_set("key", new_factory, ttl_s=60), timeout=2)
         assert fresh == 2
     finally:
         release.set()
