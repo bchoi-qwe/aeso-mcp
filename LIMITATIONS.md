@@ -55,7 +55,7 @@ Honest inventory of gaps and caveats for the current `aeso-mcp` release.
 
 - Authenticated live AESO integration tests require a real `AESO_API_KEY`; they are opt-in locally and run in a
   scheduled protected GitHub environment when that secret is configured.
-  The suite now smokes core/APIM data, the CSD archive, wind/solar/combined and Pool Price
+  Public endpoint tests run credential-free; missing authenticated credentials fail the GitHub Actions live canary rather than silently skipping it. The suite smokes core/APIM data, the CSD archive, wind/solar/combined and Pool Price
   forecasts, and the named adequacy, surplus, FFR, DDS, TMR, and system-event reports.
 - CI does not call live AESO (uses a dummy key for unit/contract/MCP tests).
 - MCP interoperability is checked against the legacy active suite and the frozen 2026-07-28
