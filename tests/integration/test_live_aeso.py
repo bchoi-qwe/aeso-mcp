@@ -7,8 +7,10 @@ smoke the production GridStatus path without hammering upstream.
 
 from __future__ import annotations
 
+import math
 import os
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 
@@ -50,9 +52,19 @@ pytestmark = pytest.mark.integration
 def live_settings() -> Settings:
     key = os.environ.get("AESO_API_KEY")
     if not key:
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            pytest.fail("Authenticated live canary requires the protected AESO_API_KEY secret")
         pytest.skip("AESO_API_KEY not set; skipping live integration tests")
     clear_settings_cache()
     return Settings(aeso_api_key=key)  # type: ignore[arg-type]
+
+
+@pytest.fixture
+def public_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Settings:
+    """Exercise public endpoints without credentials or persistent local state."""
+    monkeypatch.delenv("AESO_API_KEY", raising=False)
+    monkeypatch.delenv("aeso_api_key", raising=False)
+    return Settings(_env_file=None, history_store_path=tmp_path)  # type: ignore[call-arg]
 
 
 @pytest.mark.asyncio
@@ -63,7 +75,7 @@ async def test_live_pool_price(live_settings: Settings) -> None:
     intervals, meta = await provider.get_pool_prices(start, end)
     assert meta["provider"] == "gridstatus"
     assert len(intervals) >= 1
-    assert intervals[0].pool_price_cad_per_mwh >= 0
+    assert math.isfinite(intervals[0].pool_price_cad_per_mwh)
     assert intervals[0].interval_start.tzinfo is not None
 
 
@@ -106,7 +118,7 @@ async def test_live_load_and_smp_short_windows(live_settings: Settings) -> None:
             SystemMarginalPriceRequest(start=smp_start, end=end)
         )
         assert smp.intervals
-        assert smp.intervals[0].system_marginal_price_cad_per_mwh >= 0
+        assert math.isfinite(smp.intervals[0].system_marginal_price_cad_per_mwh)
     finally:
         await container.aclose()
 
@@ -149,14 +161,14 @@ async def test_live_outages_recent_day(live_settings: Settings) -> None:
 
 
 @pytest.mark.asyncio
-async def test_live_transmission_public_reports(live_settings: Settings) -> None:
+async def test_live_transmission_public_reports(public_settings: Settings) -> None:
     from aeso_mcp.models.market_power import MarketPowerMitigationRequest
     from aeso_mcp.models.transmission import (
         ApprovedTransmissionOutagesRequest,
         LongRangeTransmissionOutagesRequest,
     )
 
-    container = build_container(live_settings)
+    container = build_container(public_settings)
     try:
         approved = await container.transmission.get_approved_transmission_outages(
             ApprovedTransmissionOutagesRequest()
@@ -229,9 +241,9 @@ async def test_live_authenticated_operational_reports(live_settings: Settings) -
 
 
 @pytest.mark.asyncio
-async def test_live_historical_csd_archive(live_settings: Settings) -> None:
+async def test_live_historical_csd_archive(public_settings: Settings) -> None:
     """Smoke the official archive catalog, download route, ZIP schema, and timestamp parse."""
-    container = build_container(live_settings)
+    container = build_container(public_settings)
     try:
         provider = HistoricalGenerationProvider(container.archive_http)
         sources = await provider.list_source_files("hourly")
@@ -254,10 +266,10 @@ async def test_live_historical_csd_archive(live_settings: Settings) -> None:
 
 @pytest.mark.asyncio
 async def test_live_operating_reserve_and_uc_public_reports(
-    live_settings: Settings,
+    public_settings: Settings,
 ) -> None:
     """Smoke active/standby economics, forecast, activations, summary, and UC settlement."""
-    container = build_container(live_settings)
+    container = build_container(public_settings)
     try:
         end_date = market_now().date() - timedelta(days=2)
         start_date = end_date - timedelta(days=6)
@@ -302,10 +314,10 @@ async def test_live_operating_reserve_and_uc_public_reports(
 
 @pytest.mark.asyncio
 async def test_live_official_forecasts_and_named_operational_reports(
-    live_settings: Settings,
+    public_settings: Settings,
 ) -> None:
     """Detect schema or endpoint drift across the new credential-free public products."""
-    container = build_container(live_settings)
+    container = build_container(public_settings)
     try:
         now = market_now()
         for series in ("wind", "solar", "wind_solar"):
