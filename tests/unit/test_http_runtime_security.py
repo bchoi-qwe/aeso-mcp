@@ -211,3 +211,33 @@ async def _empty_receive() -> Message:
 
 async def _empty_send(_message: Message) -> None:
     return None
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_bearer_is_rejected_without_server_error() -> None:
+    transport = _http_app(_settings(http_bearer_token=SecretStr("remote-token")))
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/echo", headers=[(b"authorization", b"Bearer \xff")], content=b"ok"
+        )
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_body_deadline_rejects_stalled_upload() -> None:
+    responses: list[Message] = []
+    stalled = asyncio.Event()
+
+    async def receive() -> Message:
+        await stalled.wait()
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def app(scope: Scope, receive: Receive, send: Send) -> None:
+        pytest.fail("Stalled upload must not reach the application")
+
+    async def send(message: Message) -> None:
+        responses.append(message)
+
+    middleware = RequestBodyLimitMiddleware(app, max_bytes=32, timeout_s=0.01)
+    await middleware({"type": "http", "path": "/mcp", "headers": []}, receive, send)
+    assert responses[0]["status"] == 408

@@ -13,7 +13,7 @@
 ## Features
 
 - Typed MCP tools with Pydantic inputs/outputs and structured results
-- Stable FastMCP 4.2.0 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
+- Stable FastMCP 4.2.6 runtime targeting MCP `2026-07-28`, with FastMCP's per-connection
   negotiation for legacy session-based clients
 - Current market snapshot combining price, load, generation, interchange, and reserves
 - Paginated historical Pool Price, System Marginal Price, load, and generation retrieval
@@ -232,7 +232,7 @@ or secrets. See [.env.example](.env.example) for all bounded runtime settings.
 
 ## Guided market research skill
 
-FastMCP 4.2.0 exposes the `alberta-market-research` skill as a normal MCP resource at
+FastMCP 4.2.6 exposes the `alberta-market-research` skill as a normal MCP resource at
 `skill://alberta-market-research/SKILL.md`. Agents can use it to select authoritative AESO
 datasets, interpret timestamps and units, check publication vintages and source completeness,
 and distinguish statistical association from causation. Compatible clients can also discover it

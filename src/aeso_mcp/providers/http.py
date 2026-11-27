@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from time import perf_counter
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -22,12 +23,19 @@ from aeso_mcp.errors import (
     RateLimitError,
     UpstreamUnavailableError,
 )
-from aeso_mcp.providers.http_utils import is_retryable, parse_retry_after, retry_wait
+from aeso_mcp.providers.http_utils import (
+    buffer_response,
+    is_retryable,
+    parse_retry_after,
+    retry_wait,
+    upstream_deadline,
+)
 
 logger = logging.getLogger(__name__)
 
 ALLOWED_HOSTS = frozenset({"apimgw.aeso.ca"})
 _MAX_REDIRECTS = 5
+_MAX_APIM_BYTES = 64 * 1024 * 1024
 
 
 def _before_sleep(retry_state: RetryCallState) -> None:
@@ -77,69 +85,77 @@ class AesoHttpClient:
         path = endpoint.lstrip("/")
         self._assert_allowed_path(path)
 
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(self._settings.http_max_retries + 1),
-            wait=retry_wait,
-            retry=retry_if_exception(is_retryable),
-            before_sleep=_before_sleep,
-            reraise=True,
-        ):
-            with attempt:
-                return await self._get_once(path, params=params)
-        raise UpstreamUnavailableError("AESO request failed after retries.")
+        async with upstream_deadline(self._settings.http_total_timeout_s):
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(self._settings.http_max_retries + 1),
+                wait=retry_wait,
+                retry=retry_if_exception(is_retryable),
+                before_sleep=_before_sleep,
+                reraise=True,
+            ):
+                with attempt:
+                    return await self._get_once(path, params=params)
+            raise UpstreamUnavailableError("AESO request failed after retries.")
 
     async def _get_once(self, path: str, *, params: dict[str, Any] | None) -> Any:
         current_path = path
         current_params = params
         for _ in range(_MAX_REDIRECTS + 1):
+            started_at = perf_counter()
+            status: int | None = None
             try:
-                response = await self._client.get(current_path, params=current_params)
+                async with self._client.stream(
+                    "GET", current_path, params=current_params
+                ) as response:
+                    status = response.status_code
+
+                    if status in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("Location")
+                        if not location:
+                            raise DataValidationError(
+                                f"AESO API redirect missing Location (HTTP {status})."
+                            )
+                        current_path, current_params = self._resolve_redirect(
+                            response_url=str(response.url),
+                            location=location,
+                        )
+                        continue
+
+                    if status in {401, 403}:
+                        raise AuthenticationError(
+                            "AESO API authentication failed. Check that AESO_API_KEY is valid "
+                            "and subscribed to the public API product."
+                        )
+                    if status == 404:
+                        raise DataValidationError(
+                            f"AESO endpoint not found: {current_path.split('?', 1)[0]}"
+                        )
+                    if status == 429:
+                        retry_s = parse_retry_after(response.headers.get("Retry-After"))
+                        raise RateLimitError(retry_after_s=retry_s)
+                    if status >= 500:
+                        raise UpstreamUnavailableError(f"AESO API returned HTTP {status}.")
+                    if status >= 400:
+                        raise DataValidationError(f"AESO API rejected the request (HTTP {status}).")
+
+                    try:
+                        buffered = await buffer_response(
+                            response, max_bytes=_MAX_APIM_BYTES, body_kind="AESO APIM response"
+                        )
+                        return buffered.json()
+                    except ValueError as exc:
+                        raise DataValidationError("AESO API returned malformed JSON.") from exc
+
             except httpx.TimeoutException as exc:
                 raise UpstreamUnavailableError("AESO API request timed out.") from exc
             except httpx.TransportError as exc:
                 raise UpstreamUnavailableError("Failed to connect to AESO API.") from exc
-
-            status = response.status_code
-            logger.info(
-                "aeso_http_get path=%s status=%s duration_ms=%.1f",
-                current_path.split("?", 1)[0],
-                status,
-                response.elapsed.total_seconds() * 1000,
-            )
-
-            if status in {301, 302, 303, 307, 308}:
-                location = response.headers.get("Location")
-                if not location:
-                    raise DataValidationError(
-                        f"AESO API redirect missing Location (HTTP {status})."
-                    )
-                current_path, current_params = self._resolve_redirect(
-                    response_url=str(response.url),
-                    location=location,
+            finally:
+                logger.info(
+                    "aeso_http_get status=%s duration_ms=%.1f",
+                    status,
+                    (perf_counter() - started_at) * 1000,
                 )
-                continue
-
-            if status in {401, 403}:
-                raise AuthenticationError(
-                    "AESO API authentication failed. Check that AESO_API_KEY is valid "
-                    "and subscribed to the public API product."
-                )
-            if status == 404:
-                raise DataValidationError(
-                    f"AESO endpoint not found: {current_path.split('?', 1)[0]}"
-                )
-            if status == 429:
-                retry_s = parse_retry_after(response.headers.get("Retry-After"))
-                raise RateLimitError(retry_after_s=retry_s)
-            if status >= 500:
-                raise UpstreamUnavailableError(f"AESO API returned HTTP {status}.")
-            if status >= 400:
-                raise DataValidationError(f"AESO API rejected the request (HTTP {status}).")
-
-            try:
-                return response.json()
-            except ValueError as exc:
-                raise DataValidationError("AESO API returned malformed JSON.") from exc
 
         raise DataValidationError(
             f"AESO API exceeded {_MAX_REDIRECTS} redirects while staying allow-listed."

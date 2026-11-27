@@ -20,6 +20,7 @@ from aeso_mcp.providers.http_utils import (
     is_retryable,
     parse_retry_after,
     retry_wait,
+    upstream_deadline,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,15 +62,16 @@ class AesoArchiveHttpClient:
         return response.content
 
     async def _get(self, url: str) -> httpx.Response:
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(self._settings.http_max_retries + 1),
-            wait=retry_wait,
-            retry=retry_if_exception(is_retryable),
-            reraise=True,
-        ):
-            with attempt:
-                return await self._get_once(url)
-        raise UpstreamUnavailableError("AESO CSD archive request failed after retries.")
+        async with upstream_deadline(self._settings.http_total_timeout_s):
+            async for attempt in AsyncRetrying(
+                stop=stop_after_attempt(self._settings.http_max_retries + 1),
+                wait=retry_wait,
+                retry=retry_if_exception(is_retryable),
+                reraise=True,
+            ):
+                with attempt:
+                    return await self._get_once(url)
+            raise UpstreamUnavailableError("AESO CSD archive request failed after retries.")
 
     async def _get_once(self, url: str) -> httpx.Response:
         current = url
