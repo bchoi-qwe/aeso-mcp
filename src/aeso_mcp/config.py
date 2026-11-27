@@ -157,6 +157,11 @@ class Settings(BaseSettings):
         validation_alias="AESO_MCP_HISTORY_STORE_PATH",
         description="Local DuckDB/Parquet root used by optional historical research tools.",
     )
+    raw_csd_archive_enabled: bool = Field(
+        default=False,
+        validation_alias="AESO_MCP_RAW_CSD_ARCHIVE_ENABLED",
+        description="Retain original CSD ZIPs and retrieval manifests under the history root.",
+    )
     # Cache TTLs (seconds)
     cache_ttl_snapshot_s: float = Field(default=30.0, ge=0.0)
     cache_ttl_historical_s: float = Field(default=86_400.0, ge=0.0)

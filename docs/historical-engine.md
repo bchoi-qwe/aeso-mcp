@@ -87,3 +87,23 @@ coverage. A missing target interval is unobserved, never silently filled from a 
   units, finality, and missing-actual semantics.
 - `get_uc_settlement_summary` returns hourly public UC settlement amount in CAD and charged
   volume in MW for inclusive report dates.
+
+
+## Original CSD source objects (opt-in)
+
+Set `AESO_MCP_RAW_CSD_ARCHIVE_ENABLED=true` to persist downloaded CSD ZIP bytes under
+`<history-root>/raw/objects/<sha256-prefix>/<sha256>`. Retrieval manifests are immutable JSON
+files in `raw/observations`; they distinguish the actual download time from the source's
+reported update time (which is not necessarily the first publication time). Different retrievals
+of identical bytes share a single object; a revised file has a new SHA-256 object. The Python
+`RawSourceArchive.read(digest)` method verifies the bytes before returning them.
+
+The archive captures new downloads only, does not backfill historical vintages and does not
+expose a point-in-time query for all market data. It is opt-in because the original ZIP files can
+be large and disk retention is operator-managed. Use a local filesystem supporting atomic hard
+links; a failed manifest write can leave an unreferenced object. Never substitute the archive
+retrieval timestamp for an independently verified publication date.
+
+CSV rows are streamed from the ZIP during parsing instead of materializing a second, entire
+uncompressed list of dictionaries. Selected normalized records and the compressed input still
+occupy memory, so full-file ingestion remains subject to workload-specific benchmarking.

@@ -31,6 +31,7 @@ from aeso_mcp.services.research_data import ResearchDataService
 from aeso_mcp.services.reserves import OperatingReserveService
 from aeso_mcp.services.transmission import TransmissionService
 from aeso_mcp.storage.history import HistoricalStore
+from aeso_mcp.storage.raw_archive import RawSourceArchive
 
 
 @dataclass
@@ -76,7 +77,12 @@ def build_container(settings: Settings) -> AppContainer:
     public_reports = AesoPublicReportsProvider(public_http)
     forecast_provider = AesoForecastProvider(public_http)
     reports_provider = AesoReportsProvider(public_http)
-    historical_generation = HistoricalGenerationProvider(archive_http)
+    raw_archive = (
+        RawSourceArchive(settings.history_store_path / "raw")
+        if settings.raw_csd_archive_enabled
+        else None
+    )
+    historical_generation = HistoricalGenerationProvider(archive_http, raw_archive)
     historical_store = HistoricalStore(settings.history_store_path)
     market = MarketService(provider, settings, cache)
     grid = GridService(provider, settings, cache)

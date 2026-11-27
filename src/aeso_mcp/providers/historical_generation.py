@@ -10,6 +10,7 @@ import io
 import json
 import re
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Literal
@@ -17,6 +18,7 @@ from typing import Literal
 from aeso_mcp.errors import DataValidationError
 from aeso_mcp.models.history import HistoricalGenerationInterval
 from aeso_mcp.providers.archive_http import AesoArchiveHttpClient
+from aeso_mcp.storage.raw_archive import RawSourceArchive
 from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc, utc_now
 
 _SHARED_NAME = "qofgn9axnnw6uq3ip1goiq2ngb11txe5"
@@ -69,8 +71,11 @@ class HistoricalGenerationSourceFile:
 class HistoricalGenerationProvider:
     """Fetch and normalize hourly or five-minute individual-asset CSD history."""
 
-    def __init__(self, http: AesoArchiveHttpClient) -> None:
+    def __init__(
+        self, http: AesoArchiveHttpClient, raw_archive: RawSourceArchive | None = None
+    ) -> None:
         self._http = http
+        self._raw_archive = raw_archive
 
     async def list_source_files(
         self,
@@ -132,12 +137,24 @@ class HistoricalGenerationProvider:
     ) -> tuple[list[HistoricalGenerationInterval], str]:
         url = _DOWNLOAD_URL.format(shared=_SHARED_NAME, file_id=source.file_id)
         archive = await self._http.get_bytes(url)
-        digest, rows = await asyncio.to_thread(_digest_and_read_archive, archive)
         retrieved_at = utc_now()
+        if self._raw_archive is not None:
+            observation = await asyncio.to_thread(
+                self._raw_archive.record,
+                archive,
+                dataset="historical_generation",
+                source_id=source.file_id,
+                source_name=source.name,
+                retrieved_at=retrieved_at,
+                source_updated_at=source.content_updated_at,
+            )
+            digest = observation.sha256
+        else:
+            digest = await asyncio.to_thread(lambda: hashlib.sha256(archive).hexdigest())
         duration = timedelta(hours=1) if interval == "hourly" else timedelta(minutes=5)
         result = await asyncio.to_thread(
             _parse_generation_rows,
-            rows,
+            _read_single_csv(archive),
             source=source,
             interval=interval,
             duration=duration,
@@ -176,7 +193,7 @@ def _coverage_from_name(name: str) -> tuple[date, date] | None:
     return start, after_end - timedelta(days=1)
 
 
-def _read_single_csv(archive: bytes) -> list[dict[str, str]]:
+def _read_single_csv(archive: bytes) -> Iterator[dict[str, str]]:
     try:
         with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
             members = [
@@ -198,19 +215,13 @@ def _read_single_csv(archive: bytes) -> list[dict[str, str]]:
                     raise DataValidationError(
                         f"AESO CSD CSV omitted required columns: {', '.join(missing)}."
                     )
-                return [dict(row) for row in reader]
+                yield from reader
     except zipfile.BadZipFile as exc:
         raise DataValidationError("AESO CSD download was not a valid ZIP archive.") from exc
 
 
-def _digest_and_read_archive(archive: bytes) -> tuple[str, list[dict[str, str]]]:
-    """Hash and decompress a potentially large archive off the event loop."""
-
-    return hashlib.sha256(archive).hexdigest(), _read_single_csv(archive)
-
-
 def _parse_generation_rows(
-    rows: list[dict[str, str]],
+    rows: Iterator[dict[str, str]],
     *,
     source: HistoricalGenerationSourceFile,
     interval: Literal["hourly", "5-minute"],
