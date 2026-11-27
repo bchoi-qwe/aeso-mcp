@@ -218,50 +218,81 @@ class HistoricalStore:
 
     def replace_generation_source(
         self,
-        records: Sequence[HistoricalGenerationInterval],
+        records: Iterable[HistoricalGenerationInterval],
         *,
         source_file_id: str,
         source_file_name: str,
         source_hash: str,
         source_updated_at: datetime | None,
     ) -> tuple[int, int]:
-        """Atomically replace one published source object and rebuild partitions.
+        """Replace a source while retaining the typed count/partition return contract."""
+        _, written, rebuilt = self.replace_generation_source_stream(
+            records,
+            source_file_id=source_file_id,
+            source_file_name=source_file_name,
+            source_hash=source_hash,
+            source_updated_at=source_updated_at,
+            require_nonempty=False,
+        )
+        return written, rebuilt
 
-        The database transaction commits before Parquet replacement.  Each
-        partition is itself atomically replaced, so an interrupted rebuild
-        leaves either the prior complete file or the new complete file; the
-        DuckDB index remains the canonical recoverable source.
+    def replace_generation_source_stream(
+        self,
+        records: Iterable[HistoricalGenerationInterval],
+        *,
+        source_file_id: str,
+        source_file_name: str,
+        source_hash: str,
+        source_updated_at: datetime | None,
+        require_nonempty: bool = True,
+    ) -> tuple[int, int, int]:
+        """Stream an entire publication through one transaction.
+
+        Return received rows, unique written rows and rebuilt partitions. The
+        database primary key handles cross-batch revisions; no full normalized
+        collection or full key set is retained in Python. A parse or write failure
+        rolls back both the source replacement and manifest.
         """
-
         self.initialize()
-        records_by_key: dict[tuple[datetime, str, str], HistoricalGenerationInterval] = {}
-        for record in records:
-            key = (record.interval_start_utc, record.resolution, record.asset_id)
-            # Keep the final source row for a key.  The archive can contain
-            # revised observations in one response; callers report the
-            # duplicate count and a later source replacement remains atomic.
-            records_by_key[key] = record
-        unique_records = records_by_key.values()
+        received = 0
         with self._connect() as connection:
             affected = self._existing_generation_partitions(connection, source_file_id)
-            affected.update(
-                {
-                    (
-                        record.resolution,
-                        record.interval_start_utc.year,
-                        record.interval_start_utc.month,
-                    )
-                    for record in unique_records
-                }
-            )
             connection.begin()
             try:
                 connection.execute(
                     "DELETE FROM generation WHERE source_file_id = ?", [source_file_id]
                 )
-                for batch in batched(unique_records, _GENERATION_WRITE_BATCH_SIZE, strict=False):
-                    rows = [self._plain_row(record.model_dump(mode="python")) for record in batch]
+                for batch in batched(records, _GENERATION_WRITE_BATCH_SIZE, strict=False):
+                    received += len(batch)
+                    by_key: dict[tuple[datetime, str, str], HistoricalGenerationInterval] = {}
+                    for record in batch:
+                        if record.source_file_id != source_file_id:
+                            raise DataValidationError("Generation record source identity mismatch.")
+                        key = (record.interval_start_utc, record.resolution, record.asset_id)
+                        by_key[key] = record
+                        affected.add(
+                            (
+                                record.resolution,
+                                record.interval_start_utc.year,
+                                record.interval_start_utc.month,
+                            )
+                        )
+                    rows = [
+                        self._plain_row(record.model_dump(mode="python"))
+                        for record in by_key.values()
+                    ]
                     self._insert_arrow_rows(connection, "incoming_generation", rows, "generation")
+                if require_nonempty and received == 0:
+                    raise DataValidationError("Complete generation source contained no records.")
+                written, coverage_start, coverage_end = _required_row(
+                    connection.execute(
+                        """
+                        SELECT count(*), min(interval_start_utc), max(interval_end_utc)
+                        FROM generation WHERE source_file_id = ?
+                        """,
+                        [source_file_id],
+                    ).fetchone()
+                )
                 connection.execute(
                     """
                     INSERT OR REPLACE INTO source_manifest (
@@ -278,9 +309,9 @@ class HistoricalStore:
                         source_hash,
                         source_updated_at,
                         datetime.now(UTC),
-                        len(records_by_key),
-                        min((record.interval_start_utc for record in unique_records), default=None),
-                        max((record.interval_end_utc for record in unique_records), default=None),
+                        written,
+                        coverage_start,
+                        coverage_end,
                         "actual",
                         "unknown",
                         "complete",
@@ -292,7 +323,7 @@ class HistoricalStore:
                 connection.rollback()
                 raise
             rebuilt = self._rebuild_generation_partitions(connection, sorted(affected))
-        return len(records_by_key), rebuilt
+        return received, int(written), rebuilt
 
     def upsert_market_series(
         self,

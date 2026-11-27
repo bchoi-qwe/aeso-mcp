@@ -169,3 +169,8 @@ source object rather than a seven-day read window: ingestion replaces an entire 
 include resolution, source digest, coverage, process peak RSS and wall times. Jobs use an ephemeral
 store and a bounded runner timeout. A failure, including an out-of-memory termination, is evidence
 of a workload limitation, not a successful stress test.
+
+
+### Streaming full-source ingestion
+
+Full-source synchronization downloads and optionally archives the bounded ZIP, then lazily normalizes its CSV rows in the historical-store worker. The database writer keeps only one 10,000-row batch and its per-batch deduplication map in Python. Its primary key resolves revisions across batches. One transaction covers the deletion, inserts and source manifest; malformed rows or an empty full source roll back rather than replacing the last good data. Parquet rebuilding still occurs after the database transaction. The direct paginated archive path and single-source replay still materialize selected models; this change is for ingestion. The workload benchmark separates download from combined streaming parse/write time and records peak RSS, digest and row count.
