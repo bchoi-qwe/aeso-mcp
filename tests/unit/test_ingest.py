@@ -10,8 +10,15 @@ from aeso_mcp.models.history import HistoricalDataset
 def test_ingest_requires_explicit_dataset_and_aware_times() -> None:
     request = parse_request(
         [
-            "--start", "2026-01-01T00:00:00Z", "--end", "2026-01-02T00:00:00Z",
-            "--dataset", "pool_price", "--dataset", "load", "--refresh",
+            "--start",
+            "2026-01-01T00:00:00Z",
+            "--end",
+            "2026-01-02T00:00:00Z",
+            "--dataset",
+            "pool_price",
+            "--dataset",
+            "load",
+            "--refresh",
         ]
     )
     assert request.datasets == [HistoricalDataset.POOL_PRICE, HistoricalDataset.LOAD]
@@ -22,7 +29,5 @@ def test_ingest_requires_explicit_dataset_and_aware_times() -> None:
 @pytest.mark.parametrize("start", ["2026-01-01", "2026-01-03T00:00:00Z"])
 def test_ingest_rejects_ambiguous_or_reversed_interval(start: str) -> None:
     with pytest.raises(SystemExit) as exc:
-        parse_request(
-            ["--start", start, "--end", "2026-01-02T00:00:00Z", "--dataset", "load"]
-        )
+        parse_request(["--start", start, "--end", "2026-01-02T00:00:00Z", "--dataset", "load"])
     assert exc.value.code == 2
