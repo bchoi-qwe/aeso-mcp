@@ -180,6 +180,29 @@ class HistoricalMarketSeriesInterval(BaseModel):
         return self
 
 
+class MarketReplayRow(BaseModel):
+    """UTC outer alignment with explicit missing values and per-source provenance."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    interval_start_utc: datetime
+    pool_price: HistoricalMarketSeriesInterval | None
+    ail: HistoricalMarketSeriesInterval | None
+
+
+class MarketReplayResponse(BaseModel):
+    """Observed actuals at a fixed information cutoff, not reconstructed publications."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start: datetime
+    end: datetime
+    as_of: datetime
+    rows: list[MarketReplayRow]
+    missing_pool_price: int
+    missing_ail: int
+
+
 class HistoricalMarketSeriesCoverage(BaseModel):
     """Coverage and source quality for a bounded stored market series."""
 

@@ -29,8 +29,10 @@ from aeso_mcp.models.history import (
     HistoricalMarketSeriesCoverage,
     HistoricalMarketSeriesInterval,
     MarketSeriesSelection,
+    MarketReplayRow,
+    MarketReplayResponse,
 )
-from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc
+from aeso_mcp.timeutil import MARKET_TZ, to_market, to_utc, validate_range
 
 _SCHEMA_VERSION = 3
 _MARKET_SERIES_CADENCE = timedelta(hours=1)
@@ -300,8 +302,11 @@ class HistoricalStore:
         self.initialize()
         if not rows:
             return 0, 0
+        if dataset not in {HistoricalDataset.POOL_PRICE, HistoricalDataset.LOAD}:
+            raise DataValidationError("Only Pool Price and AIL are supported market series.")
         expected_series = "pool_price" if dataset == HistoricalDataset.POOL_PRICE else "ail"
         by_key: dict[tuple[datetime, str], dict[str, Any]] = {}
+        explicit_retrievals: set[tuple[datetime, str]] = set()
         for row in rows:
             normalized_row = self._normalize_market_row(row)
             if normalized_row["series"] != expected_series:
@@ -314,6 +319,11 @@ class HistoricalStore:
             # deterministic behavior while service-level duplicate counters
             # make the revision observable to callers.
             by_key[key] = normalized_row
+            retrieved = row.get("source_retrieved_at")
+            if isinstance(retrieved, datetime) and retrieved.utcoffset() is not None:
+                explicit_retrievals.add(key)
+            else:
+                explicit_retrievals.discard(key)
         normalized = list(by_key.values())
         partitions = sorted(
             {
@@ -328,6 +338,23 @@ class HistoricalStore:
         with self._connect() as connection:
             connection.begin()
             try:
+                # Preserve only actual retrievals with explicitly supplied information time.
+                observed = [
+                    row
+                    for row in normalized
+                    if row["actual_value"] is not None
+                    and (row["interval_start_utc"], row["series"]) in explicit_retrievals
+                ]
+                if observed:
+                    connection.register("incoming_actual_observations", self._arrow_table(observed))
+                    try:
+                        connection.execute("""
+                            INSERT OR IGNORE INTO market_actual_observations BY NAME
+                            SELECT r.*, sha256(to_json(r)) AS observation_id
+                            FROM incoming_actual_observations r
+                        """)
+                    finally:
+                        connection.unregister("incoming_actual_observations")
                 self._insert_arrow_rows(
                     connection, "incoming_market_series", normalized, "market_series"
                 )
@@ -668,6 +695,73 @@ class HistoricalStore:
             rows = cursor.fetchall()
         output_series = f"{canonical}_forecast" if forecast_only else canonical
         return [_market_row_to_model(row, output_series) for row in rows], total
+
+    def replay_market_actuals(
+        self,
+        *,
+        start: datetime,
+        end: datetime,
+        as_of: datetime,
+    ) -> MarketReplayResponse:
+        """Align two actual series on an hourly UTC grid at a strict retrieval cutoff."""
+        if any(value.utcoffset() is None for value in (start, end, as_of)):
+            raise DataValidationError("Replay requires timezone-aware start, end, and as_of.")
+        start, end = validate_range(start, end, max_days=366)
+        start_utc, end_utc, cutoff = _as_utc(start), _as_utc(end), _as_utc(as_of)
+        if any(value.minute or value.second or value.microsecond for value in (start_utc, end_utc)):
+            raise DataValidationError("Replay bounds must be aligned to UTC hours.")
+        if end_utc > cutoff:
+            raise DataValidationError("Actual replay cannot include intervals after as_of.")
+        self.initialize()
+        with self._connect() as connection:
+            records = connection.execute("""
+                WITH eligible AS (
+                    SELECT *,
+                           dense_rank() OVER (
+                               PARTITION BY interval_start_utc, series
+                               ORDER BY source_retrieved_at DESC
+                           ) AS revision_rank
+                    FROM market_actual_observations
+                    WHERE interval_start_utc >= ? AND interval_start_utc < ?
+                      AND interval_end_utc <= ?
+                      AND interval_end_utc = interval_start_utc + INTERVAL 1 HOUR
+                      AND source_retrieved_at <= ?
+                      AND source_retrieved_at >= interval_end_utc
+                      AND (source_updated_at IS NULL OR source_updated_at <= ?)
+                )
+                SELECT interval_start, interval_end, series, actual_value, forecast_value,
+                       unit, source_product, source_retrieved_at, source_updated_at,
+                       source_file_id, source_file_name, observation_type, finality,
+                       completeness, schema_version
+                FROM eligible WHERE revision_rank = 1
+                ORDER BY interval_start_utc, series
+            """, [start_utc, end_utc, cutoff, cutoff, cutoff]).fetchall()
+        observed: dict[tuple[datetime, str], HistoricalMarketSeriesInterval] = {}
+        for record in records:
+            series = str(record[2])
+            key = (_as_utc(record[0]), series)
+            if key in observed:
+                raise DataValidationError("Conflicting actual revisions share a retrieval time.")
+            # Do not expose the unverified forecast value embedded in a latest-state actual row.
+            observation = _market_row_to_model(record, series)
+            observed[key] = observation.model_copy(update={"forecast_value": None})
+        rows: list[MarketReplayRow] = []
+        current = start_utc
+        while current < end_utc:
+            rows.append(MarketReplayRow(
+                interval_start_utc=current,
+                pool_price=observed.get((current, "pool_price")),
+                ail=observed.get((current, "ail")),
+            ))
+            current += timedelta(hours=1)
+        return MarketReplayResponse(
+            start=start_utc,
+            end=end_utc,
+            as_of=cutoff,
+            rows=rows,
+            missing_pool_price=sum(row.pool_price is None for row in rows),
+            missing_ail=sum(row.ail is None for row in rows),
+        )
 
     def query_market_series_complete(
         self,
@@ -1080,6 +1174,18 @@ class HistoricalStore:
             WHERE forecast_value IS NOT NULL
             """
         )
+
+        # A new relation intentionally starts empty. Older mutable market rows cannot
+        # establish their full observation history or trustworthy original retrieval time.
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS market_actual_observations AS
+            SELECT m.*, sha256(to_json(m)) AS observation_id
+            FROM market_series m WHERE false
+        """)
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS market_actual_observation_identity
+            ON market_actual_observations (observation_id)
+        """)
 
         # Preserve the state actually retrieved, independently of forecast identity.
         # Existing v3 stores can only supply their last retained state; never invent
