@@ -100,3 +100,19 @@ The measured BM25 transform is now available as an **opt-in** runtime setting,
 client discovery and avoiding an extra tool call for straightforward market questions.
 The benchmark above was recorded before the `search_aeso_tools` addition and should be
 rerun for new releases; figures are historical measurements, not live size guarantees.
+
+
+## Evaluation integrity
+
+The external scorer also reports submitted-result and nonempty-answer coverage, exact tool-set
+accuracy, tool selection precision and no-tool abstention accuracy. Missing answers receive no
+literal safety credit, and duplicate or unknown case IDs are rejected. Tool arguments and
+self-reported caveats remain structural evidence only; they do not prove that a model used correct
+values or generated a factually grounded answer. Independent reviewers or fixture-derived numeric
+assertions must establish correctness.
+
+For real model comparisons, use the same frozen case set, observation fixtures, client settings,
+model identifier, repeated trial count and scoring rules in both discovery modes. Retain tool-call
+traces, timestamps, actual input/output token counts when provided by the client, wall-clock
+latency and human-reviewed correctness. Report incomplete trials rather than imputing successes.
+Do not use the canonical questions as both a tuning and independent holdout set.
