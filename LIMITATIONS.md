@@ -99,3 +99,13 @@ prefers the operating system's timezone database; on a stale system, update it o
 with `PYTHONTZPATH=""` to use the installed tzdata package. Separate data engines and external
 consumers should validate their own timezone data. CSD fixed-MST and fixed-MDT columns
 are interpreted by their explicit offsets, never by the download date.
+
+
+### Live checks
+
+Plain pytest excludes integration tests by default. Run `uv run pytest tests/integration -m
+"integration and public_live"` for public checks and `uv run pytest tests/integration -m
+"integration and not public_live"` with a valid AESO API key for authenticated checks. The
+protected authenticated GitHub workflow runs only from main; configure the AESO_API_KEY
+secret in the aeso-live environment and use its manual Run workflow action or scheduled run.
+The public workflow never references that secret. A public success does not validate APIM.

@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   live-canary:
-    name: Short live upstream smoke
+    name: Authenticated upstream smoke
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: aeso-live
@@ -32,4 +33,4 @@ jobs:
       - name: Run bounded AESO live canary
         env:
           AESO_API_KEY: ${{ secrets.AESO_API_KEY }}
-        run: uv run pytest tests/integration -m integration -q
+        run: uv run pytest tests/integration -m 'integration and not public_live' -q --tb=short

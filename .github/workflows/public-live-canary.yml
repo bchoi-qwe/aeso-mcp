@@ -38,8 +38,7 @@ jobs:
         env:
           AESO_MCP_HTTP_TOTAL_TIMEOUT_S: "90"
         run: |
-          uv run pytest tests/integration/test_live_aeso.py -m integration -q -ra \
-            -k "transmission_public_reports or historical_csd_archive or operating_reserve_and_uc_public_reports or official_forecasts_and_named_operational_reports" \
+          uv run pytest tests/integration/test_live_aeso.py -m "integration and public_live" -q -ra \
             --junitxml=public-live.xml
 
       - name: Record actual public canary results
