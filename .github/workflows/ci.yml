@@ -13,6 +13,27 @@ permissions:
   contents: read
 
 jobs:
+  dependency-candidate:
+    name: Resolve FastMCP 4.2.6 candidate
+    if: github.event_name == 'pull_request' && github.head_ref == 'modernization/phase2-runtime-security'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+          enable-cache: false
+      - name: Resolve candidate without publishing
+        run: |
+          sed -i 's/fastmcp==4.2.0/fastmcp==4.2.6/' pyproject.toml
+          uv lock --upgrade-package fastmcp --upgrade-package mcp
+          git diff --no-ext-diff -- uv.lock
+          uv sync --locked --group dev --extra analytics --extra docs
+          uv run python tests/packaging/check_lock_prereleases.py
+          uv run pytest tests/unit tests/contract tests/mcp -q
+          uv audit --frozen
+
   dependency-review:
     name: Review dependency changes
     if: github.event_name == 'pull_request'
