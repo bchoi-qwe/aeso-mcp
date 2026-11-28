@@ -22,12 +22,22 @@ PAGES = {
         "url": "https://aesoengage.aeso.ca/rem-it-systems-implementation",
         "expected": ("AESO_MUI_API.json", "MUI API Specification", "Soft Launch"),
     },
+    "sandbox_access": {
+        "url": "https://infohub.aeso.ca/resources/detail/?id=bcc0e018-2de4-f111-84e8-3833c5fa76e3",
+        "expected": (
+            "REM Sandbox Access Request",
+            "MarketTransition@aeso.ca",
+            "does not provide access to the production environment",
+        ),
+    },
     "schedule": {
         "url": "https://www.aeso.ca/transition/it-systems/",
         "expected": ("Soft Launch", "System Trials", "Q2 2028"),
     },
 }
-ALLOWED_HOSTS = frozenset({"aesoengage.aeso.ca", "www.aeso.ca", "aeso.ca"})
+ALLOWED_HOSTS = frozenset(
+    {"aesoengage.aeso.ca", "www.aeso.ca", "aeso.ca", "infohub.aeso.ca"}
+)
 
 
 class _ReadableText(HTMLParser):
