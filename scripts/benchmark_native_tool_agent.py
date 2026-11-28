@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from time import perf_counter
@@ -173,7 +174,7 @@ def run(fixture_python: Path, shard: int, total_shards: int) -> dict[str, Any]:
                         "arguments": raw_call["arguments"],
                     },
                 )["result"]
-            except (ValueError, KeyError, OSError) as exc:
+            except (subprocess.SubprocessError, ValueError, KeyError, OSError) as exc:
                 trace["tool_error"] = type(exc).__name__
             else:
                 trace["tool_executed"] = True
