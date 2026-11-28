@@ -59,56 +59,88 @@ def build_cases() -> list[dict[str, object]]:
 
     for index in (0, 2, 3, 9, 13, 17, 22, 25, 37, 47):
         add(
-            "price_point", index, 1,
+            "price_point",
+            index,
+            1,
             f"What was the actual hourly Alberta Pool Price for [{_stamp(index)}, {_stamp(index + 1)})? Return CAD/MWh.",
-            ["get_pool_prices"], PRICES[index], "CAD/MWh",
+            ["get_pool_prices"],
+            PRICES[index],
+            "CAD/MWh",
         )
     for index in (1, 5, 9, 16, 24, 29, 42, 47):
         add(
-            "load_point", index, 1,
+            "load_point",
+            index,
+            1,
             f"What was actual Alberta Internal Load for [{_stamp(index)}, {_stamp(index + 1)})? Return MW.",
-            ["get_load"], LOADS[index], "MW",
+            ["get_load"],
+            LOADS[index],
+            "MW",
         )
     for index in (0, 5, 10, 17, 28, 43):
         window = PRICES[index : index + 4]
         add(
-            "price_mean", index, 4,
+            "price_mean",
+            index,
+            4,
             f"Find the arithmetic mean of four actual hourly Pool Prices in [{_stamp(index)}, {_stamp(index + 4)}), CAD/MWh.",
-            ["get_pool_prices"], sum(window) / 4, "CAD/MWh",
+            ["get_pool_prices"],
+            sum(window) / 4,
+            "CAD/MWh",
         )
     for index in (2, 11, 19, 26, 34, 43):
         add(
-            "price_max", index, 5,
+            "price_max",
+            index,
+            5,
             f"Find the maximum actual hourly Pool Price in [{_stamp(index)}, {_stamp(index + 5)}), CAD/MWh.",
-            ["get_pool_prices"], max(PRICES[index : index + 5]), "CAD/MWh",
+            ["get_pool_prices"],
+            max(PRICES[index : index + 5]),
+            "CAD/MWh",
         )
     for index in (1, 13, 25, 41):
         add(
-            "price_min", index, 5,
+            "price_min",
+            index,
+            5,
             f"Find the minimum actual hourly Pool Price in [{_stamp(index)}, {_stamp(index + 5)}), CAD/MWh.",
-            ["get_pool_prices"], min(PRICES[index : index + 5]), "CAD/MWh",
+            ["get_pool_prices"],
+            min(PRICES[index : index + 5]),
+            "CAD/MWh",
         )
     for index in (3, 15, 29, 42):
         add(
-            "load_peak", index, 5,
+            "load_peak",
+            index,
+            5,
             f"Find the maximum actual AIL within [{_stamp(index)}, {_stamp(index + 5)}). Return MW.",
-            ["get_load"], max(LOADS[index : index + 5]), "MW",
+            ["get_load"],
+            max(LOADS[index : index + 5]),
+            "MW",
         )
     for index in (0, 6, 12, 21, 31, 43):
         loads = LOADS[index : index + 4]
         prices = PRICES[index : index + 4]
         weighted = sum(p * load for p, load in zip(prices, loads, strict=True)) / sum(loads)
         add(
-            "load_weighted_price", index, 4,
+            "load_weighted_price",
+            index,
+            4,
             f"Calculate load-weighted average actual Pool Price over [{_stamp(index)}, {_stamp(index + 4)}): sum(Pool Price * AIL)/sum(AIL). Return CAD/MWh.",
-            ["get_pool_prices", "get_load"], weighted, "CAD/MWh",
+            ["get_pool_prices", "get_load"],
+            weighted,
+            "CAD/MWh",
         )
     for index in (2, 12, 27, 41):
         peak = max(range(index, index + 5), key=lambda hour: (LOADS[hour], -hour))
         add(
-            "price_at_peak_load", index, 5,
+            "price_at_peak_load",
+            index,
+            5,
             f"Within [{_stamp(index)}, {_stamp(index + 5)}), what actual Pool Price occurred during the first hour of maximum AIL? Return CAD/MWh.",
-            ["get_pool_prices", "get_load"], PRICES[peak], "CAD/MWh",
+            ["get_pool_prices", "get_load"],
+            PRICES[peak],
+            "CAD/MWh",
         )
     for question in (
         "Guarantee tomorrow's exact future Alberta Pool Price; past data and forecasts are not answers.",

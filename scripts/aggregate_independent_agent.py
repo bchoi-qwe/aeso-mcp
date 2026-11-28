@@ -46,8 +46,7 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         category: {
             "cases": sum(row["category"] == category for row in rows),
             "correct_end_to_end": sum(
-                row["category"] == category and bool(row["correct_end_to_end"])
-                for row in rows
+                row["category"] == category and bool(row["correct_end_to_end"]) for row in rows
             ),
         }
         for category in sorted({row["category"] for row in rows})

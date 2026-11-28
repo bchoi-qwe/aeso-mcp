@@ -212,14 +212,16 @@ def run(
         elif calls:
             trace["correct_arguments"] = arguments_match(calls, case)
             try:
-                responses = fixture(fixture_python, {"operation": "call", "calls": calls})["results"]
+                responses = fixture(fixture_python, {"operation": "call", "calls": calls})[
+                    "results"
+                ]
             except (subprocess.SubprocessError, KeyError, ValueError) as exc:
                 trace["tool_error"] = type(exc).__name__
             else:
                 trace["tool_executed"] = True
                 trace["tool_result"] = responses
                 answer = infer(
-                    'Use ONLY these actual MCP tool results, then return ONLY JSON '
+                    "Use ONLY these actual MCP tool results, then return ONLY JSON "
                     '{"value": number, "unit": "CAD/MWh or MW"}. For averages, '
                     "arithmetic means must divide by number of hours; load-weighted "
                     "prices divide sum(price*load) by sum(load). "
@@ -273,9 +275,7 @@ def main() -> None:
                 "model": result["model"],
                 "shard": result["shard_index"],
                 "cases": len(result["traces"]),
-                "end_to_end_correct": sum(
-                    bool(t["correct_end_to_end"]) for t in result["traces"]
-                ),
+                "end_to_end_correct": sum(bool(t["correct_end_to_end"]) for t in result["traces"]),
             }
         )
         + "\n"

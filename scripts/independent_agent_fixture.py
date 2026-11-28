@@ -33,8 +33,12 @@ def validate_call(name: str, arguments: dict[str, Any]) -> None:
     start, end = to_utc(request.start), to_utc(request.end)
     if (
         not START <= start < end <= START + timedelta(hours=HOURS)
-        or start.minute or start.second or start.microsecond
-        or end.minute or end.second or end.microsecond
+        or start.minute
+        or start.second
+        or start.microsecond
+        or end.minute
+        or end.second
+        or end.microsecond
         or end - start > timedelta(hours=6)
         or request.include_forecast
         or request.offset != 0
