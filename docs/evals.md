@@ -149,3 +149,20 @@ disjoint three-question shards for each checkpoint, each with its own bounded jo
 The aggregate job verifies eight artifacts, pinned revisions, identical full-case SHA256,
 each shard identity and exactly-once coverage of every case in full and compact modes.
 Incomplete or cancelled experiments cannot become a misleading complete score.
+
+## Completed pinned-model evidence, November 28, 2026
+
+The complete independently checked 12-question routing comparison in PR #31 showed:
+Qwen2.5 1.5B exact routes 5/12 with full discovery versus 1/12 with compact
+(strict parsing); Qwen2.5 3B 10/12 full versus 9/12 compact. Three of the
+3B full-catalog successes were correct abstentions, compared with two for compact.
+The 3B model used 37,465 versus 6,368 input tokens respectively.
+These are description-only route selections, not full agent answers.
+
+The separate 54-case synthetic benchmark (PR #37) produced no correct responses
+for Qwen2.5 0.5B on 54 questions. On the same stratified 16-question subset,
+1.5B achieved 3 correct end-to-end numerical answers and 3B achieved 3 correct
+abstentions but no correct numerical answers. The native function-calling five-case
+3B pilot (PR #38) achieved 1/5 correct end to end. Full benchmark scoring validates
+all required model shards and case digests; it does not generalize to more capable
+external clients or live AESO data. The discovery default remains unchanged.

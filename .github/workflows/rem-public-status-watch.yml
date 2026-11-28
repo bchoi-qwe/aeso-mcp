@@ -1,0 +1,38 @@
+name: REM public readiness source watch
+
+on:
+  schedule:
+    - cron: "41 14 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/rem-public-status-watch.yml"
+      - "scripts/audit_rem_public_sources.py"
+      - "tests/unit/test_rem_public_audit.py"
+
+permissions:
+  contents: read
+
+jobs:
+  official-sources:
+    name: Review official REM status text
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+      - name: Install locked runtime
+        run: uv sync --locked --group dev
+      - name: Verify monitor semantics
+        run: uv run pytest tests/unit/test_rem_public_audit.py -q
+      - name: Read official public pages
+        run: uv run python -m scripts.audit_rem_public_sources --output rem-public-source-audit.json
+      - name: Retain evidence, including changed-source results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rem-public-source-audit
+          path: rem-public-source-audit.json
+          if-no-files-found: warn
