@@ -1,0 +1,85 @@
+name: Native Qwen function-call pilot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/native-tool-agent.yml"
+      - "scripts/benchmark_native_tool_agent.py"
+      - "scripts/aggregate_native_tool_agent.py"
+      - "tests/evals/test_native_tool_agent.py"
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Validate native-call parser
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+      - name: Validate parser and bounded fixture
+        run: |
+          uv sync --locked --group dev
+          uv run ruff check scripts tests/evals
+          uv run ruff format --check scripts tests/evals
+          uv run pytest tests/evals/test_native_tool_agent.py -q
+
+  model:
+    name: Native Qwen 3B (${{ matrix.shard }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+      - name: Sync locked MCP fixture
+        run: uv sync --locked --group dev
+      - name: Install isolated CPU model environment
+        run: |
+          uv venv --python 3.13 .model-venv
+          uv pip install --python .model-venv/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==2.15.0'
+          uv pip install --python .model-venv/bin/python 'transformers==5.24.1'
+      - name: Run checkpoint-native function-calling experiment
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+          SHARD: ${{ matrix.shard }}
+        run: |
+          .model-venv/bin/python -m scripts.benchmark_native_tool_agent --fixture-python .venv/bin/python --shard "$SHARD" --total-shards 3 --output native-tool.json
+      - name: Retain raw model and MCP results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-tool-${{ matrix.shard }}
+          path: native-tool.json
+
+  aggregate:
+    name: Verify native-call case coverage
+    needs: model
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: native-tool-*
+          path: shards
+      - name: Score only fully verified model shards
+        run: python -m scripts.aggregate_native_tool_agent --root shards --output native-summary.json
+      - name: Retain final score
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-tool-summary
+          path: native-summary.json
