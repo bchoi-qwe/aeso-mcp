@@ -35,9 +35,7 @@ PAGES = {
         "expected": ("Soft Launch", "System Trials", "Q2 2028"),
     },
 }
-ALLOWED_HOSTS = frozenset(
-    {"aesoengage.aeso.ca", "www.aeso.ca", "aeso.ca", "infohub.aeso.ca"}
-)
+ALLOWED_HOSTS = frozenset({"aesoengage.aeso.ca", "www.aeso.ca", "aeso.ca", "infohub.aeso.ca"})
 
 
 class _ReadableText(HTMLParser):
