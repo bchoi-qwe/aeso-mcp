@@ -109,3 +109,13 @@ Plain pytest excludes integration tests by default. Run `uv run pytest tests/int
 protected authenticated GitHub workflow runs only from main; configure the AESO_API_KEY
 secret in the aeso-live environment and use its manual Run workflow action or scheduled run.
 The public workflow never references that secret. A public success does not validate APIM.
+
+
+### CSD coverage and workload evidence
+
+The official public folders audited on 2026-11-27 list hourly CSD ZIPs covering 2015-01-01 to
+2026-10-31 and five-minute ZIPs covering 2015-01-01 to 2023-02-28. This is filename-derived,
+not a guarantee of complete intervals or assets. Recent five-minute generation is not established
+by this archive. The full-source streaming ingestion benchmark processed 1,427,328 five-minute
+records at approximately 2.74 GiB cumulative Linux process peak RSS; direct read/replay still
+materializes selected records. Actual memory consumption varies by hardware and source size.

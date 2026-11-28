@@ -93,3 +93,36 @@ authenticated upstream canary, all-dataset source chronology and multi-series re
 measurement under actual large-data workloads, and verified REM production source contracts.
 Do not interpret the implementation of a phase's first increment as satisfying all of its
 acceptance gates. Do not publish a release from this record alone.
+
+
+## Follow-up acceptance evidence (2026-11-27)
+
+- #25 merged after 376 deterministic tests and all four public integration groups passed.
+- #26 added observed-state Pool Price/AIL replay; 378 tests passed. No legacy actual-vintage
+  reconstruction or embedded-forecast inference.
+- #27 added the reproducible 12-question CPU routing baseline and full hourly archive workload.
+  The 0.5B model produced no valid bare JSON selections in either mode. A later diagnostic
+  accepting only one JSON fence recovered 3/12 exact full and 6/12 exact compact routes,
+  with no correct abstentions in either mode. Compact used 6,368 input tokens versus 37,465.
+  This does not support changing the default without stronger client/model evidence.
+- #28 and #30 separated public and protected authenticated runs. The trusted main run of #30
+  passed all seven authenticated integration groups in 10.02 seconds. Together with public
+  validation, all 11 existing live integration groups have been exercised successfully.
+- #29 and #32 established complete hourly and five-minute CSD workload baselines.
+- #34 streamed normalization directly into one atomic batched database transaction and passed
+  382 tests, 84.25% coverage, conformance, Docker, wheel smoke, locked audit and all public live
+  groups. The same source digests and row counts were reproduced. Hourly: 171,864 records,
+  peak RSS 1,317,384 to 656,036 KiB. Five-minute: 1,427,328 records, peak RSS 8,504,976 to
+  2,878,032 KiB. Five-minute end-to-end download/parse/write time was about 78.48 to 64.81 seconds.
+  Runner hardware differs, so memory/time comparisons are observational, not controlled.
+- #35 public metadata audit: 27 hourly files covering 2015-01-01 through 2026-10-31 and 98
+  five-minute files covering 2015-01-01 through 2023-02-28. All advertised pages were checked;
+  no unrecognized five-minute entries or filename date gaps. This is not row-level coverage.
+- #31 larger CPU routing and #33 actual MCP synthetic fixture agent experiments are separate
+  evaluation candidates. Until their outcomes are recorded, do not claim successful model
+  routing or end-to-end answering. Neither changes the default discovery mode.
+
+Remaining scope limitations: no broad independent external-client numeric benchmark, no actual
+REM production endpoint validation, no reconstructed publication history for previously unseen
+sources, and no local desktop workload/deployment verification. Avoid a formal release until
+release gates and intended client/deployment behavior are reviewed.
