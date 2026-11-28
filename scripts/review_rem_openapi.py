@@ -30,9 +30,7 @@ def review_spec(path: Path) -> dict[str, Any]:
         listed_servers = document.get("servers", [])
         if not isinstance(listed_servers, list):
             raise ValueError("Invalid OpenAPI server list")
-        server_values = [
-            server.get("url") for server in listed_servers if isinstance(server, dict)
-        ]
+        server_values = [server.get("url") for server in listed_servers if isinstance(server, dict)]
     elif document.get("swagger") == "2.0":
         format_name = "Swagger 2"
         host = document.get("host")
@@ -49,8 +47,10 @@ def review_spec(path: Path) -> dict[str, Any]:
         raise ValueError("Missing or excessively large OpenAPI paths mapping")
     counts: Counter[str] = Counter()
     for name, definitions in paths.items():
-        if not isinstance(name, str) or not name.startswith("/") or not isinstance(
-            definitions, dict
+        if (
+            not isinstance(name, str)
+            or not name.startswith("/")
+            or not isinstance(definitions, dict)
         ):
             raise ValueError("Invalid API path definition")
         for method in definitions:
@@ -90,7 +90,9 @@ def validate_inventory(payload: dict[str, Any]) -> None:
         raise ValueError("REM inventory must include endpoint candidates")
     for entry in payload["rem_endpoints"]:
         if not isinstance(entry, dict) or entry.get("stage") not in {
-            "engagement", "published_preview", "sandbox_announced"
+            "engagement",
+            "published_preview",
+            "sandbox_announced",
         }:
             raise ValueError("No REM endpoint has verified production status")
         if entry.get("production_base_url") is not None or entry.get("production_live_verified"):
