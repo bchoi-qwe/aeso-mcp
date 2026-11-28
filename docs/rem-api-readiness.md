@@ -55,3 +55,19 @@ participant credentials, sandbox URLs, or non-public attachments.
 
 Until those gates are complete, the correct result is **REM production endpoints unverified**,
 not a guessed URL or a legacy APIM endpoint mislabeled as REM.
+
+## Public-source monitoring, not production discovery
+
+The `REM public readiness source watch` GitHub Action checks two fixed AESO public
+information pages weekly and on manual dispatch. It records content hashes and whether
+the October 2026 MUI preview and published 2027/2028 milestones remain visible.
+If expected official phrases disappear, it requires review instead of inferring an API
+rollout. The action uses no credentials, does not follow redirects, cannot contact any
+REM endpoint and never updates the production endpoint inventory. A passing monitor
+only confirms that the reviewed public information is still present.
+
+As of November 28, 2026, AESO explicitly describes the MUI specification as an early
+preview ahead of soft launch, with future access and testing details still pending.
+A market participant must obtain authorized sandbox access and subsequently separate
+production credentials. The repository cannot validate a REM production base URL until
+AESO publishes one and grants authorized access.
