@@ -1,0 +1,43 @@
+name: Fixture agent benchmark
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/fixture-agent.yml"
+      - "scripts/fixture_agent_tools.py"
+      - "scripts/benchmark_fixture_agent.py"
+
+permissions:
+  contents: read
+
+jobs:
+  model-routing:
+    name: Real model fixture tool calls
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+      - name: Install actual MCP fixture environment
+        run: uv sync --locked --group dev
+      - name: Install isolated CPU inference environment
+        run: |
+          uv venv --python 3.13 .model-venv
+          uv pip install --python .model-venv/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==2.15.0'
+          uv pip install --python .model-venv/bin/python 'transformers==5.24.1'
+          uv pip freeze --python .model-venv/bin/python > model-environment.txt
+      - name: Run credential-free model
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: .model-venv/bin/python scripts/benchmark_fixture_agent.py --fixture-python .venv/bin/python --output fixture-agent.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fixture-agent
+          path: |
+            model-environment.txt
+            fixture-agent.json
