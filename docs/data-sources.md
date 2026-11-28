@@ -129,3 +129,11 @@ or fixed MDT (UTC-6) timestamps; the latest October 2026 hourly file was observe
 MDT header during credential-free CI. Historical DST behavior must remain intact. A dash in
 the Supply Surplus status column means the status is unavailable to this parser, not a zero-price
 forecast; retain the interval as unknown and do not infer event endings from missing statuses.
+
+
+## REM transition
+
+The existing authenticated AESO APIM is operational but **not** evidence that new MMS/MUI,
+MMDS, ESS or Operating Reserve Procurement production interfaces are available. See
+[REM API readiness](rem-api-readiness.md) and the reviewed
+[preproduction endpoint inventory](rem-endpoint-inventory.json). No REM production URL is configured.

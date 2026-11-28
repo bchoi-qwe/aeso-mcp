@@ -126,3 +126,13 @@ Remaining scope limitations: no broad independent external-client numeric benchm
 REM production endpoint validation, no reconstructed publication history for previously unseen
 sources, and no local desktop workload/deployment verification. Avoid a formal release until
 release gates and intended client/deployment behavior are reviewed.
+
+
+## 2026-11-28 REM endpoint verification
+
+Official InfoHub published an MUI API specification and JSON preview in October 2026,
+but AESO's public transition timeline places REM soft launch in 2027 and cutover in Q2 2028.
+The existing working APIM is not a verified new REM production API. New REM endpoint base URLs
+remain unset, and the offline OpenAPI reviewer does not probe declared servers. See
+`docs/rem-api-readiness.md` for source links, preproduction inventory and mandatory
+read-only production acceptance gates.

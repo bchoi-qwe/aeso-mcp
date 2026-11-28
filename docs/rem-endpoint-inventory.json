@@ -1,0 +1,62 @@
+{
+  "reviewed_on": "2026-11-28",
+  "source_category": "public official AESO documentation; status is not endpoint reachability",
+  "current_api": {
+    "id": "existing_aeso_apim",
+    "status": "production_authenticated",
+    "rem": false,
+    "documentation_url": "https://www.aeso.ca/market/market-and-system-reporting/aeso-application-programming-interface-api/",
+    "authentication": "APIM subscription key",
+    "live_validation": "seven authenticated integration groups passed on 2026-11-27"
+  },
+  "rem_endpoints": [
+    {
+      "id": "mms_mui",
+      "display": "Market Management System Market User Interface REST API",
+      "stage": "published_preview",
+      "spec_document": "AESO_MUI_API.json",
+      "source_url": "https://infohub.aeso.ca/resources/detail/?id=0d33b95e-60c3-f111-aaad-000d3ae913fc",
+      "production_base_url": null,
+      "sandbox_base_url": null,
+      "openapi_reviewed": false,
+      "production_live_verified": false
+    },
+    {
+      "id": "market_messaging_dispatch",
+      "display": "Market Messaging and Dispatch Service API",
+      "stage": "engagement",
+      "source_url": "https://aesoengage.aeso.ca/rem-it-systems-implementation",
+      "production_base_url": null,
+      "sandbox_base_url": null,
+      "openapi_reviewed": false,
+      "production_live_verified": false
+    },
+    {
+      "id": "energy_settlement",
+      "display": "Energy Settlement System portal and API",
+      "stage": "engagement",
+      "source_url": "https://aesoengage.aeso.ca/rem-it-systems-implementation",
+      "production_base_url": null,
+      "sandbox_base_url": null,
+      "openapi_reviewed": false,
+      "production_live_verified": false
+    },
+    {
+      "id": "operating_reserve_procurement",
+      "display": "Operating Reserve Procurement Platform API",
+      "stage": "engagement",
+      "source_url": "https://www.aeso.ca/transition/it-systems/",
+      "production_base_url": null,
+      "sandbox_base_url": null,
+      "openapi_reviewed": false,
+      "production_live_verified": false
+    }
+  ],
+  "readiness": {
+    "soft_launch": "January through Q3 2027",
+    "system_trials": "Q3 2027",
+    "market_cutover": "Q2 2028",
+    "source_url": "https://www.aeso.ca/transition/it-systems/"
+  },
+  "guardrail": "Neither a preview spec nor a live website proves an operational REM production API. Do not provision credentials or enable a REM endpoint automatically."
+}
