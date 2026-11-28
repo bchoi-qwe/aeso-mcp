@@ -139,3 +139,13 @@ measurements; do not confuse them with repeatable fixture-only results.
 ### Larger checkpoint comparison
 
 The Stronger CPU model routing workflow compares pinned Qwen2.5 1.5B and 3B checkpoints using BF16 CPU inference. Strict JSON remains the primary metric; a separately reported diagnostic accepts exactly one enclosing JSON Markdown fence, but no other prose, duplicate or unknown tool names. This isolates format failures without retroactively changing the baseline. Compare full and compact within a model/dtype, not latency across models or runner hardware. The 12 routing cases are reused, not a fresh independent holdout for prompt tuning.
+
+
+### Routing benchmark shard integrity
+
+The original unsharded 1.5B/3B CPU workflows reached their 25-minute limits without
+completing the twelve-question run. The larger-model workload is now split into four
+disjoint three-question shards for each checkpoint, each with its own bounded job.
+The aggregate job verifies eight artifacts, pinned revisions, identical full-case SHA256,
+each shard identity and exactly-once coverage of every case in full and compact modes.
+Incomplete or cancelled experiments cannot become a misleading complete score.

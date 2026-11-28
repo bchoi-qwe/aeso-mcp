@@ -60,7 +60,20 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, float | int]:
     }
 
 
-def run(manifest: dict[str, Any], *, threads: int, model_size: str = "0.5b") -> dict[str, Any]:
+def select_shard(cases: list[dict[str, Any]], *, index: int, count: int) -> list[dict[str, Any]]:
+    if not 0 <= index < count or count <= 0:
+        raise ValueError("Invalid model evaluation shard")
+    return [case for i, case in enumerate(cases) if i % count == index]
+
+
+def run(
+    manifest: dict[str, Any],
+    *,
+    threads: int,
+    model_size: str = "0.5b",
+    shard_index: int = 0,
+    shard_count: int = 1,
+) -> dict[str, Any]:
     # Kept in a separate benchmark environment, never a runtime MCP dependency.
     import torch
     import transformers
@@ -79,7 +92,10 @@ def run(manifest: dict[str, Any], *, threads: int, model_size: str = "0.5b") -> 
     model.eval()
     descriptions = manifest["descriptions"]
     traces: dict[str, list[dict[str, Any]]] = {"full": [], "compact": []}
-    for case in manifest["cases"]:
+    shard_cases = select_shard(manifest["cases"], index=shard_index, count=shard_count)
+    if not shard_cases:
+        raise ValueError("Selected model evaluation shard is empty")
+    for case in shard_cases:
         for mode in ("full", "compact"):
             names = sorted(descriptions) if mode == "full" else case["compact_candidates"]
             catalog = "\n".join(f"{name}: {descriptions[name]}" for name in names)
@@ -132,6 +148,8 @@ def run(manifest: dict[str, Any], *, threads: int, model_size: str = "0.5b") -> 
         "torch": torch.__version__,
         "transformers": transformers.__version__,
         "case_sha256": manifest["case_sha256"],
+        "shard_count": shard_count,
+        "shard_index": shard_index,
         "generation": {"do_sample": False, "max_new_tokens": 96, "cpu_threads": threads},
         "summary": {mode: summarize(rows) for mode, rows in traces.items()},
         "fenced_summary": {
@@ -147,12 +165,16 @@ def main() -> None:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--threads", type=int, default=2, choices=[1, 2, 4])
     parser.add_argument("--model-size", choices=sorted(MODELS), default="0.5b")
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     result = run(
         json.loads(args.manifest.read_text(encoding="utf-8")),
         threads=args.threads,
         model_size=args.model_size,
+        shard_index=args.shard_index,
+        shard_count=args.shard_count,
     )
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     sys.stdout.write(
