@@ -118,9 +118,19 @@ acceptance gates. Do not publish a release from this record alone.
 - #35 public metadata audit: 27 hourly files covering 2015-01-01 through 2026-10-31 and 98
   five-minute files covering 2015-01-01 through 2023-02-28. All advertised pages were checked;
   no unrecognized five-minute entries or filename date gaps. This is not row-level coverage.
-- #31 larger CPU routing and #33 actual MCP synthetic fixture agent experiments are separate
-  evaluation candidates. Until their outcomes are recorded, do not claim successful model
-  routing or end-to-end answering. Neither changes the default discovery mode.
+- #33 initial 3B actual MCP synthetic fixture pilot scored 4/5 end-to-end.
+- #37 merged a separately designed 54-case oracle benchmark (all 24 CI/evaluation gates
+  passed): 0.5B 0/54, 1.5B 3/16, 3B 3/16. The 1.5B successes were numeric answers;
+  3B successes were abstentions. Both larger models equal the 3/16 trivial
+  always-abstain baseline on the shared subset.
+- #38 native 3B Qwen function-calling pilot merged after all checks passed: 5/5
+  parseable native tool syntax, 4/5 routes, 2/4 valid arguments, 1/5 end-to-end
+  correct. Keep the default discovery mode and do not embed these models
+  as autonomous agents on this evidence.
+- #31 3B routing-only results: full catalog 10/12 exact routes vs compact 9/12;
+  compact uses 6,368 vs 37,465 input tokens. The 1.5B complete aggregate remains
+  pending. See `docs/model-validation-results-2026-11-28.md` and PR #31 for
+  exact evidence scope.
 
 Remaining scope limitations: no broad independent external-client numeric benchmark, no actual
 REM production endpoint validation, no reconstructed publication history for previously unseen
