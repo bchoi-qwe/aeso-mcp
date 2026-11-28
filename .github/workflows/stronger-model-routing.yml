@@ -1,0 +1,73 @@
+name: Stronger CPU model routing
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/stronger-model-routing.yml"
+      - "scripts/benchmark_model_routing.py"
+
+permissions:
+  contents: read
+
+jobs:
+  model-routing:
+    name: CPU routing (${{ matrix.model }} / ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ["1.5b", "3b"]
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+      - name: Freeze tool descriptions and BM25 results
+        run: |
+          uv sync --locked --group dev
+          uv run python scripts/export_routing_benchmark.py --output routing-manifest.json
+      - name: Install isolated CPU inference environment
+        run: |
+          uv venv --python 3.13 .model-venv
+          uv pip install --python .model-venv/bin/python --index-url https://download.pytorch.org/whl/cpu 'torch==2.15.0'
+          uv pip install --python .model-venv/bin/python 'transformers==5.24.1'
+          uv pip freeze --python .model-venv/bin/python > model-environment.txt
+      - name: Run credential-free model
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+          MODEL_SIZE: ${{ matrix.model }}
+          SHARD: ${{ matrix.shard }}
+        run: .model-venv/bin/python scripts/benchmark_model_routing.py --model-size "$MODEL_SIZE" --shard-index "$SHARD" --shard-count 4 --manifest routing-manifest.json --output model-routing.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: model-routing-${{ matrix.model }}-${{ matrix.shard }}
+          path: |
+            routing-manifest.json
+            model-environment.txt
+            model-routing.json
+  aggregate:
+    name: Verify all routing shards
+    needs: [model-routing]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: model-routing-*
+          path: shards
+      - name: Verify complete case coverage and calculate aggregate scores
+        run: |
+          python -m scripts.aggregate_model_routing --root shards --cases tests/evals/holdout_routing.json --output routing-comparison.json
+          cat routing-comparison.json
+      - name: Retain verified comparison
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: routing-comparison
+          path: routing-comparison.json
