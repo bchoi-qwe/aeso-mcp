@@ -1,0 +1,36 @@
+name: Reference MCP arithmetic oracle
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/reference-agent-oracle.yml"
+      - "scripts/validate_independent_mcp_oracle.py"
+      - "scripts/independent_agent_cases.py"
+      - "scripts/independent_agent_fixture.py"
+      - "tests/evals/test_reference_agent_oracle.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reference:
+    name: Verify 54 reference questions through actual MCP
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.12.2"
+      - name: Install locked MCP dependencies
+        run: uv sync --locked --group dev
+      - name: Verify model-free fixture execution and scoring
+        run: |
+          uv run pytest tests/evals/test_reference_agent_oracle.py -q
+          uv run python -m scripts.validate_independent_mcp_oracle --output reference-oracle.json
+      - name: Retain coverage report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reference-agent-oracle
+          path: reference-oracle.json
