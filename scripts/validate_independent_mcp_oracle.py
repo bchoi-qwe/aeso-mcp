@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import json
 import math
+import sys
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -111,9 +112,8 @@ async def verify() -> dict[str, Any]:
         }
         data = await execute(command)
         value, unit = score_observations(case, data["results"])
-        if (
-            unit != case["expected_unit"]
-            or not math.isclose(value, case["expected_value"], abs_tol=0.025, rel_tol=0)
+        if unit != case["expected_unit"] or not math.isclose(
+            value, case["expected_value"], abs_tol=0.025, rel_tol=0
         ):
             raise ValueError(f"MCP differs from independent arithmetic oracle: {case['id']}")
         checked[str(case["category"])] += 1
@@ -138,7 +138,7 @@ def main() -> None:
     content = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.write_text(content, encoding="utf-8")
-    print(content, end="")
+    sys.stdout.write(content)
 
 
 if __name__ == "__main__":

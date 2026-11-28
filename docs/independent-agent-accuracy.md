@@ -35,14 +35,3 @@ synthetic cases test whether models can use accurate market tools and arithmetic
 **not** establish performance against real AESO source revisions, ambiguous business questions,
 a native remote-client tool-calling API, or a production trading workflow. The default MCP
 discovery mode must not change based solely on these results.
-
-## Model-free reference execution
-
-The reference-oracle workflow executes all 48 numerical cases through the real FastMCP
-tool handlers, verifies exact hourly UTC coverage, correct series units, no duplicate or
-missing observations, and recalculates each answer from the returned values rather than
-the underlying fixture arrays. The six unsupported cases are explicitly not executed.
-A perfect reference score establishes that the controlled MCP fixture and independent
-arithmetic judge agree; it does **not** establish model accuracy or independent agreement
-with live AESO market publications. If the reference run fails, the model scores should
-not be used to diagnose model behavior before resolving the fixture/scoring discrepancy.

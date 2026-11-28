@@ -4,7 +4,6 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from scripts.independent_agent_cases import build_cases
 from scripts.validate_independent_mcp_oracle import score_observations, verify
 
