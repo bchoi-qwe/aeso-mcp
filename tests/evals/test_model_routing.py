@@ -1,7 +1,12 @@
 # SPDX-License-Identifier: MIT
 """The routing experiment must not reward malformed model output."""
 
-from scripts.benchmark_model_routing import parse_fenced_selection, parse_selection, select_shard, summarize
+from scripts.benchmark_model_routing import (
+    parse_fenced_selection,
+    parse_selection,
+    select_shard,
+    summarize,
+)
 
 
 def test_parse_selection_rejects_invalid_and_unknown_tools() -> None:
