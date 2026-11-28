@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -113,7 +114,7 @@ def main() -> None:
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")
     else:
-        print(rendered, end="")
+        sys.stdout.write(rendered)
 
 
 if __name__ == "__main__":

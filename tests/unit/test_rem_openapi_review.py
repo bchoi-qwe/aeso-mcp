@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from scripts.review_rem_openapi import review_spec, validate_inventory
 
 
