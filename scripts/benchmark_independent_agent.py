@@ -53,6 +53,7 @@ def parse_calls(selection: dict[str, Any] | None) -> list[dict[str, Any]] | None
         if (
             not isinstance(call, dict)
             or set(call) != {"name", "arguments"}
+            or not isinstance(call["name"], str)
             or call["name"] not in ALLOWED
             or not isinstance(call["arguments"], dict)
         ):
