@@ -64,7 +64,7 @@ jobs:
           path: shards
       - name: Verify complete case coverage and calculate aggregate scores
         run: |
-          python scripts/aggregate_model_routing.py --root shards --cases tests/evals/holdout_routing.json --output routing-comparison.json
+          python -m scripts.aggregate_model_routing --root shards --cases tests/evals/holdout_routing.json --output routing-comparison.json
           cat routing-comparison.json
       - name: Retain verified comparison
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
