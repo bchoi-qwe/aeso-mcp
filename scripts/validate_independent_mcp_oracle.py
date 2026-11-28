@@ -23,9 +23,7 @@ SERIES = {
 }
 
 
-def score_observations(
-    case: dict[str, Any], results: list[dict[str, Any]]
-) -> tuple[float, str]:
+def score_observations(case: dict[str, Any], results: list[dict[str, Any]]) -> tuple[float, str]:
     """Calculate from returned MCP values, never from the fixture's source arrays."""
     start = datetime.fromisoformat(str(case["start"])).astimezone(UTC)
     end = datetime.fromisoformat(str(case["end"])).astimezone(UTC)
@@ -103,9 +101,7 @@ async def verify() -> dict[str, Any]:
             "calls": [
                 {
                     "name": name,
-                    "arguments": {
-                        "request": {"start": case["start"], "end": case["end"]}
-                    },
+                    "arguments": {"request": {"start": case["start"], "end": case["end"]}},
                 }
                 for name in case["expected_tools"]
             ],
