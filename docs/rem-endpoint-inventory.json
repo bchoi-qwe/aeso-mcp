@@ -19,7 +19,10 @@
       "production_base_url": null,
       "sandbox_base_url": null,
       "openapi_reviewed": false,
-      "production_live_verified": false
+      "production_live_verified": false,
+      "sandbox_access_request_url": "https://infohub.aeso.ca/resources/detail/?id=bcc0e018-2de4-f111-84e8-3833c5fa76e3",
+      "sandbox_access_required": "authorized market participant questionnaire reviewed by AESO",
+      "sandbox_access_verified": false
     },
     {
       "id": "market_messaging_dispatch",

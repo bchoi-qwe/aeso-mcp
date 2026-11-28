@@ -9,6 +9,8 @@ on:
       - ".github/workflows/rem-public-status-watch.yml"
       - "scripts/audit_rem_public_sources.py"
       - "tests/unit/test_rem_public_audit.py"
+      - "docs/rem-api-readiness.md"
+      - "docs/rem-endpoint-inventory.json"
 
 permissions:
   contents: read

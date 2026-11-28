@@ -71,3 +71,17 @@ preview ahead of soft launch, with future access and testing details still pendi
 A market participant must obtain authorized sandbox access and subsequently separate
 production credentials. The repository cannot validate a REM production base URL until
 AESO publishes one and grants authorized access.
+
+## Verified market-participant sandbox request (November 28, 2026)
+
+The [official REM Sandbox Access Request — Soft Launch resource](https://infohub.aeso.ca/resources/detail/?id=bcc0e018-2de4-f111-84e8-3833c5fa76e3)
+specifies that an eligible market participant should download the attached questionnaire,
+complete one row per requested user, append the organization name to the filename and email
+the completed file to `MarketTransition@aeso.ca`. AESO reviews each request, and access is
+not immediate. The current sandbox period is Q1 through Q3 2027.
+
+The same source explicitly states that sandbox access does not provide production access.
+This repository has no authorized REM sandbox credentials, has not inspected the MUI
+OpenAPI JSON attachment, and has not tested a sandbox or production REM interface.
+Do not submit any participant questionnaire on behalf of an organization without authorization,
+and do not use commercially sensitive or participant-confidential information in test runs.
