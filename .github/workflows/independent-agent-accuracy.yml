@@ -63,7 +63,7 @@ jobs:
           MODEL_SIZE: ${{ matrix.model }}
           SHARD: ${{ matrix.shard }}
         run: |
-          .model-venv/bin/python scripts/benchmark_independent_agent.py --model-size "$MODEL_SIZE" --shard-index "$SHARD" --shard-count 6 --fixture-python .venv/bin/python --output independent-agent.json
+          .model-venv/bin/python -m scripts.benchmark_independent_agent --model-size "$MODEL_SIZE" --shard-index "$SHARD" --shard-count 6 --fixture-python .venv/bin/python --output independent-agent.json
       - name: Preserve trace and environment
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
