@@ -14,8 +14,7 @@ def test_native_tool_call_accepts_json_object_or_string_arguments() -> None:
     assert result[0]["arguments"]["request"]["start"].endswith("Z")
 
     legacy = (
-        '<|tool_call_start|>{"name":"get_load","arguments":"{\\"request\\":{}}" }'
-        "<|tool_call_end|>"
+        '<|tool_call_start|>{"name":"get_load","arguments":"{\\"request\\":{}}" }<|tool_call_end|>'
     )
     parsed = parse_native_tool_calls(legacy)
     assert parsed is not None and parsed[0]["arguments"] == {"request": {}}

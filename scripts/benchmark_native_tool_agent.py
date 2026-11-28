@@ -59,10 +59,18 @@ def parse_native_tool_calls(raw: str) -> list[dict[str, Any]] | None:
 
 def supports_abstention(raw: str) -> bool:
     """Conservatively score refusal text; not a semantic judging model."""
-    clean = re.sub(r"<\|[^>]+\|>", "", raw).strip().lower()
+    clean = re.sub(r"<\\|[^>]+\\|>", "", raw).strip().lower()
     return any(
         phrase in clean
-        for phrase in ("cannot guarantee", "can't guarantee", "not possible to guarantee", "unable to guarantee")
+        for phrase in (
+            "cannot guarantee",
+            "can't guarantee",
+            "not possible to guarantee",
+            "unable to guarantee",
+            "cannot predict",
+            "can't predict",
+            "unable to predict",
+        )
     )
 
 
