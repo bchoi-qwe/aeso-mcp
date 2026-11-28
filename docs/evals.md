@@ -134,3 +134,11 @@ it to an ephemeral DuckDB/Parquet store and queries a bounded page. It records s
 row counts, bytes, wall times and cumulative Linux process peak RSS. It never writes to a user's
 production historical store. Public network availability and runner hardware influence these
 measurements; do not confuse them with repeatable fixture-only results.
+
+
+## November 2026 model evidence
+
+See [Model and agent evaluation findings](model-validation-results-2026-11-28.md)
+for complete routing, actual FastMCP tool-execution and independently scored numeric
+results, the 0.5B/1.5B/3B shared-case comparison, the native Qwen function-call pilot,
+and the explicit acceptance requirements for a future strong-model external-client test.
