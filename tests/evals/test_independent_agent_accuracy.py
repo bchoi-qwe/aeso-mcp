@@ -4,7 +4,6 @@
 from datetime import UTC, datetime
 
 import pytest
-
 from scripts.benchmark_independent_agent import arguments_match, numeric_match, parse_calls
 from scripts.independent_agent_cases import (
     HOURS,
@@ -22,7 +21,7 @@ def test_independent_cases_are_stratified_and_cover_dst_and_edge_values() -> Non
     assert len(cases) == 54
     assert len(shared_model_subset(cases)) == 16
     assert len({case["id"] for case in cases}) == len(cases)
-    assert START == datetime(2025, 11, 2, 6, tzinfo=UTC)
+    assert datetime(2025, 11, 2, 6, tzinfo=UTC) == START
     assert len(PRICES) == len(LOADS) == HOURS == 48
     assert min(PRICES) < 0
     assert 0 in PRICES

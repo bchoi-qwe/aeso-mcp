@@ -100,7 +100,7 @@ def build_cases() -> list[dict[str, object]]:
         weighted = sum(p * load for p, load in zip(prices, loads, strict=True)) / sum(loads)
         add(
             "load_weighted_price", index, 4,
-            f"Calculate load-weighted average actual Pool Price over [{_stamp(index)}, {_stamp(index + 4)}): sum(Pool Price × AIL)/sum(AIL). Return CAD/MWh.",
+            f"Calculate load-weighted average actual Pool Price over [{_stamp(index)}, {_stamp(index + 4)}): sum(Pool Price * AIL)/sum(AIL). Return CAD/MWh.",
             ["get_pool_prices", "get_load"], weighted, "CAD/MWh",
         )
     for index in (2, 12, 27, 41):

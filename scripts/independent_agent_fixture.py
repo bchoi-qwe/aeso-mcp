@@ -11,6 +11,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock
 
 from fastmcp import Client
+from scripts.independent_agent_cases import HOURS, LOADS, PRICES, START
 
 from aeso_mcp.app import build_container
 from aeso_mcp.config import Settings
@@ -20,7 +21,6 @@ from aeso_mcp.models.prices import PoolPriceInterval, PoolPriceRequest
 from aeso_mcp.services.history import HistoryService
 from aeso_mcp.services.market import MarketService
 from aeso_mcp.timeutil import to_utc
-from scripts.independent_agent_cases import HOURS, LOADS, PRICES, START
 
 ALLOWED = frozenset({"get_pool_prices", "get_load"})
 
